@@ -1,0 +1,10 @@
+# Entorno de Aprendizaje por Refuerzo para Brazo Robótico 2D
+gymnasium>=0.29.1
+stable-baselines3>=2.3.0
+torch>=2.2.0
+pygame>=2.5.2
+numpy>=1.26.0,<2.0.0
+matplotlib>=3.8.0
+tensorboard>=2.15.0
+rich>=13.0.0
+tqdm>=4.66.0

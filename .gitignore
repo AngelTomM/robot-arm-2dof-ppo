@@ -1,0 +1,50 @@
+# Entornos virtuales de Python
+.venv/
+venv/
+ENV/
+env/
+
+# Archivos compilados y caché de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Logs de entrenamiento y monitoreo (TensorBoard)
+logs/
+*.tfevents.*
+
+# Modelos y Checkpoints pesados (ignorar modelos generados localmente excepto si se desea versionar un benchmark)
+models/
+*.zip
+
+# Pygame / Logs de ejecución
+*.log
+
+# Archivos de configuración del IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Sistema Operativo
+.DS_Store
+Thumbs.db
+Desktop.ini
