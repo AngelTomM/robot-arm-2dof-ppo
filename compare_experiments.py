@@ -114,11 +114,12 @@ def generate_experiment_summary():
     out_md = os.path.join(reports_dir, "EXPERIMENTS_SUMMARY.md")
 
     with open(out_md, "w", encoding="utf-8") as f:
-        f.write("# Comparación de Experimentos\n\n")
+        f.write("# 📊 Comparación de Experimentos\n\n")
         f.write("Resumen consolidado de parámetros de configuración y métricas de desempeño por experimento.\n\n")
         f.write(df.to_markdown(index=False))
         f.write("\n\n---\n")
-        f.write("- **Recompensa Máx**: Mejor retorno medio obtenido durante la evaluación del modelo.\n")
+        f.write("### 💡 Interpretación de Métricas:\n")
+        f.write("- **Recompensa Máx**: Mejor retorno medio obtenido durante la evaluación del modelo (valores más cercanos a 0 o positivos indican mejor desempeño).\n")
         f.write("- **Pasos/Episodio**: Duración media del episodio (un valor menor indica resolución más rápida de la tarea).\n")
 
     print(f"\n>>> [OK] Reporte actualizado en: {out_md}")

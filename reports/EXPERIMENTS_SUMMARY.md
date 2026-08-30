@@ -1,4 +1,4 @@
-# Comparación de Experimentos
+# 📊 Comparación de Experimentos
 
 Resumen consolidado de parámetros de configuración y métricas de desempeño por experimento.
 
@@ -8,5 +8,6 @@ Resumen consolidado de parámetros de configuración y métricas de desempeño p
 | exp2_smooth_precision | Uli/Tomi | smooth_precision |         1.5 |         0.06 | 0.00015 |      2048 |      300000 | -36.51 *         |            132.9 | 2026-08-30 12:12:33 |
 
 ---
-- **Recompensa Máx**: Mejor retorno medio obtenido durante la evaluación del modelo.
+### 💡 Interpretación de Métricas:
+- **Recompensa Máx**: Mejor retorno medio obtenido durante la evaluación del modelo (valores más cercanos a 0 o positivos indican mejor desempeño).
 - **Pasos/Episodio**: Duración media del episodio (un valor menor indica resolución más rápida de la tarea).
