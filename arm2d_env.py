@@ -162,6 +162,18 @@ class Arm2DEnv(gym.Env):
         is_success = distance < self.target_radius
 
         # --- Cálculo Modular de la Recompensa ---
+        # ==============================================================================
+        # GUÍA / PLANTILLA PARA AGREGAR NUEVAS FORMAS DE RECOMPENSA:
+        # 1. En __init__(): Lee cualquier parámetro que necesites desde 'reward_params'.
+        # 2. Aquí en step(): Agrega un bloque 'elif self.reward_type == "tu_nombre":'
+        # 3. Diseña tu fórmula matemática usando variables disponibles:
+        #    - 'distance' (distancia al target)
+        #    - 'action' (acciones del agente [-1, 1])
+        #    - 'self.dtheta1', 'self.dtheta2' (velocidades angulares)
+        #    - 'is_success' (True si distance < target_radius)
+        # 4. En tu archivo configs/tu_config.yaml define 'reward_type: "tu_nombre"'
+        # ==============================================================================
+
         if self.reward_type == "smooth_precision":
             # Penalización base por distancia y acción
             reward = -self.dist_coef * distance - self.action_coef * float(np.sum(np.square(action)))
@@ -176,6 +188,13 @@ class Arm2DEnv(gym.Env):
             reward = -self.dist_coef * distance - 0.1 * float(np.sum(np.square(action)))
             if is_success:
                 reward += self.success_bonus
+
+        # --- PLANTILLA: Descomenta y adapta para crear una nueva estrategia ---
+        # elif self.reward_type == "mi_nueva_recompensa":
+        #     # Ejemplo: Penalizar distancia + premiar velocidad apuntando al target
+        #     reward = -self.dist_coef * distance
+        #     if is_success:
+        #         reward += self.success_bonus
 
         else:  # "distance_only" (Por defecto)
             reward = -self.dist_coef * distance - self.action_coef * float(np.sum(np.square(action)))

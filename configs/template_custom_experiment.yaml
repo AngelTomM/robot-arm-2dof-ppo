@@ -1,0 +1,47 @@
+# ==============================================================================
+# PLANTILLA DE CONFIGURACIÓN PARA NUEVOS EXPERIMENTOS
+# ==============================================================================
+# Copia este archivo y renómbralo (ej. exp3_mi_prueba.yaml)
+# Para entrenar con este archivo ejecuta:
+#   .venv\Scripts\python train.py --config configs/exp3_mi_prueba.yaml
+# ==============================================================================
+
+experiment:
+  name: "exp3_custom_template"      # Nombre de la subcarpeta que se creará en models/ y logs/
+  description: "Descripción breve del objetivo de este experimento"
+  author: "TuNombre"
+
+env:
+  l1: 1.0                           # Longitud del eslabón 1
+  l2: 1.0                           # Longitud del eslabón 2
+  max_speed: 2.0                    # Velocidad máxima angular (rad/s)
+  target_radius: 0.08               # Radio de tolerancia de éxito
+  max_steps: 200                    # Límite de pasos por episodio
+  dt: 0.05                          # Paso de tiempo de simulación
+
+  # Nombre de tu estrategia de recompensa (definida en arm2d_env.py)
+  # Opciones: "distance_only", "smooth_precision", "energy_efficient" o tu propio nombre custom
+  reward_type: "distance_only"
+  
+  # Parámetros numéricos que leerá tu función de recompensa en arm2d_env.py
+  reward_params:
+    distance_penalty_coef: 1.0      # Coeficiente de distancia
+    action_penalty_coef: 0.01       # Coeficiente de esfuerzo
+    success_bonus: 10.0             # Bonificación por tocar la meta
+
+ppo:
+  learning_rate: 0.0003             # Tasa de aprendizaje (ej. 0.0003 para rápido, 0.0001 para fino)
+  n_steps: 1024                     # Pasos recolectados por entorno antes de actualizar la red
+  batch_size: 64                    # Tamaño del minilote de optimización
+  n_epochs: 10                      # Pasadas de optimización sobre los datos de cada rollout
+  gamma: 0.99                       # Factor de descuento (0.99 = visión a largo plazo)
+  gae_lambda: 0.95                  # Factor de sesgo/varianza de GAE
+  clip_range: 0.2                   # Rango de clipping de PPO
+  ent_coef: 0.001                   # Coeficiente de entropía (fomenta exploración)
+  num_envs: 4                       # Número de brazos simulados en paralelo
+
+training:
+  total_timesteps: 150000           # Pasos totales (150k básico, 300k+ para alta precisión)
+  eval_freq: 5000                   # Cada cuántos pasos evaluar y guardar best_model
+  n_eval_episodes: 10               # Número de episodios durante cada evaluación
+  save_freq: 25000                  # Cada cuántos pasos guardar un checkpoint intermedio
