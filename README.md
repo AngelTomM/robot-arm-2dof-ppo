@@ -15,7 +15,7 @@ Simulación y entrenamiento de un brazo robótico planar de 2 Grados de Libertad
   - [2. Entrenar un Experimento](#2-entrenar-un-experimento)
   - [3. Simulación Interactiva en Tiempo Real](#3-simulación-interactiva-en-tiempo-real)
   - [4. Monitoreo con TensorBoard](#4-monitoreo-con-tensorboard)
-  - [5. Comparar Experimentos y Resumen](#5-comparar-experimentos-y-resumen)
+  - [5. Comparar Experimentos y Reportes](#5-comparar-experimentos-y-reportes)
 - [Buenas Prácticas para Trabajo Colaborativo](#-buenas-prácticas-para-trabajo-colaborativo)
 - [Licencia](#-licencia)
 
@@ -23,14 +23,15 @@ Simulación y entrenamiento de un brazo robótico planar de 2 Grados de Libertad
 
 ## 🚀 Características
 
-- **Configuración desacoplada en YAML**: Cambia la física, los hiperparámetros de PPO o el tipo de recompensa sin tocar el código fuente.
-- **Entorno Gymnasium Estándar (`Arm2DEnv`)**: Compatible con el ecosistema de RL.
+- **Configuración desacoplada en YAML**: Ajusta la física, hiperparámetros de PPO o funciones de recompensa sin modificar el código central.
+- **Entorno Gymnasium Estándar (`Arm2DEnv`)**: Implementación estándar con espacios continuos de acción y observación (10 dimensiones).
 - **Estrategias de Recompensa Modulares**:
-  - `distance_only`: Penalización básica por distancia euclidiana.
-  - `smooth_precision`: Recompensa de proximidad y penalización de frenado cerca del objetivo para evitar sobreimpulsos.
-  - `energy_efficient`: Penalización por esfuerzo y uso de torques.
-- **Registro Automático de Metadatos**: Cada ejecución guarda un `experiment_meta.json` con todos los parámetros usados.
-- **Renderizado Interactivo**: Ventana a 60 FPS con Pygame para mover el objetivo con el mouse o la barra espaciadora.
+  - `distance_only`: Penalización base por distancia euclidiana.
+  - `smooth_precision`: Recompensa de proximidad y penalización de velocidad cerca de la meta para posarse con precisión sin oscilaciones ni sobreimpulsos.
+  - `energy_efficient`: Minimización de esfuerzo y torques angulares.
+- **Registro Automático de Metadatos**: Cada ejecución almacena `experiment_meta.json` dentro de `models/<nombre_experimento>/`.
+- **Generación de Reportes Automática**: `compare_experiments.py` consolida todos los modelos en `reports/EXPERIMENTS_SUMMARY.md`.
+- **Simulador Interactivo a 60 FPS**: Control visual en tiempo real con soporte para puntero de mouse y atajos de teclado.
 
 ---
 
@@ -53,17 +54,20 @@ El brazo robótico consta de dos articulaciones rotacionales y dos eslabones de 
 
 ```text
 ├── configs/
-│   ├── exp1_baseline.yaml         # Configuración base
-│   └── exp2_smooth_precision.yaml # Configuración optimizada para precisión y suavidad
-├── arm2d_env.py                   # Entorno Gymnasium configurable
-├── train.py                       # Script de entrenamiento con soporte para YAML
-├── interactive_render.py          # Simulador interactivo en tiempo real (Pygame)
-├── plot_results.py                # Generador de gráficas de entrenamiento
-├── compare_experiments.py         # Comparador y tabla resumen de experimentos
-├── test_env.py                    # Validación con Gymnasium check_env
-├── requirements.txt               # Dependencias del proyecto
-├── .gitignore                     # Archivos ignorados por Git
-└── README.md                      # Documentación completa
+│   ├── exp1_baseline.yaml              # Configuración base (baseline)
+│   ├── exp2_smooth_precision.yaml      # Configuración de alta precisión y frenado suave
+│   └── template_custom_experiment.yaml # Plantilla para crear nuevos experimentos
+├── reports/
+│   └── EXPERIMENTS_SUMMARY.md          # Tabla consolidada con todos los experimentos del equipo
+├── arm2d_env.py                        # Entorno Gymnasium configurable con Pygame
+├── train.py                            # Script de entrenamiento PPO con soporte YAML y metadatos
+├── interactive_render.py               # Simulador interactivo en tiempo real (control con mouse)
+├── plot_results.py                     # Generador de gráficas de rendimiento desde logs
+├── compare_experiments.py              # Consolidador y generador de reportes comparativos
+├── test_env.py                         # Test de validación con Gymnasium check_env
+├── requirements.txt                    # Dependencias del proyecto
+├── .gitignore                          # Archivos y carpetas ignorados por Git
+└── README.md                           # Documentación completa
 ```
 
 ---
@@ -98,11 +102,11 @@ El brazo robótico consta de dos articulaciones rotacionales y dos eslabones de 
 ## 🎮 Uso y Flujo de Trabajo en Equipo
 
 ### 1. Configuración Modular con YAML
-Crea tu propio archivo en `configs/` (por ejemplo: `configs/exp_tomi.yaml` o `configs/exp_uli.yaml`):
+Copia la plantilla `configs/template_custom_experiment.yaml` o modifica uno existente (ej. `configs/exp2_smooth_precision.yaml`):
 ```yaml
 experiment:
   name: "exp2_smooth_precision"
-  author: "Uli"
+  author: "Uli/Tomi"
 
 env:
   max_speed: 1.5
@@ -117,46 +121,49 @@ training:
 ```
 
 ### 2. Entrenar un Experimento
-Ejecuta el entrenamiento pasando tu archivo de configuración:
+Inicia el entrenamiento pasando la ruta de la configuración deseada:
 ```powershell
 .venv\Scripts\python train.py --config configs/exp2_smooth_precision.yaml
 ```
-Los modelos se guardan en `models/<nombre_experimento>/` junto con su `experiment_meta.json`.
+El modelo y sus metadatos se guardarán en `models/exp2_smooth_precision/`.
 
 ### 3. Simulación Interactiva en Tiempo Real
-Prueba cualquier modelo generado en el simulador:
+Prueba el modelo entrenado en la ventana interactiva:
 ```powershell
 .venv\Scripts\python interactive_render.py models/exp2_smooth_precision/best_model/best_model.zip
 ```
 **Controles:**
-- 🖱️ **Click Izquierdo**: Mueve el objetivo (Target) al puntero del mouse.
-- ⌨️ **Barra Espaciadora**: Genera un nuevo objetivo aleatorio.
+- 🖱️ **Click Izquierdo**: Mueve el objetivo (Target) a la posición del cursor del mouse.
+- ⌨️ **Barra Espaciadora**: Genera un objetivo aleatorio dentro del área alcanzable.
 - 🔄 **Tecla 'R'**: Reinicia los ángulos del brazo.
 - ❌ **Tecla 'ESC'**: Cierra el simulador.
 
 ### 4. Monitoreo con TensorBoard
-Para comparar las curvas de varios experimentos al mismo tiempo:
+Visualiza las curvas de recompensa, entropía y pérdida en tiempo real:
 ```powershell
 .venv\Scripts\tensorboard --logdir logs
 ```
 Abre tu navegador en `http://localhost:6006`.
 
-### 5. Comparar Experimentos y Resumen
-Para ver una tabla con los parámetros y estados de todos los modelos entrenados por el equipo:
+### 5. Comparar Experimentos y Reportes
+Genera o actualiza la tabla de comparación de todos los modelos entrenados por el equipo:
 ```powershell
 .venv\Scripts\python compare_experiments.py
 ```
+El reporte se actualizará automáticamente en [`reports/EXPERIMENTS_SUMMARY.md`](reports/EXPERIMENTS_SUMMARY.md).
 
 ---
 
 ## 🤝 Buenas Prácticas para Trabajo Colaborativo
 
-1. **No modificar código central para cambiar parámetros**: Agrega o modifica archivos en la carpeta `configs/`.
-2. **Archivos `.zip` y logs locales**: No se suben a Git (están en `.gitignore`). Si deseas compartir un modelo `.zip` específico con tu compañero, puedes adjuntarlo en un **GitHub Release** o carpeta compartida de Google Drive.
-3. **Flujo de ramas**:
-   - Crea tu rama para nuevas funciones: `git checkout -b feature/mi-mejora`
-   - Sube tu configuración: `git add configs/mi_exp.yaml && git commit -m "add: mi config"`
-   - Haz Pull Request a `main`.
+1. **Desacople de Parámetros**: No modifiques código central para cambiar valores; añade nuevos archivos en `configs/`.
+2. **Registro Compartido**: Ejecuta y comitea `reports/EXPERIMENTS_SUMMARY.md` tras completar nuevos experimentos para que tu compañero vea el resumen en GitHub.
+3. **Modelos Pesados**: Los binarios `.zip` de los modelos están excluidos de Git por `.gitignore`. Compártelos vía GitHub Releases o almacenamiento en la nube.
+4. **Flujo de Ramas**:
+   - `git checkout -b feature/nombre-de-la-mejora`
+   - `git add configs/mi_exp.yaml reports/EXPERIMENTS_SUMMARY.md`
+   - `git commit -m "feat: add nuevo experimento"`
+   - `git push origin feature/nombre-de-la-mejora`
 
 ---
 
