@@ -98,7 +98,7 @@ def interactive_render(model_path=None, config_path=None):
                 elif event.key == pygame.K_SPACE:
                     manual_target = False
                     obs, _ = env.reset()
-                elif event.key == pygame.K_R:
+                elif event.key == pygame.K_r:
                     obs, _ = env.reset()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
