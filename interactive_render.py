@@ -1,18 +1,53 @@
 """
 Paso 5: Renderizado Interactivo en Tiempo Real para Brazo Robótico 2 DOF.
 Permite ver al agente de RL en acción y controlar el objetivo de forma interactiva con el mouse o con la barra espaciadora.
+Soporta la carga automática de la configuración con la que se entrenó el modelo (experiment_meta.json o --config).
 """
 
 import os
 import sys
+import json
+import argparse
 import math
 import numpy as np
 import pygame
+import yaml
 from stable_baselines3 import PPO
 from arm2d_env import Arm2DEnv
 
 
-def interactive_render(model_path=None):
+def find_model_config(model_path, config_path=None):
+    """Carga la configuración asociada al modelo o usa valores por defecto."""
+    if config_path and os.path.exists(config_path):
+        with open(config_path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f)
+
+    # Intentar buscar experiment_meta.json en la carpeta del modelo
+    if model_path:
+        # Si model_path es 'models/exp2_smooth_precision/best_model/best_model.zip',
+        # buscamos el experiment_meta.json en la carpeta del experimento
+        model_dir = os.path.dirname(os.path.abspath(model_path))
+        
+        # Buscar en la carpeta actual y en la carpeta padre
+        candidates = [
+            os.path.join(model_dir, "experiment_meta.json"),
+            os.path.join(os.path.dirname(model_dir), "experiment_meta.json")
+        ]
+        
+        for meta_file in candidates:
+            if os.path.exists(meta_file):
+                try:
+                    with open(meta_file, "r", encoding="utf-8") as f:
+                        meta = json.load(f)
+                        print(f">>> [CONFIG] Ajustando entorno a los parámetros del modelo ({meta_file})...")
+                        return meta.get("parameters", {})
+                except Exception as e:
+                    print(f">>> [AVISO] No se pudo leer {meta_file}: {e}")
+
+    return None
+
+
+def interactive_render(model_path=None, config_path=None):
     print("=" * 60)
     print(" SIMULADOR INTERACTIVO DE BRAZO ROBÓTICO 2D (PPO)")
     print("=" * 60)
@@ -23,8 +58,23 @@ def interactive_render(model_path=None):
     print(" - Tecla 'ESC' o cerrar ventana  : Salir")
     print("=" * 60)
 
-    # Crear entorno en modo 'human'
-    env = Arm2DEnv(render_mode="human")
+    # Resolver ruta de modelo por defecto si no se proporcionó
+    if not model_path:
+        default_paths = [
+            "models/exp2_smooth_precision/best_model/best_model.zip",
+            "models/exp1_baseline/best_model/best_model.zip",
+            "models/PPO/best_model/best_model.zip"
+        ]
+        for p in default_paths:
+            if os.path.exists(p):
+                model_path = p
+                break
+
+    # Cargar la configuración exacta del modelo para que coincidan los observation spaces
+    cfg = find_model_config(model_path, config_path)
+
+    # Crear entorno con la configuración adecuada
+    env = Arm2DEnv(render_mode="human", config=cfg)
     obs, info = env.reset()
 
     # Cargar modelo entrenado si existe
@@ -33,24 +83,12 @@ def interactive_render(model_path=None):
         print(f">>> Cargando modelo entrenado desde: {model_path}")
         model = PPO.load(model_path, env=env)
     else:
-        # Buscar modelo por defecto si existe
-        default_paths = [
-            "models/PPO/best_model/best_model.zip",
-            "models/PPO/ppo_arm2d_final.zip"
-        ]
-        for p in default_paths:
-            if os.path.exists(p):
-                print(f">>> Encontrado modelo: {p}")
-                model = PPO.load(p, env=env)
-                break
-        if model is None:
-            print(">>> [AVISO] No se encontró modelo entrenado. Ejecutando con acciones aleatorias.")
+        print(">>> [AVISO] No se encontró modelo. Ejecutando con acciones aleatorias.")
 
     running = True
     manual_target = False
 
     while running:
-        # Manejo de eventos de Pygame
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -60,11 +98,10 @@ def interactive_render(model_path=None):
                 elif event.key == pygame.K_SPACE:
                     manual_target = False
                     obs, _ = env.reset()
-                elif event.key == pygame.K_r:
+                elif event.key == pygame.K_R:
                     obs, _ = env.reset()
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:  # Click izquierdo
-                    # Convertir coordenadas de pantalla a métricas del simulador
+                if event.button == 1:
                     mx, my = pygame.mouse.get_pos()
                     world_x = (mx - env.origin[0]) / env.scale
                     world_y = -(my - env.origin[1]) / env.scale
@@ -72,7 +109,6 @@ def interactive_render(model_path=None):
                     manual_target = True
                     obs = env._get_obs()
 
-        # Decisión de acción (modelo RL o aleatoria)
         if model is not None:
             action, _ = model.predict(obs, deterministic=True)
         else:
@@ -87,6 +123,9 @@ def interactive_render(model_path=None):
 
 
 if __name__ == "__main__":
-    # Si se pasa la ruta del modelo como argumento por línea de comandos
-    custom_model = sys.argv[1] if len(sys.argv) > 1 else None
-    interactive_render(custom_model)
+    parser = argparse.ArgumentParser(description="Simulador interactivo para Brazo 2D")
+    parser.add_argument("model_path", nargs="?", default=None, help="Ruta al modelo .zip")
+    parser.add_argument("--config", "-c", type=str, default=None, help="Ruta opcional al YAML de configuración")
+    args = parser.parse_args()
+
+    interactive_render(args.model_path, args.config)
