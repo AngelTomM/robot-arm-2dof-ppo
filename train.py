@@ -13,8 +13,13 @@ from arm2d_env import Arm2DEnv
 
 def train():
     # 1. Directorios para guardar modelos y logs
-    models_dir = "models/PPO"
-    log_dir = "logs"
+    
+     # Asignar un nombre único al experimento:
+    EXPERIMENT_NAME = "exp1_baseline"  # Puedes cambiarlo a "exp2_alta_velocidad", etc.
+    
+    # Carpetas separadas por experimento
+    models_dir = f"models/{EXPERIMENT_NAME}"
+    log_dir = f"logs/{EXPERIMENT_NAME}"
     os.makedirs(models_dir, exist_ok=True)
     os.makedirs(log_dir, exist_ok=True)
 
@@ -68,7 +73,8 @@ def train():
     model.learn(
         total_timesteps=total_timesteps,
         callback=[eval_callback, checkpoint_callback],
-        progress_bar=True
+        progress_bar=True,
+        tb_log_name=EXPERIMENT_NAME
     )
 
     # 5. Guardar Modelo Final
