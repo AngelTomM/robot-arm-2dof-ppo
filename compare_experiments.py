@@ -53,14 +53,17 @@ def generate_experiment_summary():
     df = pd.DataFrame(records)
     print(df.to_string(index=False))
 
-    # Guardar en Markdown para consulta rápida
-    out_md = "EXPERIMENTS_SUMMARY.md"
+    # Guardar en Markdown dentro de una carpeta dedicada 'reports/'
+    reports_dir = "reports"
+    os.makedirs(reports_dir, exist_ok=True)
+    out_md = os.path.join(reports_dir, "EXPERIMENTS_SUMMARY.md")
+    
     with open(out_md, "w", encoding="utf-8") as f:
         f.write("# 📊 Resumen Comparativo de Experimentos\n\n")
         f.write(df.to_markdown(index=False))
-        f.write("\n\n*Generado automáticamente con `python compare_experiments.py`*\n")
+        f.write("\n\n*Actualizado automáticamente con `python compare_experiments.py`*\n")
 
-    print(f"\n>>> [OK] Resumen guardado en: {out_md}")
+    print(f"\n>>> [OK] Resumen actualizado en: {out_md}")
 
 
 if __name__ == "__main__":
