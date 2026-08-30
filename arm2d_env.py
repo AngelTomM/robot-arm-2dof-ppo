@@ -186,7 +186,7 @@ class Arm2DEnv(gym.Env):
         # Bono si alcanza el objetivo con precisión
         is_success = distance < self.target_radius
         if is_success:
-            reward += 5.0  # Gran bonificación al tocar la meta
+            reward += 10.0  # Gran bonificación al tocar la meta
 
         # 5. Condiciones de finalización del episodio
         terminated = is_success  # Termina con éxito

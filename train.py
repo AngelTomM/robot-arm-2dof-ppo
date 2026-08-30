@@ -15,7 +15,7 @@ def train():
     # 1. Directorios para guardar modelos y logs
     
      # Asignar un nombre único al experimento:
-    EXPERIMENT_NAME = "exp1_baseline"  # Puedes cambiarlo a "exp2_alta_velocidad", etc.
+    EXPERIMENT_NAME = "exp2_baseline"  # Puedes cambiarlo a "exp2_alta_velocidad", etc.
     
     # Carpetas separadas por experimento
     models_dir = f"models/{EXPERIMENT_NAME}"
@@ -55,8 +55,8 @@ def train():
     model = PPO(
         policy="MlpPolicy",
         env=vec_env,
-        learning_rate=3e-4,
-        n_steps=1024,
+        learning_rate=1.5e-4,
+        n_steps=2048,
         batch_size=64,
         n_epochs=10,
         gamma=0.99,
@@ -68,7 +68,7 @@ def train():
     )
 
     # 4. Iniciar Entrenamiento
-    total_timesteps = 150_000
+    total_timesteps = 300_000
     print(f">>> Iniciando entrenamiento por {total_timesteps:,} timesteps...")
     model.learn(
         total_timesteps=total_timesteps,
