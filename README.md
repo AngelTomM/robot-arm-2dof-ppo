@@ -5,6 +5,7 @@ Simulación y entrenamiento de un brazo robótico planar de 2 Grados de Libertad
 ---
 
 ## 📌 Tabla de Contenidos
+
 - [Características](#-características)
 - [Fundamento Teórico y Cinemática Directa](#-fundamento-teórico-y-cinemática-directa)
 - [Estructura del Proyecto](#-estructura-del-proyecto)
@@ -21,10 +22,11 @@ Simulación y entrenamiento de un brazo robótico planar de 2 Grados de Libertad
 ---
 
 ## 🚀 Características
+
 - **Entorno Gymnasium Estándar (`Arm2DEnv`)**: Cumple con todas las especificaciones y APIs de Gymnasium.
 - **Espacio de Acciones Continuo**: Control directo de velocidades angulares $(\dot{\theta}_1, \dot{\theta}_2)$ normalizadas en $[-1.0, 1.0]$.
 - **Espacio de Observaciones Continuo**: Vector de 10 dimensiones sin discontinuidades angulares:
-  $$[\cos\theta_1, \sin\theta_1, \cos\theta_2, \sin\theta_2, \dot{\theta}_1, \dot{\theta}_2, x_{target}, y_{target}, d_x, d_y]$$
+  $[\cos\theta_1, \sin\theta_1, \cos\theta_2, \sin\theta_2, \dot{\theta}_1, \dot{\theta}_2, x_{target}, y_{target}, d_x, d_y]$
 - **Función de Recompensa Densa**: Incentiva la aproximación al objetivo, penaliza el consumo excesivo de energía/torque y otorga una bonificación de éxito al alcanzar la meta con precisión.
 - **Renderizado Interactivo**: Ventana en tiempo real a 60 FPS con Pygame para interactuar con el brazo usando el mouse.
 - **Análisis de Métricas**: Compatible con TensorBoard y generación automática de reportes gráficos.
@@ -35,7 +37,8 @@ Simulación y entrenamiento de un brazo robótico planar de 2 Grados de Libertad
 
 El brazo robótico consta de dos articulaciones rotacionales y dos eslabones de longitudes $L_1$ y $L_2$, anclado a la base $(0, 0)$. Los ángulos son $\theta_1$ (ángulo absoluto del eslabón 1) y $\theta_2$ (ángulo relativo del eslabón 2 respecto al 1).
 
-### Ecuaciones de Cinemática Directa:
+### Ecuaciones de Cinemática Directa
+
 1. **Posición del Codo (Articulación 1)**:
    $$x_1 = L_1 \cdot \cos(\theta_1)$$
    $$y_1 = L_1 \cdot \sin(\theta_1)$$
@@ -64,6 +67,7 @@ El brazo robótico consta de dos articulaciones rotacionales y dos eslabones de 
 ## ⚙️ Instalación
 
 1. **Clonar el repositorio:**
+
    ```bash
    git clone https://github.com/AngelTomM/robot-arm-2dof-ppo.git
    cd robot-arm-2dof-ppo
@@ -71,17 +75,21 @@ El brazo robótico consta de dos articulaciones rotacionales y dos eslabones de 
 
 2. **Crear y activar el entorno virtual (Python 3.11 recomendado):**
    - **En Windows (PowerShell):**
+
      ```powershell
      py -3.11 -m venv .venv
      .\.venv\Scripts\Activate.ps1
      ```
+
    - **En Linux / macOS:**
+
      ```bash
      python3.11 -m venv .venv
      source .venv/bin/activate
      ```
 
 3. **Instalar dependencias:**
+
    ```bash
    pip install -r requirements.txt
    ```
@@ -94,7 +102,9 @@ El brazo robótico consta de dos articulaciones rotacionales y dos eslabones de 
 ## 🎮 Uso y Ejecución
 
 ### 1. Verificación del Entorno
+
 Valida que el entorno cumpla con todas las especificaciones de Gymnasium:
+
 ```bash
 # Con entorno activado:
 python test_env.py
@@ -104,7 +114,9 @@ python test_env.py
 ```
 
 ### 2. Entrenamiento con PPO
+
 Inicia el entrenamiento del agente con PPO (150,000 pasos en 4 entornos paralelos):
+
 ```bash
 # Con entorno activado:
 python train.py
@@ -112,10 +124,13 @@ python train.py
 # Sin activar el entorno (ruta directa en Windows):
 .venv\Scripts\python train.py
 ```
+
 Los modelos y mejores checkpoints se guardan automáticamente en `models/PPO/` y los logs en `logs/`.
 
 ### 3. Simulación Interactiva en Tiempo Real
+
 Ejecuta la visualización interactiva a 60 FPS con el agente entrenado:
+
 ```bash
 # Con entorno activado:
 python interactive_render.py
@@ -125,13 +140,16 @@ python interactive_render.py
 ```
 
 **Controles del Simulador:**
+
 - 🖱️ **Click Izquierdo**: Mueve el objetivo (Target) a la posición del cursor del mouse.
 - ⌨️ **Barra Espaciadora**: Genera un objetivo aleatorio dentro del espacio alcanzable.
 - 🔄 **Tecla 'R'**: Reinicia la pose y ángulos del brazo.
 - ❌ **Tecla 'ESC'**: Cierra la simulación.
 
 ### 4. Monitoreo con TensorBoard
+
 Para inspeccionar las curvas de recompensa media, pérdidas y entropía en tiempo real:
+
 ```powershell
 # Con entorno activado:
 tensorboard --logdir logs
@@ -139,10 +157,13 @@ tensorboard --logdir logs
 # Sin activar el entorno (ruta directa en Windows):
 .venv\Scripts\tensorboard --logdir logs
 ```
+
 Abre tu navegador en `http://localhost:6006`.
 
 ### 5. Generar Gráficas de Rendimiento Offline
+
 Si deseas exportar una imagen en alta definición con el análisis de curvas de aprendizaje sin abrir TensorBoard:
+
 ```bash
 # Con entorno activado:
 python plot_results.py
@@ -150,6 +171,7 @@ python plot_results.py
 # Sin activar el entorno (ruta directa en Windows):
 .venv\Scripts\python plot_results.py
 ```
+
 La gráfica se guardará automáticamente en `analysis/training_curves.png`.
 
 ---
@@ -163,4 +185,5 @@ La gráfica se guardará automáticamente en `analysis/training_curves.png`.
 ---
 
 ## 📄 Licencia
+
 Este proyecto está bajo la Licencia MIT.
