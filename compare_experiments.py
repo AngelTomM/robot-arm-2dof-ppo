@@ -99,7 +99,6 @@ def generate_experiment_summary():
                 "n_steps": ppo.get("n_steps", 1024),
                 "Timesteps": train.get("total_timesteps", 150000),
                 "Recompensa Máx": metrics["Recompensa Máx (Best)"],
-                "Recompensa Final": metrics["Recompensa Final"],
                 "Pasos/Episodio": metrics["Pasos / Episodio (Prom)"],
                 "Fecha": data.get("timestamp", "N/A")
             })
@@ -115,16 +114,14 @@ def generate_experiment_summary():
     out_md = os.path.join(reports_dir, "EXPERIMENTS_SUMMARY.md")
 
     with open(out_md, "w", encoding="utf-8") as f:
-        f.write("# 📊 Resumen Comparativo de Experimentos y Rendimiento\n\n")
-        f.write("Esta tabla consolida las métricas de rendimiento reales obtenidas desde los logs de entrenamiento de cada modelo.\n\n")
+        f.write("# Comparación de Experimentos\n\n")
+        f.write("Resumen consolidado de parámetros de configuración y métricas de desempeño por experimento.\n\n")
         f.write(df.to_markdown(index=False))
-        f.write("\n\n### 💡 Guía de Interpretación de Métricas:\n")
-        f.write("- **Recompensa Máx / Final**: Cuanto más alta o cercana a valores positivos, mejor aprendió el robot a alcanzar el objetivo.\n")
-        f.write("- **Pasos/Episodio (Promedio)**: Comienza en el límite (200 pasos). Un valor bajo (ej. 30-60 pasos) indica que el robot llega rápidamente a la meta sin dar vueltas.\n")
-        f.write("- **V. Máx / Radio Meta**: Parámetros de dificultad y precisión física configurados.\n\n")
-        f.write("*Actualizado automáticamente con `python compare_experiments.py`*\n")
+        f.write("\n\n---\n")
+        f.write("- **Recompensa Máx**: Mejor retorno medio obtenido durante la evaluación del modelo.\n")
+        f.write("- **Pasos/Episodio**: Duración media del episodio (un valor menor indica resolución más rápida de la tarea).\n")
 
-    print(f"\n>>> [OK] Reporte consolidado con métricas de rendimiento en: {out_md}")
+    print(f"\n>>> [OK] Reporte actualizado en: {out_md}")
 
 
 if __name__ == "__main__":
