@@ -92,8 +92,8 @@ def generate_experiment_summary():
             records.append({
                 "Experimento": exp_name,
                 "Autor": exp.get("author", "N/A"),
-                "Estrategia Recompensa": env.get("reward_type", "distance_only"),
-                "V. Máx": env.get("max_speed", 2.0),
+                "Recompensa": env.get("reward_type", "distance_only"),
+                "Max Speed": env.get("max_speed", 2.0),
                 "Radio Meta": env.get("target_radius", 0.08),
                 "LR": ppo.get("learning_rate", 3e-4),
                 "n_steps": ppo.get("n_steps", 1024),
