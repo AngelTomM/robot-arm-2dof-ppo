@@ -1,0 +1,39 @@
+# Configuración Base / Baseline
+experiment:
+  name: "exp2_baseline"
+  description: "Entrenamiento base con recompensa por distancia euclidiana"
+  author: "Tomi"
+
+# Parámetros del Entorno Físico
+env:
+  l1: 1.0
+  l2: 1.0
+  max_speed: 2.0
+  target_radius: 0.08
+  max_steps: 200
+  dt: 0.05
+  # Tipo de función de recompensa: "distance_only", "smooth_precision", "energy_efficient"
+  reward_type: "distance_only"
+  reward_params:
+    distance_penalty_coef: 1.0
+    action_penalty_coef: 0.01
+    success_bonus: 15.0
+
+# Hiperparámetros de PPO
+ppo:
+  learning_rate: 0.00015
+  n_steps: 2048
+  batch_size: 64
+  n_epochs: 10
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.001
+  num_envs: 4
+
+# Parámetros de Entrenamiento y Evaluación
+training:
+  total_timesteps: 300000
+  eval_freq: 5000
+  n_eval_episodes: 10
+  save_freq: 25000
