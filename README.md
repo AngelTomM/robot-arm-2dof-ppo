@@ -16,6 +16,7 @@ Simulación y entrenamiento de un brazo robótico planar de 2 Grados de Libertad
   - [3. Simulación Interactiva en Tiempo Real](#3-simulación-interactiva-en-tiempo-real)
   - [4. Monitoreo con TensorBoard](#4-monitoreo-con-tensorboard)
   - [5. Comparar Experimentos y Reportes](#5-comparar-experimentos-y-reportes)
+  - [6. Generar Gráficas Offline](#6-generar-gráficas-offline)
 - [Buenas Prácticas para Trabajo Colaborativo](#-buenas-prácticas-para-trabajo-colaborativo)
 - [Licencia](#-licencia)
 
@@ -23,11 +24,12 @@ Simulación y entrenamiento de un brazo robótico planar de 2 Grados de Libertad
 
 ## 🚀 Características
 
-- **Configuración desacoplada en YAML**: Ajusta la física, hiperparámetros de PPO o funciones de recompensa sin modificar el código central.
-- **Entorno Gymnasium Estándar (`Arm2DEnv`)**: Implementación estándar con espacios continuos de acción y observación (10 dimensiones).
+- **Configuración desacoplada en YAML**: Ajusta la física, hiperparámetros de PPO o funciones de recompensa sin modificar el código fuente.
+- **Detección Automática de Parámetros en el Simulador**: `interactive_render.py` detecta automáticamente la configuración y física con la que fue entrenado cada modelo para evitar discrepancias de observación.
+- **Entorno Gymnasium Estándar (`Arm2DEnv`)**: Implementación compatible con espacios continuos de acción y observación (10 dimensiones).
 - **Estrategias de Recompensa Modulares**:
   - `distance_only`: Penalización base por distancia euclidiana.
-  - `smooth_precision`: Recompensa de proximidad y penalización de velocidad cerca de la meta para posarse con precisión sin oscilaciones ni sobreimpulsos.
+  - `smooth_precision`: Recompensa de proximidad fina y penalización de velocidad cerca de la meta para posarse con precisión sin oscilaciones ni sobreimpulsos.
   - `energy_efficient`: Minimización de esfuerzo y torques angulares.
 - **Registro Automático de Metadatos**: Cada ejecución almacena `experiment_meta.json` dentro de `models/<nombre_experimento>/`.
 - **Generación de Reportes Automática**: `compare_experiments.py` consolida todos los modelos en `reports/EXPERIMENTS_SUMMARY.md`.
@@ -61,7 +63,7 @@ El brazo robótico consta de dos articulaciones rotacionales y dos eslabones de 
 │   └── EXPERIMENTS_SUMMARY.md          # Tabla consolidada con todos los experimentos del equipo
 ├── arm2d_env.py                        # Entorno Gymnasium configurable con Pygame
 ├── train.py                            # Script de entrenamiento PPO con soporte YAML y metadatos
-├── interactive_render.py               # Simulador interactivo en tiempo real (control con mouse)
+├── interactive_render.py               # Simulador interactivo en tiempo real con auto-carga de configs
 ├── plot_results.py                     # Generador de gráficas de rendimiento desde logs
 ├── compare_experiments.py              # Consolidador y generador de reportes comparativos
 ├── test_env.py                         # Test de validación con Gymnasium check_env
@@ -128,7 +130,7 @@ Inicia el entrenamiento pasando la ruta de la configuración deseada:
 El modelo y sus metadatos se guardarán en `models/exp2_smooth_precision/`.
 
 ### 3. Simulación Interactiva en Tiempo Real
-Prueba el modelo entrenado en la ventana interactiva:
+Prueba cualquier modelo generado. El simulador detectará automáticamente los parámetros físicos y de observación correspondientes:
 ```powershell
 .venv\Scripts\python interactive_render.py models/exp2_smooth_precision/best_model/best_model.zip
 ```
@@ -151,6 +153,13 @@ Genera o actualiza la tabla de comparación de todos los modelos entrenados por 
 .venv\Scripts\python compare_experiments.py
 ```
 El reporte se actualizará automáticamente en [`reports/EXPERIMENTS_SUMMARY.md`](reports/EXPERIMENTS_SUMMARY.md).
+
+### 6. Generar Gráficas Offline
+Si deseas exportar imágenes de curvas de aprendizaje sin abrir TensorBoard:
+```powershell
+.venv\Scripts\python plot_results.py
+```
+Las imágenes se guardarán en `analysis/` (ignorado por Git).
 
 ---
 
