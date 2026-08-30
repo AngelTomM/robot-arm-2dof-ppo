@@ -30,6 +30,8 @@ share/python-wheels/
 # Logs de entrenamiento y monitoreo (TensorBoard)
 logs/
 *.tfevents.*
+analysis/
+*.png
 
 # Modelos y Checkpoints pesados (ignorar modelos generados localmente excepto si se desea versionar un benchmark)
 models/
