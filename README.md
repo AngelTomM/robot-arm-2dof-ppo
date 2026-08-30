@@ -130,9 +130,14 @@ Inicia el entrenamiento pasando la ruta de la configuración deseada:
 El modelo y sus metadatos se guardarán en `models/exp2_smooth_precision/`.
 
 ### 3. Simulación Interactiva en Tiempo Real
-Prueba cualquier modelo generado. El simulador detectará automáticamente los parámetros físicos y de observación correspondientes:
+Prueba cualquier modelo generado. El simulador detectará automáticamente los parámetros físicos y de observación correspondientes a través de su `experiment_meta.json`. También puedes forzar un archivo YAML de configuración explícito con `--config`:
+
 ```powershell
+# Detección automática de configuración desde la carpeta del modelo:
 .venv\Scripts\python interactive_render.py models/exp2_smooth_precision/best_model/best_model.zip
+
+# O especificando un YAML de configuración explícito:
+.venv\Scripts\python interactive_render.py models/exp2_smooth_precision/best_model/best_model.zip --config configs/exp2_smooth_precision.yaml
 ```
 **Controles:**
 - 🖱️ **Click Izquierdo**: Mueve el objetivo (Target) a la posición del cursor del mouse.
