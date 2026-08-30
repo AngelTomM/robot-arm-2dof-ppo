@@ -26,7 +26,10 @@ Simulación y entrenamiento de un brazo robótico planar de 2 Grados de Libertad
 - **Entorno Gymnasium Estándar (`Arm2DEnv`)**: Cumple con todas las especificaciones y APIs de Gymnasium.
 - **Espacio de Acciones Continuo**: Control directo de velocidades angulares $(\dot{\theta}_1, \dot{\theta}_2)$ normalizadas en $[-1.0, 1.0]$.
 - **Espacio de Observaciones Continuo**: Vector de 10 dimensiones sin discontinuidades angulares:
+  $$[\cos\theta_1, \sin\theta_1, \cos\theta_2, \sin\theta_2, \dot{\theta}_1, \dot{\theta}_2, x_{target}, y_{target}, d_x, d_y]$$
+  
   $[\cos\theta_1, \sin\theta_1, \cos\theta_2, \sin\theta_2, \dot{\theta}_1, \dot{\theta}_2, x_{target}, y_{target}, d_x, d_y]$
+
 - **Función de Recompensa Densa**: Incentiva la aproximación al objetivo, penaliza el consumo excesivo de energía/torque y otorga una bonificación de éxito al alcanzar la meta con precisión.
 - **Renderizado Interactivo**: Ventana en tiempo real a 60 FPS con Pygame para interactuar con el brazo usando el mouse.
 - **Análisis de Métricas**: Compatible con TensorBoard y generación automática de reportes gráficos.
