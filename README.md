@@ -60,11 +60,11 @@ El brazo robótico consta de dos articulaciones rotacionales y dos eslabones de 
 │   ├── exp2_smooth_precision.yaml      # Configuración de alta precisión y frenado suave
 │   └── template_custom_experiment.yaml # Plantilla para crear nuevos experimentos
 ├── reports/
+│   ├── runs/                           # Metadatos livianos de cada entrenamiento para compartir
 │   └── EXPERIMENTS_SUMMARY.md          # Tabla consolidada con todos los experimentos del equipo
 ├── arm2d_env.py                        # Entorno Gymnasium configurable con Pygame
 ├── train.py                            # Script de entrenamiento PPO con soporte YAML y metadatos
 ├── interactive_render.py               # Simulador interactivo en tiempo real con auto-carga de configs
-├── plot_results.py                     # Generador de gráficas de rendimiento desde logs
 ├── compare_experiments.py              # Consolidador y generador de reportes comparativos
 ├── test_env.py                         # Test de validación con Gymnasium check_env
 ├── requirements.txt                    # Dependencias del proyecto
@@ -158,13 +158,6 @@ Genera o actualiza la tabla de comparación de todos los modelos entrenados por 
 .venv\Scripts\python compare_experiments.py
 ```
 El reporte se actualizará automáticamente en [`reports/EXPERIMENTS_SUMMARY.md`](reports/EXPERIMENTS_SUMMARY.md).
-
-### 6. Generar Gráficas Offline
-Si deseas exportar imágenes de curvas de aprendizaje sin abrir TensorBoard:
-```powershell
-.venv\Scripts\python plot_results.py
-```
-Las imágenes se guardarán en `analysis/` (ignorado por Git).
 
 ---
 
