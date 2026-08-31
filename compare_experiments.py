@@ -1,8 +1,7 @@
 """
 Herramienta Avanzada de Comparación y Resumen de Experimentos.
-Lee los archivos experiment_meta.json y extrae automáticamente las métricas de rendimiento reales
-de los logs de TensorBoard (Recompensa Máxima, Recompensa Final, Longitud Media de Episodio, etc.).
-Genera una tabla detallada en consola y un reporte estructurado en reports/EXPERIMENTS_SUMMARY.md.
+Lee los archivos de metadatos (reports/runs/*.json y models/**/experiment_meta.json)
+y los logs de TensorBoard para unificar automáticamente los resultados de todos los miembros del equipo.
 """
 
 import os
@@ -19,44 +18,37 @@ def extract_metrics_from_logs(exp_name):
 
     default_metrics = {
         "Recompensa Máx (Best)": "N/D",
-        "Recompensa Final": "N/D",
-        "Pasos / Episodio (Prom)": "N/D",
-        "Estado": "Sin Logs"
+        "Pasos / Episodio (Prom)": "N/D"
     }
 
     if not event_files:
         return default_metrics
 
     try:
-        # Cargar el archivo de logs más reciente del experimento
         latest_log = max(event_files, key=os.path.getmtime)
         ea = event_accumulator.EventAccumulator(latest_log)
         ea.Reload()
 
         scalars = ea.Tags().get("scalars", [])
 
-        # 1. Recompensa media de episodios (ep_rew_mean)
-        if "rollout/ep_rew_mean" in scalars:
+        # 1. Recompensa periódica de evaluación
+        if "eval/mean_reward" in scalars:
+            eval_rewards = [e.value for e in ea.Scalars("eval/mean_reward")]
+            if eval_rewards:
+                default_metrics["Recompensa Máx (Best)"] = f"{max(eval_rewards):.2f} *"
+        elif "rollout/ep_rew_mean" in scalars:
             rewards = [e.value for e in ea.Scalars("rollout/ep_rew_mean")]
             if rewards:
                 default_metrics["Recompensa Máx (Best)"] = f"{max(rewards):.2f}"
-                default_metrics["Recompensa Final"] = f"{rewards[-1]:.2f}"
 
-        # 2. Longitud de episodios (ep_len_mean: pasos antes de terminar)
+        # 2. Longitud media de episodio
         if "rollout/ep_len_mean" in scalars:
             lengths = [e.value for e in ea.Scalars("rollout/ep_len_mean")]
             if lengths:
                 default_metrics["Pasos / Episodio (Prom)"] = f"{lengths[-1]:.1f}"
 
-        # 3. Evaluación periódica de EvalCallback si existe
-        if "eval/mean_reward" in scalars:
-            eval_rewards = [e.value for e in ea.Scalars("eval/mean_reward")]
-            if eval_rewards:
-                default_metrics["Recompensa Máx (Best)"] = f"{max(eval_rewards):.2f} *"
-
-        default_metrics["Estado"] = "Completado"
-    except Exception as e:
-        default_metrics["Estado"] = "Error lectura"
+    except Exception:
+        pass
 
     return default_metrics
 
@@ -66,14 +58,19 @@ def generate_experiment_summary():
     print(" RESUMEN Y COMPARACION AVANZADA DE RENDIMIENTO DE MODELOS")
     print("=" * 85)
 
-    meta_files = glob.glob("models/**/experiment_meta.json", recursive=True)
+    # 1. Buscar metadatos compartidos en reports/runs/ y modelos locales en models/
+    shared_runs = glob.glob("reports/runs/*.json")
+    local_meta_files = glob.glob("models/**/experiment_meta.json", recursive=True)
 
-    if not meta_files:
-        print(">>> No se encontraron metadatos en 'models/'. Ejecuta entrenamientos primero.")
+    all_meta_sources = set(shared_runs + local_meta_files)
+
+    if not all_meta_sources:
+        print(">>> No se encontraron experimentos en 'reports/runs/' ni en 'models/'.")
         return
 
-    records = []
-    for mf in meta_files:
+    records = {}
+
+    for mf in all_meta_sources:
         try:
             with open(mf, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -84,14 +81,22 @@ def generate_experiment_summary():
             ppo = params.get("ppo", {})
             train = params.get("training", {})
 
-            exp_name = exp.get("name", os.path.basename(os.path.dirname(mf)))
+            exp_name = exp.get("name", "sin_nombre")
+            author = exp.get("author", "Anonimo")
+            timestamp = data.get("timestamp", "N/A")
 
-            # Extraer métricas reales de TensorBoard
+            # Clave única para evitar colisiones: nombre + autor
+            unique_key = f"{exp_name}_{author}"
+
+            # Extraer métricas de TensorBoard local si existen, o usar las guardadas en el json
             metrics = extract_metrics_from_logs(exp_name)
+            if metrics["Recompensa Máx (Best)"] == "N/D" and "metrics" in data:
+                metrics["Recompensa Máx (Best)"] = data["metrics"].get("Recompensa Máx (Best)", "N/D")
+                metrics["Pasos / Episodio (Prom)"] = data["metrics"].get("Pasos / Episodio (Prom)", "N/D")
 
-            records.append({
+            records[unique_key] = {
                 "Experimento": exp_name,
-                "Autor": exp.get("author", "N/A"),
+                "Autor": author,
                 "Recompensa": env.get("reward_type", "distance_only"),
                 "Max Speed": env.get("max_speed", 2.0),
                 "Radio Meta": env.get("target_radius", 0.08),
@@ -100,12 +105,14 @@ def generate_experiment_summary():
                 "Timesteps": train.get("total_timesteps", 150000),
                 "Recompensa Máx": metrics["Recompensa Máx (Best)"],
                 "Pasos/Episodio": metrics["Pasos / Episodio (Prom)"],
-                "Fecha": data.get("timestamp", "N/A")
-            })
+                "Fecha": timestamp
+            }
         except Exception as e:
             print(f"Error procesando {mf}: {e}")
 
-    df = pd.DataFrame(records)
+    df = pd.DataFrame(list(records.values()))
+
+    # Ordenar por Recompensa Máx o Fecha si están disponibles
     print(df.to_string(index=False))
 
     # Guardar en Markdown dentro de reports/
@@ -115,14 +122,14 @@ def generate_experiment_summary():
 
     with open(out_md, "w", encoding="utf-8") as f:
         f.write("# 📊 Comparación de Experimentos\n\n")
-        f.write("Resumen consolidado de parámetros de configuración y métricas de desempeño por experimento.\n\n")
+        f.write("Resumen consolidado de parámetros de configuración y métricas de desempeño por experimento de todos los autores.\n\n")
         f.write(df.to_markdown(index=False))
         f.write("\n\n---\n")
         f.write("### 💡 Interpretación de Métricas:\n")
         f.write("- **Recompensa Máx**: Mejor retorno medio obtenido durante la evaluación del modelo (valores más cercanos a 0 o positivos indican mejor desempeño).\n")
         f.write("- **Pasos/Episodio**: Duración media del episodio (un valor menor indica resolución más rápida de la tarea).\n")
 
-    print(f"\n>>> [OK] Reporte actualizado en: {out_md}")
+    print(f"\n>>> [OK] Reporte consolidado actualizado en: {out_md}")
 
 
 if __name__ == "__main__":

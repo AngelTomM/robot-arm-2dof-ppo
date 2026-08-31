@@ -33,16 +33,29 @@ def load_config(config_path):
 
 
 def save_experiment_metadata(models_dir, cfg, config_path=None):
-    """Guarda un registro JSON con todos los parámetros del experimento."""
+    """Guarda un registro JSON con todos los parámetros del experimento tanto en models/ como en reports/runs/."""
+    exp_name = cfg.get("experiment", {}).get("name", "exp_default")
+    author = cfg.get("experiment", {}).get("author", "anonimo").replace("/", "_").replace(" ", "_")
+
     meta = {
         "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "config_file": config_path or "default",
         "parameters": cfg
     }
+    
+    # 1. Guardar localmente junto al modelo
     meta_path = os.path.join(models_dir, "experiment_meta.json")
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=4, ensure_ascii=False)
     print(f">>> [METADATA] Parámetros registrados en: {meta_path}")
+
+    # 2. Guardar en reports/runs/ para que se comparta por Git
+    runs_dir = "reports/runs"
+    os.makedirs(runs_dir, exist_ok=True)
+    shared_run_path = os.path.join(runs_dir, f"{exp_name}_{author}.json")
+    with open(shared_run_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=4, ensure_ascii=False)
+    print(f">>> [METADATA] Resumen de sesión guardado para el equipo en: {shared_run_path}")
 
 
 def train(config_path=None):
