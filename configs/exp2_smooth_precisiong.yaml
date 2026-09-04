@@ -2,7 +2,7 @@
 experiment:
   name: "exp2_smooth_precisiong"
   description: "Recompensa suave con penalización de velocidad cerca del objetivo y mayor número de pasos"
-  author: "Yo/Gabi"
+  author: "Gabi"
 
 # Parámetros del Entorno Físico
 env:
@@ -17,13 +17,13 @@ env:
   reward_params:
     distance_penalty_coef: 1.0
     action_penalty_coef: 0.02
-    success_bonus: 15.0     # Gran incentivo al alcanzar la meta
+    success_bonus: 20.0     # Gran incentivo al alcanzar la meta
     near_zone_threshold: 0.3 # Zona de frenado
     velocity_penalty_near: 0.15 # Penalización por llegar a lo loco
 
 # Hiperparámetros de PPO
 ppo:
-  learning_rate: 0.00015   # Aprendizaje más fino y estable
+  learning_rate: 0.0001   # Aprendizaje más fino y estable
   n_steps: 2048            # Trayectorias más largas para evaluar la detención
   batch_size: 64
   n_epochs: 10
