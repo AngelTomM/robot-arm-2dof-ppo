@@ -1,0 +1,55 @@
+{
+  "timestamp": "2026-10-02 20:49:36",
+  "config_source": "configs/phase_a/X1a.yaml",
+  "seed": 100,
+  "parameters": {
+    "experiment": {
+      "name": "X1a",
+      "description": "Hold relajado (5 pasos, 0.3 rad/s) con bonus al completar la permanencia",
+      "author": "Fase A"
+    },
+    "env": {
+      "l1": 1.0,
+      "l2": 1.0,
+      "max_speed": 1.5,
+      "target_radius": 0.06,
+      "max_steps": 200,
+      "dt": 0.05,
+      "success_mode": "hold",
+      "hold_steps": 5,
+      "velocity_tolerance": 0.3,
+      "reward_type": "smooth_precision",
+      "reward_params": {
+        "distance_penalty_coef": 1.0,
+        "action_penalty_coef": 0.02,
+        "success_bonus": 15.0,
+        "near_zone_threshold": 0.3,
+        "velocity_penalty_near": 0.15
+      }
+    },
+    "normalization": {
+      "norm_obs": false,
+      "norm_reward": false
+    },
+    "ppo": {
+      "learning_rate": 0.00015,
+      "n_steps": 2048,
+      "batch_size": 64,
+      "n_epochs": 10,
+      "gamma": 0.99,
+      "gae_lambda": 0.95,
+      "clip_range": 0.2,
+      "ent_coef": 0.002,
+      "max_grad_norm": 0.5,
+      "num_envs": 4,
+      "net_arch": "64x64_tanh"
+    },
+    "training": {
+      "total_timesteps": 300000,
+      "eval_freq": 5000,
+      "n_eval_episodes": 15,
+      "save_freq": 50000
+    }
+  },
+  "effective_policy_kwargs": "{'net_arch': {'pi': [64, 64], 'vf': [64, 64]}, 'activation_fn': <class 'torch.nn.modules.activation.Tanh'>}"
+}

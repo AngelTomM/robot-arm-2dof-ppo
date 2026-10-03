@@ -77,11 +77,33 @@ def interactive_render(model_path=None, config_path=None):
     env = Arm2DEnv(render_mode="human", config=cfg)
     obs, info = env.reset()
 
+    # Buscar estadísticas de normalización si existen (Fase A)
+    norm_wrapper = None
+    if model_path:
+        model_dir = os.path.dirname(os.path.abspath(model_path))
+        norm_candidates = [
+            os.path.join(model_dir, "vecnormalize_stats.pkl"),
+            os.path.join(os.path.dirname(model_dir), "vecnormalize_stats.pkl"),
+            os.path.join(os.path.dirname(model_dir), "models", "vecnormalize_stats.pkl")
+        ]
+        for norm_file in norm_candidates:
+            if os.path.exists(norm_file):
+                try:
+                    from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+                    dummy = DummyVecEnv([lambda: Arm2DEnv(config=cfg)])
+                    norm_wrapper = VecNormalize.load(norm_file, dummy)
+                    norm_wrapper.training = False
+                    norm_wrapper.norm_reward = False
+                    print(f">>> [NORM] Estadísticas de normalización cargadas desde: {norm_file}")
+                    break
+                except Exception as e:
+                    print(f">>> [AVISO] No se pudo cargar VecNormalize ({norm_file}): {e}")
+
     # Cargar modelo entrenado si existe
     model = None
     if model_path and os.path.exists(model_path):
         print(f">>> Cargando modelo entrenado desde: {model_path}")
-        model = PPO.load(model_path, env=env)
+        model = PPO.load(model_path)
     else:
         print(">>> [AVISO] No se encontró modelo. Ejecutando con acciones aleatorias.")
 
@@ -110,7 +132,8 @@ def interactive_render(model_path=None, config_path=None):
                     obs = env._get_obs()
 
         if model is not None:
-            action, _ = model.predict(obs, deterministic=True)
+            policy_obs = norm_wrapper.normalize_obs(obs) if norm_wrapper else obs
+            action, _ = model.predict(policy_obs, deterministic=True)
         else:
             action = env.action_space.sample()
 
