@@ -1,0 +1,18 @@
+{
+  "figure_name": "fig_agg_07_acceptance_summary.png",
+  "description": "Matriz visual de cumplimiento de criterios de aceptaci\u00f3n de Fase A con C0 como referencia y X0 como n=1.",
+  "timestamp": "2026-10-05T19:36:02.119639",
+  "python_version": "3.11.16 (main, Aug 25 2026, 13:59:19) [MSC v.1944 64 bit (AMD64)]",
+  "os_platform": "Windows-10-10.0.19045-SP0",
+  "libraries": {
+    "numpy": "1.26.4",
+    "pandas": "3.0.5",
+    "matplotlib": "3.11.1"
+  },
+  "script_path": "scripts\\generate_phase_a_aggregated_plots.py",
+  "script_sha256": "0e37f5295926f29d250fa08fb2ea7af9e56253a7db18db5ba5cf5f268bbbd851",
+  "input_files_sha256": {
+    "confirmation_all_seeds_results.csv": "9c8de64c21c299bf635d77db5e2fc3a2ae510a3bd55a57d2f4f04f4ee4dd61eb",
+    "thresholds.yaml": "89e4e72e831d9df38dd3c5b54790de3742c7f32a81fa698cf0c1c30e328ecad1"
+  }
+}
