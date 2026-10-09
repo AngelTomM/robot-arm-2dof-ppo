@@ -28,10 +28,12 @@ def find_model_config(model_path, config_path=None):
         # buscamos el experiment_meta.json en la carpeta del experimento
         model_dir = os.path.dirname(os.path.abspath(model_path))
         
-        # Buscar en la carpeta actual y en la carpeta padre
+        # Buscar en la carpeta actual y en carpetas superiores (útil para checkpoints)
         candidates = [
             os.path.join(model_dir, "experiment_meta.json"),
-            os.path.join(os.path.dirname(model_dir), "experiment_meta.json")
+            os.path.join(os.path.dirname(model_dir), "experiment_meta.json"),
+            os.path.join(os.path.dirname(os.path.dirname(model_dir)), "experiment_meta.json"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(model_dir))), "experiment_meta.json")
         ]
         
         for meta_file in candidates:
