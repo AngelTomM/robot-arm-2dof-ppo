@@ -439,3 +439,100 @@ python scripts/generate_phase_b_figures.py
 # 6. Ejecutar tests unitarios de validación de Fase B
 python -m unittest tests/test_phase_b_validations.py
 ```
+
+---
+
+## 14. Addenda: Fase B (Extensión) — Comparación Exhaustiva de Candidatas y Selección Formal del Mejor Agente (Presupuesto 655 360 Pasos)
+
+### 14.1 Alcance, Presupuesto y Protocolo de Decisión Pre-registrado
+En esta extensión de la Fase B (Etapas B-7 a B-13) se unificó el presupuesto de interacción a **655 360 timesteps** (80 rollouts de 8 192 pasos, 16 checkpoints periódicos cada 40 960 pasos) para **todas las configuraciones candidatas**:
+* **7 agentes principales (n=3 semillas: 42, 100, 2026):** `X1a`, `X2`, `X3`, `X4`, `X5`, `X5_near`, `X6`.
+* **4 agentes pilotos (n=1 semilla: 42, informativos fuera de la regla):** `X1b`, `X1c`, `X1s`, `X2b`.
+* **2 versiones del baseline analítico:** `C0 (consistente, max_speed=1.5)` y `C0 (histórico, max_speed=2.0)`.
+
+Se generaron dos conjuntos de 500 episodios con 0 % de solapamiento entre sí y con los conjuntos históricos:
+1. `validation_b2_500.json` (semilla maestra 202611): Utilizado para la selección del checkpoint óptimo bajo la **Regla 4.1**.
+2. `final_b2_500.json` (semilla maestra 202622, SHA-256 `c02716de...`): Sellado criptográficamente hasta la evaluación única terminal bajo la **Regla 4.2**.
+
+La reutilización de checkpoints para `X3` y `X5_near` se rotula formalmente como: *"verificado hasta 655360 para X3 y X5_near (semilla 42); inferido para semillas 100 y 2026"*, tras comprobar empíricamente que la diferencia paramétrica y de `VecNormalize` respecto a un entrenamiento nuevo fue exactamente 0.0.
+
+---
+
+### 14.2 Selección de Checkpoints por Agente en Validación B2 (Regla 4.1)
+Bajo la Regla 4.1 (media móvil de 3 puntos, extremos truncados, umbral de indiferencia $U_{equiv}$ calculado como ancho Wilson al 95 % en $n=500$ sobre el pico, y desempate por checkpoint más temprano):
+
+| Agente | Tipo | Checkpoint Elegido | Éxito Suavizado | Éxito Raw ($\pm$ std) | Pico Suavizado (Paso) | Banda $U_{equiv}$ | Pendiente Final [573k $\to$ 655k] | Diagnóstico Asintótico |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **X4** | Principal | **450 560** | **97.18 %** | **97.00 %** $\pm$ 2.31 % | 98.40 % (655k) | 2.31 pp | +0.53 pp | Meseta (>98 %) |
+| **X3** | Principal | **286 720** | **94.11 %** | **94.13 %** $\pm$ 2.16 % | 97.00 % (410k) | 3.06 pp | +1.53 pp | Meseta (~95 %) |
+| **X6** | Principal | **286 720** | **93.73 %** | **93.67 %** $\pm$ 2.81 % | 96.24 % (369k) | 3.41 pp | +1.93 pp | Meseta (~95 %) |
+| **X5** | Principal | **286 720** | **92.76 %** | **94.73 %** $\pm$ 3.72 % | 95.09 % (451k) | 3.87 pp | -4.40 pp | Degradando al final |
+| **X2b** | Piloto ($n=1$) | **532 480** | **86.33 %** | **87.60 %** | 89.80 % (655k) | 5.32 pp | +2.60 pp | Creciendo |
+| **X5_near**| Principal | **327 680** | **80.47 %** | **79.00 %** $\pm$ 7.83 % | 85.00 % (655k) | 6.26 pp | +7.53 pp | Creciendo |
+| **X1a** | Principal | **614 400** | **75.96 %** | **77.53 %** $\pm$ 5.00 % | 78.73 % (655k) | 7.15 pp | +9.53 pp | Creciendo |
+| **X2** | Principal | **573 440** | **76.20 %** | **75.27 %** $\pm$ 1.67 % | 82.80 % (655k) | 6.61 pp | +9.67 pp | Creciendo |
+| **X1b** | Piloto ($n=1$) | **614 400** | **70.93 %** | **71.80 %** | 74.10 % (655k) | 7.67 pp | +11.80 pp | Creciendo |
+| **X1c** | Piloto ($n=1$) | **614 400** | **70.93 %** | **71.80 %** | 74.10 % (655k) | 7.67 pp | +11.80 pp | Creciendo |
+| **X1s** | Piloto ($n=1$) | **614 400** | **49.73 %** | **48.40 %** | 53.80 % (655k) | 8.71 pp | +17.60 pp | Creciendo |
+
+---
+
+### 14.3 Evaluación Terminal sobre Final B2 y Veredicto Formal (Regla 4.2)
+En la lectura única del conjunto final (`final_b2_500.json`, $n=500$ episodios por semilla):
+
+| Pos. | Agente | Checkpoint Evaluado | Éxito Medio ($n=3$) | Desv. Semillas ($s_R$) | Semillas Raw (`42`, `100`, `2026`) | Distancia al Líder | ¿Equivalente Estadístico? | Mediana Pasos | Suavidad $\overline{\Delta a}$ |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **1** | **X4** | Paso 450 560 | **96.73 %** | 2.81 % | $93.8\,\%,\,97.0\,\%,\,99.4\,\%$ | $0.00\text{ pp}$ | **SÍ (Líder)** | 59.7 | 0.0464 |
+| **2** | **X3** | Paso 286 720 | **94.53 %** | **0.83 %** | $93.6\,\%,\,94.8\,\%,\,95.2\,\%$ | **2.20 pp** | **SÍ** | **57.7** | 0.0422 |
+| **3** | **X5** | Paso 286 720 | **93.93 %** | 4.37 % | $89.2\,\%,\,97.8\,\%,\,94.8\,\%$ | **2.80 pp** | **SÍ** | 60.0 | **0.0392** |
+| 4 | **X6** | Paso 286 720 | **92.67 %** | 3.37 % | $95.0\,\%,\,94.2\,\%,\,88.8\,\%$ | 4.07 pp | No ($> U_{equiv}$) | 59.3 | 0.0387 |
+| 5 | **X5_near**| Paso 327 680| **79.60 %** | 7.63 % | $88.4\,\%,\,75.6\,\%,\,74.8\,\%$ | 17.13 pp | No | 67.2 | 0.0289 |
+| 6 | **X1a** | Paso 614 400 | **77.00 %** | 5.30 % | $71.2\,\%,\,78.2\,\%,\,81.6\,\%$ | 19.73 pp | No | 71.5 | 0.0318 |
+| 7 | **X2** | Paso 573 440 | **74.73 %** | 1.81 % | $76.4\,\%,\,72.8\,\%,\,75.0\,\%$ | 22.00 pp | No | 69.3 | 0.0311 |
+
+* **Baselines C0 en Final B2:** Ambos alcanzan **100.0 %** de éxito; $C0$ consistente ($\text{max\_speed}=1.5$) registra mediana de **59.0 pasos** y $\overline{\Delta a}=0.0508$; $C0$ histórico ($\text{max\_speed}=2.0$) registra mediana de **63.0 pasos** y $\overline{\Delta a}=0.0435$.
+* **Pilotos $n=1$ en Final B2:** `X2b` (85.00 %), `X1b` (71.20 %), `X1c` (71.20 %), `X1s` (47.00 %).
+
+#### Veredicto Formal Emitido:
+* Líder muestral: **`X4`** ($\bar{p}_{top} = 96.73\,\%$).
+* Banda de ruido operacional ($n=500$): $U_{equiv\_final} = \mathbf{3.16\text{ pp}}$ (Umbral: **93.58 %**).
+* **Declaración:** Se declara formalmente un **Grupo de Agentes Estadísticamente Equivalentes: `['X4', 'X3', 'X5']`**. Con los datos y presupuesto disponibles, no se distinguen estadísticamente.
+* **Caracterización Multicriterio del Grupo:**
+  * **X4:** Líder en tasa bruta ($96.73\,\%$, pico semilla $99.4\,\%$), pero requiere más timesteps para converger (450k) y exhibe mayor esfuerzo de acción ($\overline{\Delta a} = 0.0464$).
+  * **X3:** Líder en consistencia ($s_R = \mathbf{0.83\,\%}$ inter-semilla) y velocidad de alcance (mediana de **57.7 pasos**, superando a $C0$), con convergencia temprana (paso 286k).
+  * **X5:** Líder en suavidad de acción ($\overline{\Delta a} = \mathbf{0.0392}$), a costo de mayor dispersión entre semillas ($s_R = 4.37\,\%$).
+
+---
+
+### 14.4 Aislamiento de Factores: Pares Adyacentes (Final B2)
+
+| Par Adyacente | Factor Aislado | $\Delta$ Éxito | $\Delta$ Pasos | $\Delta$ Suavidad ($\overline{\Delta a}$) | Conclusión |
+| :---: | :---: | :---: | :---: | :---: | :--- |
+| **X1a $\to$ X2** | `VecNormalize(obs)` sobre red idéntica | $-2.27\text{ pp}$ | $-2.2\text{ pasos}$ | $-0.0007$ | La normalización por sí sola no compensa una recompensa sin guía espacial a 655k. |
+| **X2 $\to$ X3** | Recompensa cuadrática + $R_{near}$ | **$+19.80\text{ pp}$** | **$-11.7\text{ pasos}$** | $+0.0110$ | **Factor más determinante del proyecto:** transforma una política mediocre en casi óptima. |
+| **X3 $\to$ X4** | Batch size PPO ($64 \to 128$) | $+2.20\text{ pp}$ | $+2.0\text{ pasos}$ | $+0.0042$ | Mayor estabilidad de gradiente PPO que eleva el techo asintótico requiriendo más pasos. |
+| **X3 $\to$ X5_near**| Supresión de $R_{near}$ positivo | **$-14.93\text{ pp}$** | **$+9.5\text{ pasos}$** | $-0.0133$ | La ausencia de proximidad degrada severamente el frenado y la retención estricta. |
+| **X3 $\to$ X5** | $R_{vel}$ gaussiana ($w_v=0.10, \sigma_v=0.15$) | $-0.60\text{ pp}$ | $+2.3\text{ pasos}$ | **$-0.0030$** | Modela frenado suave en el extremo a costo despreciable en éxito estricto. |
+| **X5 $\to$ X6** | Penalización aceleración $w_a=0.01$ | $-1.27\text{ pp}$ | $-0.7\text{ pasos}$ | $-0.0005$ | Sobre-penalización: ganancia nula en suavidad sobre X5 y reducción marginal en éxito. |
+
+---
+
+### 14.5 Documentación de Advertencias de Configuración Históricas
+1. **Parámetros reales de la familia X6:** Los valores implementados en el repositorio son $w_a = 0.01$ (`X6`), $w_a = 0.10$ (`X6_wa01`) y $w_a = 0.50$ (`X6_wa05`), y no $0.02$ ni $0.05$.
+2. **Descripción textual de `X6.yaml`:** La descripción en [`configs/phase_a/X6.yaml`](file:///c:/Users/ggevi/Documents/GitHub/robot-arm-2dof-ppo/configs/phase_a/X6.yaml) indica erróneamente *"Añade R_vel gaussiana sobre X3"*, cuando en realidad añade penalización de aceleración $w_a = 0.01$ sobre $X5$ (heredando $w_v = 0.10$).
+3. **Estado de $R_{near}$ en `x5_vel`:** El reward `x5_vel` mantiene el término positivo $R_{near}$ activo por defecto (`r_near_mode: "historical"`). Únicamente `x5_near` desactiva dicho término (`r_near_mode: "none"`).
+
+---
+
+### 14.6 Trazabilidad y Archivos de la Extensión
+* **Reporte Monográfico Completo:** [`reports/phase_b_extension_report.md`](file:///c:/Users/ggevi/Documents/GitHub/robot-arm-2dof-ppo/reports/phase_b_extension_report.md)
+* **Veredicto Estructurado:** [`reports/data/phase_b/extension/final_b2_selection_verdict.json`](file:///c:/Users/ggevi/Documents/GitHub/robot-arm-2dof-ppo/reports/data/phase_b/extension/final_b2_selection_verdict.json)
+* **Figuras a 300 dpi con Metadatos JSON (18 pares):** [`reports/figures/phase_b/extension/`](file:///c:/Users/ggevi/Documents/GitHub/robot-arm-2dof-ppo/reports/figures/phase_b/extension/)
+  * `fig_ext_learning_curves_main.png` y `.json`
+  * `fig_ext_learning_curves_pilots.png` y `.json`
+  * `fig_ext_success_barplot.png` y `.json`
+  * `fig_ext_pareto_smoothness.png` y `.json`
+  * `fig_ext_pareto_speed.png` y `.json`
+  * `fig_ext_canonical_trajectories.png` y `.json`
+  * `fig_ext_canonical_actions.png` y `.json`
+  * 11 figuras individuales `fig_agent_<agente>_selection.png` y `.json`.

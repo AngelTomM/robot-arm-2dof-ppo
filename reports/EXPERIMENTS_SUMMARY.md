@@ -1,87 +1,77 @@
-# 📊 Comparación Integral de Modelos — Brazo Robótico 2 DOF
+# 📊 Comparación Integral de Modelos y Descubrimientos — Brazo Robótico 2 DOF
 
-Resumen consolidado de todos los modelos entrenados y evaluados en el proyecto (Fase Histórica y Fase A).
-
----
-
-## 1. 🏆 Ranking de Rendimiento Físico Real (Evaluación Hold Estricto)
-
-> **Protocolo de Evaluación Riguroso (300 Episodios de Prueba):**  
-> Para declarar éxito, el efector debe permanecer dentro de $r_{tgt} = 0.06\text{ m}$ con velocidad angular $\|\dot{\boldsymbol{\theta}}\| \le 0.10\text{ rad/s}$ durante **20 pasos consecutivos** ($1.0\text{ s}$).  
-> *Los modelos confirmados (`C0`, `X5_near`, `X5`, `X6`, `X3`, `X1a`, `X2`, `X0`) fueron evaluados en 3 semillas independientes (900 episodios).*
-
-| # | Modelo | Tipo / Modificación Principal | Éxito Estricto | Truncamientos | Error Final | Pasos al Éxito | Suavidad \|\|Δa\|\| |
-| :-: | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| 🥇 | **`C0`** | **Jacobiano Damped Least Squares** | **100.0%** | **0.0%** | **0.001 m** | **54.0** | 0.053 |
-| 🥈 | **`X5_near`** ⭐ | **Red 256x256 + VecNormalize + Sin $R_{near}$** | **70.8%** | **29.2%** | **0.050 m** | **58.0** | 0.030 |
-| 🥉 | **`X5`** (`wv01`) | Penalización de velocidad gaussiana ($w_v=0.10$) | **55.3%** | 44.7% | 0.065 m | 54.5 | 0.028 |
-| 4 | **`X6`** (`wa001`) | Penalización de suavidad de acción ($w_a=0.01$) | **45.6%** | 54.4% | 0.084 m | 58.5 | **0.023** |
-| 5 | **`X3`** | Red $256\times 256$ ReLU + VecNormalize (Batch 64) | **44.1%** | 55.9% | 0.081 m | 60.0 | 0.023 |
-| 6 | **`X2b`** | Normalización de recompensa (`norm_reward=True`) | **45.0%** | 55.0% | 0.088 m | 66.0 | 0.025 |
-| 7 | **`X6_wa05`** | Suavidad alta ($w_a=0.05$, excesiva rigidez) | **27.5%** | 72.5% | 0.125 m | 68.0 | **0.018** |
-| 8 | **`X6_wa01`** | Suavidad media ($w_a=0.02$) | **27.0%** | 73.0% | 0.134 m | 67.5 | 0.020 |
-| 9 | **`X4`** | Batch size grande (256, menos updates) | **15.0%** | 85.0% | 0.220 m | 64.0 | 0.015 |
-| 10 | **`X1a`** | Hold moderado (5 pasos, 0.3 rad/s) sin VecNorm | **8.6%** | 91.4% | 0.414 m | 63.0 | 0.013 |
-| 11 | **`X2`** | VecNormalize con red pequeña $64\times 64$ Tanh | **5.9%** | 94.1% | 0.375 m | 70.0 | 0.012 |
-| 12 | **`X1s`** | Hold estricto directo (20p, 0.1 rad/s) sin VecNorm | **5.0%** | 95.0% | 0.430 m | 118.5 | 0.011 |
-| 13 | **`X1b`** | Hold 10 pasos sin VecNormalize | **3.5%** | 96.5% | 0.485 m | 124.0 | 0.011 |
-| 14 | **`X1c`** | Hold 15 pasos sin VecNormalize | **3.0%** | 97.0% | 0.510 m | 130.0 | 0.011 |
-| 15 | **`X0`** | **Modelo Histórico Original (`exp2_smooth_precision`)** | **1.0%** | **99.0%** | **0.675 m** | **92.0** | **0.011** |
-| 16 | **`X5_wv10`** | Penalización de velocidad excesiva ($w_v=1.0$) | **0.5%** | 99.5% | 0.720 m | 145.0 | 0.009 |
-| 17 | **`X5_wv50`** | Penalización de velocidad parálisis ($w_v=5.0$) | **0.0%** | 100.0% | 0.850 m | N/A | 0.005 |
+**Fecha de Actualización:** 2026-10-12  
+**Alcance del Proyecto:** Síntesis consolidada de Fase Histórica, Fase A, Fase B y Fase B (Extensión — Presupuesto Unificado 655 360 Pasos).  
+**Protocolo Estricto de Evaluación:** Hold durante 20 pasos consecutivos ($1.0\text{ s}$) con velocidad angular conjunta $\|\dot{\boldsymbol{\theta}}\| \le 0.10\text{ rad/s}$ dentro de $r_{tgt} = 0.06\text{ m}$ antes de 200 pasos.
 
 ---
 
-## 2. 📋 Registro Completo de Entrenamientos y Parámetros
+## 1. 🏆 Ranking Definitivo de Rendimiento Físico (Lectura Terminal en Final B2)
 
-Historial de todos los entrenamientos ejecutados con sus hiperparámetros y métricas registradas en TensorBoard:
+Los resultados corresponden a la evaluación determinista terminal sobre el conjunto final sellado ([`data/datasets/phase_b_ext/final_b2_500.json`](file:///c:/Users/ggevi/Documents/GitHub/robot-arm-2dof-ppo/data/datasets/phase_b_ext/final_b2_500.json), $n=500$ episodios por corrida, 1 500 episodios para agentes con $n=3$ semillas), ejecutada con el presupuesto unificado de **655 360 timesteps** y checkpoints seleccionados formalmente por la Regla 4.1:
 
-| Experimento | Autor | Tipo Recompensa | Vel. Máx | Radio | Learning Rate | Batch | Timesteps | Recompensa Máx | Pasos/Episodio | Fecha de Ejecución |
-| :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **`exp2_smooth_precision`** | Uli/Tomi | `smooth_precision` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | -46.80 * | 187.1 | 2026-08-30 23:31 |
-| **`exp2_smooth_precisiong`** | Yo/Gabi | `smooth_precision` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | -51.69 * | 179.1 | 2026-08-30 23:35 |
-| **`exp1_baselineg`** | Equipo | `distance_only` | 2.0 rad/s | 0.08 m | 0.00015 | 64 | 200,000 | -99.74 * | 165.6 | 2026-08-30 23:42 |
-| **`exp1_baseline`** | Equipo | `distance_only` | 2.0 rad/s | 0.08 m | 0.00030 | 64 | 150,000 | -62.41 * | 174.5 | 2026-09-03 19:42 |
-| **`smoke_test`** | Fase A | `smooth_precision` | 2.0 rad/s | 0.06 m | 0.00030 | 64 | 2,048 | -74.83 * | 50.0 | 2026-10-02 19:44 |
-| **`X1a (seed_42)`** | Fase A | `smooth_precision` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | -56.71 * | 190.5 | 2026-10-02 19:46 |
-| **`X1b (seed_42)`** | Fase A | `smooth_precision` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | -56.40 * | 200.0 | 2026-10-02 19:50 |
-| **`X1c (seed_42)`** | Fase A | `smooth_precision` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | -55.65 * | 200.0 | 2026-10-02 19:53 |
-| **`X1s (seed_42)`** | Fase A | `smooth_precision` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | -109.32 * | 187.6 | 2026-10-02 19:56 |
-| **`X2 (seed_42)`** | Fase A | `smooth_precision` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | -39.04 * | 183.7 | 2026-10-02 20:02 |
-| **`X2b (seed_42)`** | Fase A | `smooth_precision` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | 9.41 * | 104.2 | 2026-10-02 20:06 |
-| **`X3 (seed_42)`** | Fase A | `smooth_precision` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | 32.08 * | 63.7 | 2026-10-02 20:09 |
-| **`X4 (seed_42)`** | Fase A | `smooth_precision` | 1.5 rad/s | 0.06 m | 0.00015 | 256 | 300,000 | 9.06 * | 58.9 | 2026-10-02 20:13 |
-| **`X5_wv10 (seed_42)`** | Fase A | `x5_vel` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | -55.13 * | 200.0 | 2026-10-02 20:25 |
-| **`X5_wv50 (seed_42)`** | Fase A | `x5_vel` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | -118.15 * | 200.0 | 2026-10-02 20:29 |
-| **`X6_wa001 (seed_42)`**| Fase A | `x6_smooth` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | 17.74 * | 41.9 | 2026-10-02 20:33 |
-| **`X6_wa01 (seed_42)`** | Fase A | `x6_smooth` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | 34.67 * | 64.7 | 2026-10-02 20:37 |
-| **`X6_wa05 (seed_42)`** | Fase A | `x6_smooth` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | 29.44 * | 64.5 | 2026-10-02 20:41 |
-| **`X1a (seed_100)`** | Fase A | `smooth_precision` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | -1.28 * | 147.9 | 2026-10-02 20:49 |
-| **`X1a (seed_2026)`** | Fase A | `smooth_precision` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | -62.57 * | 166.9 | 2026-10-02 20:52 |
-| **`X2 (seed_100)`** | Fase A | `smooth_precision` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | -15.13 * | 189.1 | 2026-10-02 20:56 |
-| **`X2 (seed_2026)`** | Fase A | `smooth_precision` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | -58.72 * | 200.0 | 2026-10-02 21:00 |
-| **`X3 (seed_100)`** | Fase A | `smooth_precision` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | 19.84 * | 56.0 | 2026-10-02 21:04 |
-| **`X3 (seed_2026)`** | Fase A | `smooth_precision` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | 19.36 * | 43.6 | 2026-10-02 21:08 |
-| **`X5_near (seed_100)`**| Fase A | `x5_near` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | -25.42 * | 140.8 | 2026-10-02 21:12 |
-| **`X5_near (seed_2026)`**| Fase A | `x5_near` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | -19.70 * | 99.4 | 2026-10-02 21:16 |
-| **`X5 (seed_42)`** | Fase A | `x5_vel` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | 17.91 * | 78.1 | 2026-10-02 21:20 |
-| **`X5 (seed_100)`** | Fase A | `x5_vel` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | 16.66 * | 49.9 | 2026-10-02 21:31 |
-| **`X5 (seed_2026)`** | Fase A | `x5_vel` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | 19.13 * | 44.7 | 2026-10-02 21:35 |
-| **`X6 (seed_100)`** | Fase A | `x6_smooth` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | 22.89 * | 54.5 | 2026-10-02 21:40 |
-| **`X6 (seed_2026)`** | Fase A | `x6_smooth` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | 21.04 * | 52.1 | 2026-10-02 21:44 |
-| **`X5_near (seed_42)`** | Fase A | `x5_near` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | -13.64 * | 68.9 | 2026-10-02 22:37 |
-| **`exp2_smooth_precision (seed_42)`** | Uli/Tomi | `smooth_precision` | 1.5 rad/s | 0.06 m | 0.00015 | 64 | 300,000 | -30.94 * | 186.9 | 2026-10-02 22:46 |
+| # | Agente / Controlador | Tipo / Configuración Clave | Éxito Estricto Medio | Desv. Semillas ($s_R$) | Pasos al Éxito (Mediana) | Suavidad $\overline{\Delta a}$ | Distancia Final (m) | Estado Formal (Regla 4.2) |
+| :-: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| 🥇 | **`C0` (Consistente)** | Jacobiano analítico ($K_p=3.0, v_{max}=1.5$) | **100.0 %** | — | **59.0** | 0.0508 | **0.0009 m** | Benchmark analítico |
+| 🥇 | **`C0` (Histórico)** | Jacobiano analítico ($K_p=3.0, v_{max}=2.0$) | **100.0 %** | — | 63.0 | 0.0435 | 0.0028 m | Benchmark analítico |
+| ⭐ | **`X4`** | PPO batch 128 + red $256^2$ + VecNorm + $X3$ | **96.73 %** | 2.81 % | 59.7 | 0.0464 | 0.0193 m | **Grupo Equivalente (Líder)** |
+| ⭐ | **`X3`** | Red $256^2$ + VecNorm + cuadrática + $R_{near}$ | **94.53 %** | **0.83 %** | **57.7** | 0.0422 | 0.0288 m | **Grupo Equivalente** |
+| ⭐ | **`X5`** | Idem X3 + penalización vel. $R_{vel}$ gaussiana | **93.93 %** | 4.37 % | 60.0 | **0.0392** | 0.0273 m | **Grupo Equivalente** |
+| 4 | **`X6`** | Idem X5 + penalización aceleración $w_a=0.01$ | **92.67 %** | 3.37 % | 59.3 | 0.0387 | 0.0305 m | A 0.91 pp del umbral |
+| 5 | **`X2b`** *(Piloto $n=1$)* | Red pequeña $64\times 64$ Tanh + **`VecNormalize`** | **85.00 %** | — | 67.0 | 0.0373 | 0.0432 m | Informativo (rescate Tanh) |
+| 6 | **`X5_near`** | Idem X5 pero **sin** término positivo $R_{near}$ | **79.60 %** | 7.63 % | 67.2 | 0.0289 | 0.0455 m | Degradación por falta de $R_{near}$ |
+| 7 | **`X1a`** | Red $256^2$ ReLU base sin `VecNormalize` | **77.00 %** | 5.30 % | 71.5 | 0.0318 | 0.0653 m | No convergió a 655k |
+| 8 | **`X2`** | Red $256^2$ ReLU base + `VecNormalize` | **74.73 %** | 1.81 % | 69.3 | 0.0311 | 0.0651 m | No convergió a 655k |
+| 9 | **`X1b`** *(Piloto $n=1$)* | Red $64\times 64$ Tanh base sin `VecNormalize` | **71.20 %** | — | 71.0 | 0.0298 | 0.0671 m | Informativo |
+| 10 | **`X1c`** *(Piloto $n=1$)* | Red $128\times 128$ ReLU base sin `VecNormalize` | **71.20 %** | — | 71.0 | 0.0298 | 0.0671 m | Informativo |
+| 11 | **`X1s`** *(Piloto $n=1$)* | Red $256^2$ base con entropía alta ($\text{ent}=0.01$) | **47.00 %** | — | 86.0 | 0.0160 | 0.1220 m | Ruptura por sobre-exploración |
 
 ---
 
-## 3. 💡 Claves para Interpretar los Resultados
+## 2. 🔬 Descubrimientos Fundamentales del Proyecto
 
-1. **La Recompensa Máx no define al mejor modelo:** Modelos como `X1a (seed_100)` obtuvieron `-1.28` porque su función de recompensa regalaba puntos por orbitar cerca del objetivo ($R_{near}$). Al quitar ese término viciado en `X5_near`, el modelo aprende a frenar en serio y su tasa de éxito físico sube al **70.8%**.
-2. **Métricas Físicas Reales (Tabla 1):**
-   - **Éxito Estricto (%):** Mide la capacidad real de frenar y sostener la posición durante 1 segundo ($20\text{ pasos}$) con $v \le 0.10\text{ rad/s}$.
-   - **Truncamientos (%):** Episodios donde el brazo se quedó sin tiempo (200 pasos) sin estabilizarse.
-   - **Error Final:** Distancia cartesiana al centro de la meta ($< 0.06\text{ m}$ indica precisión dentro del radio).
-   - **Pasos al Éxito:** Tiempo que tarda en completar la tarea (menos pasos = más rápido).
-3. **Modelos Destacados:**
-   - 🥇 **`C0` (Jacobiano Clásico):** 100% de éxito y error de $0.001\text{ m}$ (Benchmark y Cota Superior).
-   - 🥈 **`X5_near` (RL PPO):** 70.8% de éxito real y 29.2% de truncamientos (El mejor agente por refuerzo).
+### 1. Resolución del Enigma de X3 (Fase A vs Fase B)
+* **El hallazgo en Fase A:** En la Fase A se reportó erróneamente que `X3` apenas alcanzaba un 44.1 % de éxito frente al 70.8 % de `X5_near`.
+* **El descubrimiento en Fase B:** Aquel resultado se debió a un **artefacto procedimental de guardado de checkpoints**. El callback de Fase A guardó los pesos de la red `best_model.zip` en los pasos 120k–160k, pero el archivo `vecnormalize_stats.pkl` fue sobreescrito al paso 300k. Al evaluar esa red con estadísticas cinemáticas desfasadas, la política colapsó.
+* **La realidad física:** Cuando se evalúa `X3` con su par acoplado atómico de `VecNormalize`, alcanza **94.53 %** en Final B2 a 286k pasos y supera el **98.0 %** a 410k pasos.
+
+### 2. El Factor Más Determinante: Densificación de Recompensa Cuadrática + $R_{near}$ ($X2 \to X3$)
+* Aislando este único factor (red y normalización idénticas), la recompensa cuadrática con bonificación de proximidad generó un salto de **$+19.80$ pp en tasa de éxito** (de 74.73 % a 94.53 %) y redujo en **$-11.7$ pasos** el tiempo de estabilización.
+* Al suprimir el término positivo de $R_{near}$ en `X5_near`, el rendimiento cae inmediatamente en **$-14.93$ pp** (a 79.60 %), demostrando que el brazo necesita una densificación geométrica explícita para aprender a desacelerar antes de entrar a la zona de tolerancia.
+
+### 3. Veredicto Formal de la Fase B (Extensión): Grupo de Equivalentes ['X4', 'X3', 'X5']
+Bajo la regla formal congelada antes del entrenamiento (anchura Wilson de ruido $U_{equiv\_final} = 3.16$ pp):
+* **`X4` lidera en tasa bruta (96.73 %):** La duplicación del tamaño de lote a 128 estabilizó las estimaciones del gradiente PPO, llevando la política a un techo del 99.4 % en su mejor semilla, aunque requirió más pasos para converger (paso 450k).
+* **`X3` lidera en robustez y velocidad (94.53 %):** Presenta la menor dispersión entre semillas de todo el estudio ($s_R = \mathbf{0.83\,\%}$) y el tiempo de llegada más rápido (**57.7 pasos**, superando los 59 pasos de $C0$), convergiendo a solo 286k pasos.
+* **`X5` lidera en suavidad cinemática (93.93 %):** La penalización de velocidad gaussiana modela eficazmente el frenado fino ($\overline{\Delta a} = \mathbf{0.0392}$ rad/s) sin sacrificar la tasa de éxito dentro del margen estadístico.
+
+### 4. El Rescate de Redes Tanh Pequeñas (`X2b`)
+* En la Fase A se hipotetizó que las redes $64\times 64$ Tanh fallaban debido a saturación de gradientes.
+* En la extensión, el piloto **`X2b`** demostró que al incorporar `VecNormalize(obs)` a esa misma arquitectura de 64 neuronas, el éxito se dispara de **71.20 % a 85.00 %** ($+13.8$ pp). La normalización de las observaciones alivia la saturación en la primera capa.
+
+### 5. Colapso por Entropía Excesiva (`X1s`)
+* Elevar el coeficiente de entropía de $0.002$ a $0.01$ en PPO provocó que el agente `X1s` colapsara al **47.00 %** de éxito, sufriendo un 53.0 % de truncamientos. Para tareas de posicionamiento de precisión milimétrica, una varianza estocástica forzada impide la convergencia asintótica requerida para cumplir el criterio de hold durante 20 pasos.
+
+---
+
+## 3. ⚖️ Tabla de Comparación de Pares de Un Solo Factor Adyacentes
+
+Para evitar inferencias indirectas, se evaluaron las diferencias estrictas entre configuraciones contiguas en su árbol genealógico sobre el conjunto final:
+
+| Par Adyacente | Factor Aislado | Impacto en Éxito | Impacto en Pasos | Impacto en Suavidad ($\overline{\Delta a}$) | Conclusión |
+| :---: | :---: | :---: | :---: | :---: | :--- |
+| **X1a $\to$ X2** | `VecNormalize(obs)` sobre red $256^2$ | $-2.27\text{ pp}$ | $-2.2\text{ pasos}$ | $-0.0007$ | La normalización por sí sola no compensa una recompensa lineal sin guía espacial a 655k pasos. |
+| **X2 $\to$ X3** | Recompensa cuadrática + $R_{near}$ | **$+19.80\text{ pp}$** | **$-11.7\text{ pasos}$** | $+0.0110$ | **Factor de mayor impacto:** transforma una política insuficiente en casi óptima. |
+| **X3 $\to$ X4** | Batch size PPO ($64 \to 128$) | $+2.20\text{ pp}$ | $+2.0\text{ pasos}$ | $+0.0042$ | Mayor estabilidad del gradiente PPO que eleva el techo asintótico requiriendo más timesteps. |
+| **X3 $\to$ X5_near**| Supresión de $R_{near}$ positivo | **$-14.93\text{ pp}$** | **$+9.5\text{ pasos}$** | $-0.0133$ | La ausencia de proximidad degrada severamente el frenado y la retención estricta. |
+| **X3 $\to$ X5** | $R_{vel}$ gaussiana ($w_v=0.10, \sigma_v=0.15$) | $-0.60\text{ pp}$ | $+2.3\text{ pasos}$ | **$-0.0030$** | Modela frenado suave en el efector final a costo despreciable en éxito estricto. |
+| **X5 $\to$ X6** | Penalización aceleración $w_a=0.01$ | $-1.27\text{ pp}$ | $-0.7\text{ pasos}$ | $-0.0005$ | Sobre-penalización: ganancia nula en suavidad sobre X5 y reducción marginal en éxito. |
+
+---
+
+## 4. 📁 Trazabilidad de Reportes y Datos en el Repositorio
+
+* **Informe General Integrado de Fase B:** [`reports/phase_b_report.md`](file:///c:/Users/ggevi/Documents/GitHub/robot-arm-2dof-ppo/reports/phase_b_report.md) (Secciones 1 a 13 originales + Sección 14 Addenda de la Extensión).
+* **Veredicto Formal Estructurado:** [`reports/data/phase_b/extension/final_b2_selection_verdict.json`](file:///c:/Users/ggevi/Documents/GitHub/robot-arm-2dof-ppo/reports/data/phase_b/extension/final_b2_selection_verdict.json).
+* **Evaluaciones en Conjunto Final:** [`reports/data/phase_b/extension/final_b2_eval_details.csv`](file:///c:/Users/ggevi/Documents/GitHub/robot-arm-2dof-ppo/reports/data/phase_b/extension/final_b2_eval_details.csv) y [`final_b2_eval_aggregated.csv`](file:///c:/Users/ggevi/Documents/GitHub/robot-arm-2dof-ppo/reports/data/phase_b/extension/final_b2_eval_aggregated.csv).
+* **Galería de Figuras a 300 dpi con Trazabilidad JSON:** [`reports/figures/phase_b/extension/`](file:///c:/Users/ggevi/Documents/GitHub/robot-arm-2dof-ppo/reports/figures/phase_b/extension/).

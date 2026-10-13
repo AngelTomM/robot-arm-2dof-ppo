@@ -1,0 +1,10 @@
+{
+  "agent": "X5",
+  "chosen_step": 286720,
+  "chosen_smoothed_success": 0.9275555555555556,
+  "max_step": 450560,
+  "max_smoothed_success": 0.950888888888889,
+  "u_equiv_width": 0.03867433544714016,
+  "final_slope_status": "DEGRADANDO",
+  "dataset": "validation_b2_500.json"
+}

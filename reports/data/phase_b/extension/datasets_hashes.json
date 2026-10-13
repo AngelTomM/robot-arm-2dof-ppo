@@ -1,0 +1,16 @@
+{
+  "final_b2_500_json": {
+    "path": "data\\datasets\\phase_b_ext\\final_b2_500.json",
+    "sha256": "c02716dea21687dff42367427fbbafa4304fc340ab18b62c8399d0ba1b832062",
+    "episodes": 500,
+    "seed": 202622,
+    "status": "SEALED (No abrir hasta B-12)"
+  },
+  "validation_b2_500_json": {
+    "path": "data\\datasets\\phase_b_ext\\validation_b2_500.json",
+    "sha256": "3508a95124a5f933bb541632c399b1af579c01d7e817af6e3b8de7ab245f7222",
+    "episodes": 500,
+    "seed": 202611,
+    "status": "ACTIVE (Para toma de decisiones B-11)"
+  }
+}
