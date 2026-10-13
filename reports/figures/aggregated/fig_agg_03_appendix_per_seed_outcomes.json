@@ -1,0 +1,17 @@
+{
+  "figure_name": "fig_agg_03_appendix_per_seed_outcomes.png",
+  "description": "Ap\u00e9ndice de partici\u00f3n de desenlaces por semilla individual en modo determinista.",
+  "timestamp": "2026-10-05T19:35:56.130087",
+  "python_version": "3.11.16 (main, Aug 25 2026, 13:59:19) [MSC v.1944 64 bit (AMD64)]",
+  "os_platform": "Windows-10-10.0.19045-SP0",
+  "libraries": {
+    "numpy": "1.26.4",
+    "pandas": "3.0.5",
+    "matplotlib": "3.11.1"
+  },
+  "script_path": "scripts\\generate_phase_a_aggregated_plots.py",
+  "script_sha256": "0e37f5295926f29d250fa08fb2ea7af9e56253a7db18db5ba5cf5f268bbbd851",
+  "input_files_sha256": {
+    "all_final_deterministic_episodes.csv": "44b53aa9a5485a42970b35ab9b37a3f5df36bc1b1046d33ebf062af2a5989317"
+  }
+}

@@ -1,0 +1,26 @@
+# Configuración Versionada de Umbrales Operativos y Criterios de Aceptación - Fase A
+# FIJADO PREVIO A LA EVALUACIÓN FINAL (Secciones 9.6 y 18)
+
+operational_thresholds:
+  # Llegada balística: velocidad articular al cruzar por primera vez r < 0.06m
+  u_b: 0.30                     # rad/s
+
+  # Episodio oscilatorio: sobrepasos (salidas de la región) o cruces de error en d < 0.30m
+  n_exits_threshold: 2          # n_exits >= 2 clasifica como oscilatorio
+  n_cross_threshold: 3          # n_cross >= 3 cruces de signo clasifica como oscilatorio
+
+strict_eval_criteria:
+  target_radius: 0.06           # metros
+  velocity_tolerance: 0.10      # rad/s
+  hold_steps: 20                # pasos consecutivos requeridos (~1.0s)
+  max_steps: 200                # pasos máximos por episodio
+  dt: 0.05                      # segundos por paso
+
+acceptance_criteria:
+  min_success_rate: 0.95        # >= 95% éxito estricto en evaluación determinista
+  max_ballistic_rate: 0.05      # <= 5% llegadas balísticas
+  max_oscillatory_rate: 0.05    # <= 5% episodios oscilatorios
+  max_truncation_rate: 0.05     # <= 5% episodios truncados
+  max_seed_std: 0.05            # Desviación estándar entre semillas <= 5 pp
+  min_seed_success: 0.90        # Ninguna semilla por debajo de 90%
+  max_det_stoch_gap: 0.10       # Brecha determinista-estocástica <= 10 pp

@@ -1,0 +1,15 @@
+{
+  "title": "Curvas de aprendizaje de 7 agentes principales",
+  "dataset": "validation_b2_500.json",
+  "n_episodes": 500,
+  "n_seeds": 3,
+  "seeds": [
+    42,
+    100,
+    2026
+  ],
+  "eval_mode": "deterministic",
+  "budget_limit": 655360,
+  "primary_metric": "strict_success_rate",
+  "aggregation": "mean +- std (ddof=1)"
+}

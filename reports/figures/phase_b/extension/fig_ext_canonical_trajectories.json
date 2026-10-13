@@ -1,0 +1,17 @@
+{
+  "title": "Trayectorias cartesianas del extremo en 4 episodios can\u00f3nicos",
+  "dataset": "validation_b2_500.json",
+  "canonical_episodes": [
+    311,
+    85,
+    167,
+    480
+  ],
+  "agents": [
+    "X3",
+    "X4",
+    "X5",
+    "X6",
+    "C0_consistent_1_5"
+  ]
+}

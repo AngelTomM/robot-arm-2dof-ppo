@@ -1,0 +1,8 @@
+{
+  "title": "Curvas de aprendizaje de pilotos n=1 vs referencia X1a",
+  "dataset": "validation_b2_500.json",
+  "n_episodes": 500,
+  "eval_mode": "deterministic",
+  "budget_limit": 655360,
+  "note": "Pilotos informativos n=1 con semilla 42; no participan de la regla de elecci\u00f3n 4.2"
+}

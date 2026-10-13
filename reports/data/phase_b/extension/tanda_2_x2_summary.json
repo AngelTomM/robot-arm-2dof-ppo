@@ -1,0 +1,45 @@
+{
+  "experiment": "X2",
+  "tanda": 2,
+  "total_timesteps_per_seed": 655360,
+  "checkpoint_freq": 40960,
+  "expected_checkpoints_per_seed": 16,
+  "runs": [
+    {
+      "seed": 42,
+      "exp_dir": "experiments\\phase_b\\extension\\X2\\seed_42",
+      "elapsed_seconds": 397.48,
+      "elapsed_minutes": 6.62,
+      "fps": 1648.8,
+      "checkpoints_count": 16,
+      "all_models_exist": true,
+      "all_vecnormalize_exist": true,
+      "status": "COMPLETED"
+    },
+    {
+      "seed": 100,
+      "exp_dir": "experiments\\phase_b\\extension\\X2\\seed_100",
+      "elapsed_seconds": 414.31,
+      "elapsed_minutes": 6.91,
+      "fps": 1581.8,
+      "checkpoints_count": 16,
+      "all_models_exist": true,
+      "all_vecnormalize_exist": true,
+      "status": "COMPLETED"
+    },
+    {
+      "seed": 2026,
+      "exp_dir": "experiments\\phase_b\\extension\\X2\\seed_2026",
+      "elapsed_seconds": 407.5,
+      "elapsed_minutes": 6.79,
+      "fps": 1608.3,
+      "checkpoints_count": 16,
+      "all_models_exist": true,
+      "all_vecnormalize_exist": true,
+      "status": "COMPLETED"
+    }
+  ],
+  "total_elapsed_seconds": 1219.29,
+  "total_elapsed_minutes": 20.32,
+  "total_checkpoints": 48
+}

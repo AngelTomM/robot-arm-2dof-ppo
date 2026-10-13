@@ -1,0 +1,71 @@
+{
+  "experiment": "Pilots_n1",
+  "tanda": 6,
+  "pilots": [
+    "X1b",
+    "X1c",
+    "X1s",
+    "X2b"
+  ],
+  "seed": 42,
+  "total_timesteps_per_pilot": 655360,
+  "checkpoint_freq": 40960,
+  "expected_checkpoints_per_pilot": 16,
+  "runs": [
+    {
+      "pilot": "X1b",
+      "seed": 42,
+      "exp_dir": "experiments\\phase_b\\extension\\X1b\\seed_42",
+      "elapsed_seconds": 389.71,
+      "elapsed_minutes": 6.5,
+      "fps": 1681.6,
+      "checkpoints_count": 16,
+      "all_models_exist": true,
+      "vecnormalize_count": 0,
+      "expected_vecnormalize": false,
+      "status": "COMPLETED"
+    },
+    {
+      "pilot": "X1c",
+      "seed": 42,
+      "exp_dir": "experiments\\phase_b\\extension\\X1c\\seed_42",
+      "elapsed_seconds": 375.57,
+      "elapsed_minutes": 6.26,
+      "fps": 1745.0,
+      "checkpoints_count": 16,
+      "all_models_exist": true,
+      "vecnormalize_count": 0,
+      "expected_vecnormalize": false,
+      "status": "COMPLETED"
+    },
+    {
+      "pilot": "X1s",
+      "seed": 42,
+      "exp_dir": "experiments\\phase_b\\extension\\X1s\\seed_42",
+      "elapsed_seconds": 380.08,
+      "elapsed_minutes": 6.33,
+      "fps": 1724.3,
+      "checkpoints_count": 16,
+      "all_models_exist": true,
+      "vecnormalize_count": 0,
+      "expected_vecnormalize": false,
+      "status": "COMPLETED"
+    },
+    {
+      "pilot": "X2b",
+      "seed": 42,
+      "exp_dir": "experiments\\phase_b\\extension\\X2b\\seed_42",
+      "elapsed_seconds": 400.65,
+      "elapsed_minutes": 6.68,
+      "fps": 1635.7,
+      "checkpoints_count": 16,
+      "all_models_exist": true,
+      "vecnormalize_count": 16,
+      "expected_vecnormalize": true,
+      "status": "COMPLETED"
+    }
+  ],
+  "total_elapsed_seconds": 1546.03,
+  "total_elapsed_minutes": 25.77,
+  "total_checkpoints": 64
+}

@@ -1,7 +1,7 @@
 """
 Paso 5: Renderizado Interactivo en Tiempo Real para Brazo Robótico 2 DOF.
 Permite ver al agente de RL en acción y controlar el objetivo de forma interactiva con el mouse o con la barra espaciadora.
-Soporta la carga automática de modelos PPO o SAC según los metadatos o formato del checkpoint.
+Soporta la carga automática de la configuración con la que se entrenó el modelo (experiment_meta.json o --config).
 """
 
 import os
@@ -12,7 +12,7 @@ import math
 import numpy as np
 import pygame
 import yaml
-from stable_baselines3 import PPO, SAC
+from stable_baselines3 import PPO
 from arm2d_env import Arm2DEnv
 
 
@@ -24,11 +24,18 @@ def find_model_config(model_path, config_path=None):
 
     # Intentar buscar experiment_meta.json en la carpeta del modelo
     if model_path:
+        # Si model_path es 'models/exp2_smooth_precision/best_model/best_model.zip',
+        # buscamos el experiment_meta.json en la carpeta del experimento
         model_dir = os.path.dirname(os.path.abspath(model_path))
+        
+        # Buscar en la carpeta actual y en carpetas superiores (útil para checkpoints)
         candidates = [
             os.path.join(model_dir, "experiment_meta.json"),
-            os.path.join(os.path.dirname(model_dir), "experiment_meta.json")
+            os.path.join(os.path.dirname(model_dir), "experiment_meta.json"),
+            os.path.join(os.path.dirname(os.path.dirname(model_dir)), "experiment_meta.json"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(model_dir))), "experiment_meta.json")
         ]
+        
         for meta_file in candidates:
             if os.path.exists(meta_file):
                 try:
@@ -42,39 +49,9 @@ def find_model_config(model_path, config_path=None):
     return None
 
 
-def load_trained_model(model_path, env, algo_hint=None):
-    """Carga el modelo intentando PPO o SAC según corresponda."""
-    if not model_path or not os.path.exists(model_path):
-        return None
-
-    algo = (algo_hint or "").upper()
-
-    if algo == "SAC":
-        try:
-            print(f">>> Cargando modelo SAC desde: {model_path}")
-            return SAC.load(model_path, env=env)
-        except Exception:
-            pass
-
-    if algo == "PPO":
-        try:
-            print(f">>> Cargando modelo PPO desde: {model_path}")
-            return PPO.load(model_path, env=env)
-        except Exception:
-            pass
-
-    # Si no se especificó o falló, intentar primero con PPO y fallback a SAC
-    try:
-        print(f">>> Intentando cargar modelo como PPO: {model_path}")
-        return PPO.load(model_path, env=env)
-    except Exception:
-        print(f">>> Cargando modelo como SAC: {model_path}")
-        return SAC.load(model_path, env=env)
-
-
 def interactive_render(model_path=None, config_path=None):
     print("=" * 60)
-    print(" SIMULADOR INTERACTIVO DE BRAZO ROBÓTICO 2D (PPO / SAC)")
+    print(" SIMULADOR INTERACTIVO DE BRAZO ROBÓTICO 2D (PPO)")
     print("=" * 60)
     print("Controles:")
     print(" - Click Izquierdo en la ventana : Mover el objetivo (Target) a esa posición")
@@ -86,28 +63,51 @@ def interactive_render(model_path=None, config_path=None):
     # Resolver ruta de modelo por defecto si no se proporcionó
     if not model_path:
         default_paths = [
-            "models/exp_sac_baseline/best_model/best_model.zip",
             "models/exp2_smooth_precision/best_model/best_model.zip",
-            "models/exp1_baseline/best_model/best_model.zip"
+            "models/exp1_baseline/best_model/best_model.zip",
+            "models/PPO/best_model/best_model.zip"
         ]
         for p in default_paths:
             if os.path.exists(p):
                 model_path = p
                 break
 
-    # Cargar configuración y resolver algoritmo
-    cfg = find_model_config(model_path, config_path) or {}
-    algo_name = cfg.get("algorithm", None)
+    # Cargar la configuración exacta del modelo para que coincidan los observation spaces
+    cfg = find_model_config(model_path, config_path)
 
-    # Crear entorno
+    # Crear entorno con la configuración adecuada
     env = Arm2DEnv(render_mode="human", config=cfg)
     obs, info = env.reset()
 
-    # Cargar modelo PPO o SAC
-    model = load_trained_model(model_path, env, algo_name)
+    # Buscar estadísticas de normalización si existen (Fase A)
+    norm_wrapper = None
+    if model_path:
+        model_dir = os.path.dirname(os.path.abspath(model_path))
+        norm_candidates = [
+            os.path.join(model_dir, "vecnormalize_stats.pkl"),
+            os.path.join(os.path.dirname(model_dir), "vecnormalize_stats.pkl"),
+            os.path.join(os.path.dirname(model_dir), "models", "vecnormalize_stats.pkl")
+        ]
+        for norm_file in norm_candidates:
+            if os.path.exists(norm_file):
+                try:
+                    from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+                    dummy = DummyVecEnv([lambda: Arm2DEnv(config=cfg)])
+                    norm_wrapper = VecNormalize.load(norm_file, dummy)
+                    norm_wrapper.training = False
+                    norm_wrapper.norm_reward = False
+                    print(f">>> [NORM] Estadísticas de normalización cargadas desde: {norm_file}")
+                    break
+                except Exception as e:
+                    print(f">>> [AVISO] No se pudo cargar VecNormalize ({norm_file}): {e}")
 
-    if model is None:
-        print(">>> [AVISO] No se encontró modelo válido. Ejecutando con acciones aleatorias.")
+    # Cargar modelo entrenado si existe
+    model = None
+    if model_path and os.path.exists(model_path):
+        print(f">>> Cargando modelo entrenado desde: {model_path}")
+        model = PPO.load(model_path)
+    else:
+        print(">>> [AVISO] No se encontró modelo. Ejecutando con acciones aleatorias.")
 
     running = True
     manual_target = False
@@ -134,7 +134,8 @@ def interactive_render(model_path=None, config_path=None):
                     obs = env._get_obs()
 
         if model is not None:
-            action, _ = model.predict(obs, deterministic=True)
+            policy_obs = norm_wrapper.normalize_obs(obs) if norm_wrapper else obs
+            action, _ = model.predict(policy_obs, deterministic=True)
         else:
             action = env.action_space.sample()
 
@@ -147,7 +148,7 @@ def interactive_render(model_path=None, config_path=None):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Simulador interactivo para Brazo 2D (PPO / SAC)")
+    parser = argparse.ArgumentParser(description="Simulador interactivo para Brazo 2D")
     parser.add_argument("model_path", nargs="?", default=None, help="Ruta al modelo .zip")
     parser.add_argument("--config", "-c", type=str, default=None, help="Ruta opcional al YAML de configuración")
     args = parser.parse_args()

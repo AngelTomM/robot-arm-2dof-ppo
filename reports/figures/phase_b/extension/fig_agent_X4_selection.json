@@ -1,0 +1,10 @@
+{
+  "agent": "X4",
+  "chosen_step": 450560,
+  "chosen_smoothed_success": 0.9717777777777776,
+  "max_step": 655360,
+  "max_smoothed_success": 0.984,
+  "u_equiv_width": 0.023121804099780485,
+  "final_slope_status": "MESETA_FINAL",
+  "dataset": "validation_b2_500.json"
+}
