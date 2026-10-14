@@ -1,0 +1,32 @@
+# configs/phase_c/S1_smooth_fast.yaml
+environment:
+  max_steps: 200               # límite de pasos por episodio (más corto)
+  action_penalty_coef: 0.02
+  success_bonus: 15.0
+  near_zone_threshold: 0.3
+  velocity_penalty_near: 0.15
+  smooth_penalty:
+    enable: true               # ← activar r_smooth = -w_a·|a_t‑a_{t‑1}|²
+    weight: 0.05               # coeficiente w_a (valor recomendado, ajustar si es necesario)
+
+normalization:
+  norm_obs: true
+  norm_reward: false
+  clip_obs: 10.0
+
+sac:
+  learning_rate: 0.0003
+  buffer_size: 200000          # reducir el buffer para menos memoria y mayor rapidez
+  learning_starts: 2000        # iniciar aprendizaje antes
+  batch_size: 256
+  tau: 0.005
+  gamma: 0.99
+  train_freq: 1
+  gradient_steps: 1
+  ent_coef: auto
+  net_arch: 128x128_relu       # arquitectura más ligera para entrenamiento rápido
+  num_envs: 1
+
+training:
+  total_timesteps: 200000      # << reducción significativa para pruebas rápidas
+  checkpoint_freq: 20000       # guardar cada 20 k pasos
