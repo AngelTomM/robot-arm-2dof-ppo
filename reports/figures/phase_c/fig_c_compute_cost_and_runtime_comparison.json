@@ -1,0 +1,7 @@
+{
+  "figure_id": "fig_c_compute_cost_and_runtime_comparison",
+  "time_s1_sec": 4600.0,
+  "time_x3_sec": 720.0,
+  "grad_steps_s1": 650360,
+  "grad_steps_x3": 2560
+}

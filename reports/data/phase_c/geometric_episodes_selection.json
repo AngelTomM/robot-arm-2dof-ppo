@@ -1,0 +1,41 @@
+{
+  "dataset": "validation_c_500.json",
+  "episodes": [
+    {
+      "label": "Geom-Q1",
+      "role": "Cuantil 25% radio (campo cercano)",
+      "episode_id": 239,
+      "target_r": 0.5237363808516554,
+      "target_x": 0.33589758176789225,
+      "target_y": -0.401836547852572,
+      "initial_distance": 0.5127216376009146
+    },
+    {
+      "label": "Geom-Q2",
+      "role": "Cuantil 50% radio (mediana)",
+      "episode_id": 39,
+      "target_r": 0.9518090277298451,
+      "target_x": 0.41960833141751297,
+      "target_y": -0.8543238691930851,
+      "initial_distance": 0.2857980851289287
+    },
+    {
+      "label": "Geom-Q3",
+      "role": "Cuantil 75% radio (campo lejano)",
+      "episode_id": 146,
+      "target_r": 1.4309008181853122,
+      "target_x": -0.2817338593073227,
+      "target_y": 1.402891009310131,
+      "initial_distance": 0.6179751262980063
+    },
+    {
+      "label": "Geom-Edge",
+      "role": "Caso de borde (alcance m\u00e1ximo)",
+      "episode_id": 151,
+      "target_r": 1.8997548629596652,
+      "target_x": 0.3845078805333354,
+      "target_y": -1.860436031995365,
+      "initial_distance": 3.701457509430439
+    }
+  ]
+}

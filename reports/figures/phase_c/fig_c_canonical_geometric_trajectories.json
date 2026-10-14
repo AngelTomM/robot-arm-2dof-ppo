@@ -1,0 +1,11 @@
+{
+  "figure_id": "fig_c_canonical_geometric_trajectories",
+  "episodes": [
+    39,
+    146,
+    151,
+    239
+  ],
+  "mode": "deterministic",
+  "dataset": "validation_c_500.json"
+}

@@ -1,0 +1,8 @@
+{
+  "steps": 20000,
+  "elapsed_seconds": 140.38360780011863,
+  "fps": 142.46677595347495,
+  "model_size_bytes": 3104109,
+  "norm_size_bytes": 1821,
+  "buf_size_20k_bytes": 30001414
+}
