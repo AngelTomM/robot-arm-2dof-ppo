@@ -173,7 +173,7 @@ def train_agent(config_path_or_dict, seed: int = 42, total_timesteps_override: i
     model.learn(
         total_timesteps=total_timesteps,
         callback=[eval_callback, checkpoint_callback, training_callback],
-        progress_bar=False,
+        progress_bar=True,
         tb_log_name=f"{exp_id}_seed_{seed}"
     )
 

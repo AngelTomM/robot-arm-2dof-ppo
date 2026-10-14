@@ -164,7 +164,7 @@ def train_phase_c_sac_agent(config_path_or_dict, seed: int = 42,
     model.learn(
         total_timesteps=total_timesteps,
         callback=[checkpoint_callback],
-        progress_bar=False,
+        progress_bar=True,
         reset_num_timesteps=True
     )
     t_end = time.perf_counter()
