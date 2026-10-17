@@ -120,6 +120,12 @@ def train_phase_c_sac_agent(config_path_or_dict, seed: int = 42,
     # 5. Instanciar SAC
     total_timesteps = total_timesteps_override or int(train_cfg.get("total_timesteps", 655360))
 
+    raw_target_entropy = sac_cfg.get("target_entropy", "auto")
+    if isinstance(raw_target_entropy, str) and raw_target_entropy.lower() == "auto":
+        target_entropy = "auto"
+    else:
+        target_entropy = float(raw_target_entropy)
+
     model = SAC(
         policy="MlpPolicy",
         env=vec_env,
@@ -132,6 +138,7 @@ def train_phase_c_sac_agent(config_path_or_dict, seed: int = 42,
         train_freq=int(sac_cfg.get("train_freq", 1)),
         gradient_steps=int(sac_cfg.get("gradient_steps", 1)),
         ent_coef=sac_cfg.get("ent_coef", "auto"),
+        target_entropy=target_entropy,
         policy_kwargs=policy_kwargs,
         tensorboard_log=str(logs_dir),
         seed=seed,

@@ -1,0 +1,16 @@
+{
+    "figure": "fig3_suavidad_y_salidas_245k.png",
+    "description": "Evoluci\u00f3n temporal de delta_a y salidas medias n_exits en paso 245.760",
+    "n_exits_means": [
+        0.02,
+        0.6326666666666667,
+        0.22933333333333336,
+        0.22066666666666668
+    ],
+    "models": [
+        "PPO X3",
+        "SAC S1",
+        "SAC S2_freq",
+        "SAC S2_wa"
+    ]
+}
