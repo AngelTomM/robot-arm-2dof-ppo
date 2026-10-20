@@ -2,7 +2,7 @@
   "figure_name": "figX_05_checkpoint_success_curve.png",
   "description": "\u00c9xito estricto y recompensa media por checkpoint (l\u00edneas punteadas = recompensa en eje secundario; estrella = mejor por \u00e9xito).",
   "phase": "X",
-  "timestamp": "2026-10-20T17:18:55.306570",
+  "timestamp": "2026-10-20T17:26:28.619698",
   "python_version": "3.11.3 (tags/v3.11.3:f3909b8, Apr  4 2023, 23:49:59) [MSC v.1934 64 bit (AMD64)]",
   "os_platform": "Windows-10-10.0.26300-SP0",
   "libraries": {
@@ -11,6 +11,6 @@
     "matplotlib": "3.11.2"
   },
   "script_path": "src\\visualization\\phase_custom.py",
-  "script_sha256": "c907abcd721281f0e3e888c2dd4316ac9baa9855d220795cfe711b2653b2bad3",
+  "script_sha256": "d1312fb2c27085ff69b3be8423e27d3500357b46f504daf409d1175a6b03d884",
   "input_files_sha256": {}
 }
