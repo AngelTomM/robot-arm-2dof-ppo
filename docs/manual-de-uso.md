@@ -111,7 +111,12 @@ python train.py --config configs/phase_c/S1_smooth_200.yaml --seed 42 --total_ti
 
 ## 3. Simulación Interactiva en Tiempo Real
 
-Vista del agente entrenado a 60 FPS. Carga automáticamente el vector de normalización acoplado `vecnormalize_stats.pkl` asociado al checkpoint (los artefactos `model.zip` y `vecnormalize_stats.pkl` son locales y no se versionan; reproduzca primero el entrenamiento con `train.py` si es necesario):
+Vista del agente entrenado a 60 FPS. Acepta modelos **PPO y SAC** (detecta el
+algoritmo leyendo el propio `.zip`, sin depender del nombre del fichero). Carga
+automáticamente el vector de normalización acoplado `vecnormalize_stats.pkl`
+asociado al checkpoint (los artefactos `model.zip` y `vecnormalize_stats.pkl`
+son locales y no se versionan; reproduzca primero el entrenamiento con
+`train.py` si es necesario):
 
 ```powershell
 # Agente X4 (checkpoint de la carpeta ckpt_<paso>/: model.zip + vecnormalize_stats.pkl)
@@ -119,6 +124,9 @@ python interactive_render.py experiments/phase_b/extension/X4/seed_42/checkpoint
 
 # Ejemplo con un checkpoint recién entrenado por train.py (nuevo layout phase_b_ext)
 python interactive_render.py experiments/phase_b_ext/X4/seed_42/checkpoints/ckpt_<paso>/model.zip --config configs/phase_b/extension/X4.yaml
+
+# Modelos SAC (p. ej. los propios de configs/phase_X/<autor>)
+python interactive_render.py experiments/phase_X_tomi/sac_smooth/seed_42/models/best_model/best_model.zip
 ```
 
 | Control | Función |
@@ -308,7 +316,7 @@ python -m pytest tests/ -q
 robot-arm-2dof-ppo/
 ├── train.py                                 # Punto de entrada único de entrenamiento (PPO/SAC)
 ├── arm2d_env.py                             # Entorno Gymnasium (física, cinemática directa, hold, jacobiano)
-├── interactive_render.py                    # Simulador interactivo Pygame con auto-carga de normalización
+├── interactive_render.py                    # Simulador interactivo Pygame (PPO/SAC) con auto-carga de normalización
 ├── configs/
 │   ├── phase_a/                             # Configuraciones de diagnóstico de la Fase A (X1a a X6)
 │   ├── phase_b/                             # Configuraciones a 1M pasos (X3, X5_near)
