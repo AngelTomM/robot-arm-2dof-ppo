@@ -229,6 +229,8 @@ Resumen orientativo:
 - **`phase_c`**: `data_dir`/`figures_dir`; `AGENT_COLORS`; `experiments`/`sac_exp_dir`/`figures` (figs 1-3 y 5 parametrizables); `step_filter` (655360 por defecto; 245760 para el presupuesto del estudio S3; `None` sin filtro); `time_s1_sec`/`time_x3_sec` (4600.0 y 720.0 segundos medidos en GPU).
 - **`phase_c_s3`**: `out_dir`; `STEPS`, `SEEDS`, `COLORS`; `train_times`/`fps_vals` (tiempos de entrenamiento en minutos y FPS medios por modelo, medidos en GPU, de la fig4).
 
+- **`phase_custom`**: `out_dir`; `configs` (obligatorio, 1 YAML por agente); `experiments` (nombre de corrida 1-a-1 con `--configs`); `seeds` (1-a-1, default 42); `figures` (subconjunto 1-5); `exps_dir` (raíz alternativa de corridas; por defecto la fase se deriva de la ruta del YAML como en `train.py`); `skip_checkpoint_eval`/`refresh_checkpoint_eval` (evaluación formal de la fig. 5).
+
 ### 5.2 Notas de reproducción
 
 - **Aviso controlado**: si falta el insumo principal, los generadores `a` y `trajectories` avisan y terminan sin error ("no encontrado aún", "Modelos aún no listos"); el resto aborta con la excepción correspondiente. En la fase `b`, las figuras monográficas 1 y 4-7 se omiten con aviso ("[OMITIDA]") cuando sus CSV no existen (p. ej. con un `--data-dir` alternativo).
@@ -236,6 +238,57 @@ Resumen orientativo:
 - **`a_agg`**: las tablas y figuras se generan íntegras; la suite V01–V18 exige los logs históricos de TensorBoard (`experiments/phase_a/<exp>/seed_<seed>/logs/`); si no están presentes, la validación V12 se interrumpe tras la generación de artefactos.
 - **Trazabilidad JSON**: cada figura con metadatos escribe un `<figura>.json` junto al PNG. El campo `script_path` apunta ahora al módulo migrado en `src/visualization/` (procedencia real); los esquemas de claves son idénticos a los publicados.
 - La invocación directa de cada módulo (`python -m src.visualization.phase_b`) es equivalente al despachador.
+
+### 5.3 Modo custom: comparativas libres entre agentes (fase X)
+
+Para agentes propios fuera de las fases monográficas (p. ej. los de
+`configs/phase_X/<autor>/`), `--phase custom` compara las corridas que
+`train.py` dejó en `experiments/…` usando sus registros sin recurrir a datos
+históricos:
+
+```powershell
+# Comparar dos agentes (las semillas van 1-a-1 con los configs):
+python scripts/generate_figures.py --phase custom `
+    --configs configs/phase_X/tomi/ppo_x3_v1.yaml,configs/phase_X/tomi/sac_smooth_v1.yaml `
+    --seeds 42
+
+# Variantes: solo algunas figuras (--figures 1,2,3), omitir la evaluación
+# formal de checkpoints (--skip-checkpoint-eval), o otra raíz de corridas
+# (--exps-dir) / nombres de directorio distintos al YAML (--experiments).
+```
+
+**Qué figura mirar según la pregunta:**
+
+| Pregunta | Figura | Dato a mirar |
+| :--- | :--- | :--- |
+| ¿Quién obtiene más recompensa durante el entrenamiento? | `figX_01` | `rollout/ep_rew_mean` (curva suavizada) |
+| ¿En qué punto del entrenamiento estuvo el mejor modelo? | `figX_02` | la **estrella**: timestep de máxima recompensa media de evaluación; el modelo ya extraído es `models/best_model/best_model.zip` |
+| ¿Cuánto varía una recompensa a otra por episodio? | `figX_03` | puntos individuales (mejor punto vs final) |
+| ¿Cuál es el mejor checkpoint para interactuar? | `figX_05` | la estrella por **tasa de éxito estricta formal** ±IC Wilson (dataset congelado n=200) |
+
+**Selección para la interacción** (con el VecNormalize acoplado del propio
+checkpoint cuando exista):
+
+```powershell
+python interactive_render.py experiments/phase_X_tomi/X3_v1/seed_42/checkpoints/ckpt_204800/model.zip
+# o el "mejor modelo" del callback de evaluación:
+python interactive_render.py experiments/phase_X_tomi/X3_v1/seed_42/models/best_model/best_model.zip
+```
+
+**Caveats del modo custom:**
+
+- Comparar RECOMPENSAS entre agentes solo es limpio si ambos comparten el
+  mismo `reward_params` (mismos pesos, incluido `w_a`): agentes con pesos
+  distintos usan escalas distintas (p. ej. un SAC con `w_a > 0` penaliza la
+  acción cambiante y su recompensa total es sistemáticamente menor). Si
+  difieren, usa la comparación por **éxito** de la figura 5 y el CSV
+  `reports/data/phase_X/checkpoint_eval.csv`.
+- El módulo avisa cuando el mejor por recompensa (fig. 2) no coincide con
+  el mejor por éxito (fig. 5): para elegir modelo la métrica objetivo de
+  la TFM es el éxito estricto.
+- La fig. 5 evalúa 200 episodios por checkpoint (dataset congelado
+  'validation'); las corridas entrenadas sin VecNormalize se detectan
+  automáticamente (columna `has_vecnormalize` del CSV).
 
 ---
 

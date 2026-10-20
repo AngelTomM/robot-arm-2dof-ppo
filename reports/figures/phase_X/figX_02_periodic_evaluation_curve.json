@@ -1,0 +1,16 @@
+{
+  "figure_name": "figX_02_periodic_evaluation_curve.png",
+  "description": "Recompensa de evaluaci\u00f3n peri\u00f3dica por timestep; puntos = episodios individuales; estrella = mejor evaluaci\u00f3n.",
+  "phase": "X",
+  "timestamp": "2026-10-20T17:16:11.667923",
+  "python_version": "3.11.3 (tags/v3.11.3:f3909b8, Apr  4 2023, 23:49:59) [MSC v.1934 64 bit (AMD64)]",
+  "os_platform": "Windows-10-10.0.26300-SP0",
+  "libraries": {
+    "numpy": "1.26.4",
+    "pandas": "3.0.6",
+    "matplotlib": "3.11.2"
+  },
+  "script_path": "src\\visualization\\phase_custom.py",
+  "script_sha256": "c907abcd721281f0e3e888c2dd4316ac9baa9855d220795cfe711b2653b2bad3",
+  "input_files_sha256": {}
+}

@@ -32,6 +32,9 @@ FASES DISPONIBLES
                 (reports/data/phase_c/*.csv + experiments/phase_c/S1).
   c_s3          4 figuras del análisis de cierre S3_combined
                 (reports/phase_c_s2_analysis y phase_c_s3_analysis).
+  custom        Comparativa libre entre agentes propios (paso D2):
+                figura por --configs (1 YAML por agente), 5 figuras en
+                reports/figures/phase_X/ + CSV en reports/data/phase_X/.
 
 PARÁMETROS GLOBALES
 ===================
@@ -39,14 +42,21 @@ PARÁMETROS GLOBALES
   --out-dir    (opcional) ruta de salida alternativa. Cada módulo la
                interpreta sobre su ruta histórica; ver el docstring del
                módulo correspondiente en src/visualization/.
-  --experiments (solo b|c) modelos a dibujar, separados por comas; sin
-               la bandera se dibujan los históricos de cada fase.
-  --seeds      (solo b|c) semillas separadas por comas.
-  --exps-dir   (solo b|c) raíz alternativa de corridas para el
-               TensorBoard (b: figs 2/8; c: figura 2 SAC).
+  --experiments (solo b|c|custom) modelos a dibujar, separados por comas.
+               b|c: columna 'experiment' de los CSV o nombre de corrida;
+               custom: nombre de corrida 1-a-1 con --configs.
+  --seeds      (solo b|c|custom) semillas separadas por comas.
+  --exps-dir   (solo b|c|custom) raíz alternativa de corridas para el
+               TensorBoard/evaluaciones (b: figs 2/8; c: figura 2;
+               custom: raíz de corridas de los agentes).
   --data-dir   (solo b|c) directorio alternativo de los CSV de evaluación
                (mismo esquema de columnas histórico).
-  --figures    (solo b|c) subconjunto de figuras, separadas por comas.
+  --figures    (solo b|c|custom) subconjunto de figuras, separadas por comas.
+  --configs    (solo custom; OBLIGATORIO en custom) YAML de train.py,
+               uno por agente, separados por comas.
+  --skip-checkpoint-eval     (solo custom) omite la evaluación formal de
+               checkpoints (figura 5).
+  --refresh-checkpoint-eval  (solo custom) reevalúa aunque exista el CSV.
 
 Las fases a, a_agg, trajectories, b_ext y c_s3 son monográficas: no
 aceptan banderas de selección (parser.error si se aportan).
@@ -59,7 +69,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-PHASE_CHOICES = ["a", "a_agg", "trajectories", "b", "b_ext", "c", "c_s3"]
+PHASE_CHOICES = ["a", "a_agg", "trajectories", "b", "b_ext", "c", "c_s3", "custom"]
 
 ENTRY_POINTS = {
     "a": "src.visualization.phase_a",
@@ -69,6 +79,7 @@ ENTRY_POINTS = {
     "b_ext": "src.visualization.phase_b_ext",
     "c": "src.visualization.phase_c",
     "c_s3": "src.visualization.phase_c_s3",
+    "custom": "src.visualization.phase_custom",
 }
 
 
@@ -97,18 +108,43 @@ def main() -> None:
                         help="[b|c] Directorio alternativo de los CSV de evaluación "
                              "(mismo esquema histórico de columnas).")
     parser.add_argument("--figures", default=None,
-                        help="[b|c] Subconjunto de figuras separadas por comas (p. ej. '1,3').")
+                        help="[b|c|custom] Subconjunto de figuras separadas por comas (p. ej. '1,3').")
+    parser.add_argument("--configs", default=None,
+                        help="[custom] YAML de train.py, uno por agente, separados por comas.")
+    parser.add_argument("--skip-checkpoint-eval", action="store_true", default=False,
+                        help="[custom] Omite la evaluación formal de checkpoints (figura 5).")
+    parser.add_argument("--refresh-checkpoint-eval", action="store_true", default=False,
+                        help="[custom] Reevalúa los checkpoints aunque exista el CSV previo.")
     args = parser.parse_args()
 
+    custom_only_args = {"configs": args.configs,
+                        "skip_checkpoint_eval": args.skip_checkpoint_eval,
+                        "refresh_checkpoint_eval": args.refresh_checkpoint_eval}
+    if args.phase != "custom" and any(
+            v not in (None, False) for v in custom_only_args.values()):
+        parser.error("las banderas --configs, --skip-checkpoint-eval y "
+                     "--refresh-checkpoint-eval solo aplican a --phase custom")
     selection_args = {"experiments": args.experiments, "seeds": args.seeds,
                       "exps_dir": args.exps_dir, "data_dir": args.data_dir, "figures": args.figures}
-    selectable_phase = args.phase in ("b", "c")
+    selectable_phase = args.phase in ("b", "c", "custom")
     if any(v is not None for v in selection_args.values()) and not selectable_phase:
         parser.error("las banderas de selección (--experiments, --seeds, --exps-dir, "
-                     "--data-dir, --figures) solo aplican a --phase b o c")
+                     "--data-dir, --figures) solo aplican a --phase b, c o custom")
 
     module = importlib.import_module(ENTRY_POINTS[args.phase])
-    if selectable_phase:
+    if args.phase == "custom":
+        module.run(
+            out_dir=args.out_dir,
+            configs=([s.strip() for s in args.configs.split(",")]
+                     if args.configs else None),
+            experiments=([s.strip() for s in args.experiments.split(",")]
+                         if args.experiments else None),
+            seeds=([int(s) for s in args.seeds.split(",")] if args.seeds else None),
+            figures=([int(f) for f in args.figures.split(",")] if args.figures else None),
+            exps_dir=args.exps_dir,
+            skip_checkpoint_eval=args.skip_checkpoint_eval,
+            refresh_checkpoint_eval=args.refresh_checkpoint_eval)
+    elif selectable_phase:
         experiments = ([s.strip() for s in args.experiments.split(",")]
                        if args.experiments else None)
         seeds = ([int(s) for s in args.seeds.split(",")] if args.seeds else None)
