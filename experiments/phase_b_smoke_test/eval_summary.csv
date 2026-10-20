@@ -1,3 +1,0 @@
-checkpoint_dir,total_episodes,successes,strict_success_rate,ci_low,ci_high,truncation_rate,ballistic_rate,oscillatory_rate,steps_to_success_median,mean_final_distance,mean_action_delta,has_vecnormalize,step,experiment,seed
-experiments\phase_b_smoke_test\X5_near\seed_999\checkpoints\ckpt_8192,200,0,0.0,0.0,0.018845251197524133,1.0,0.0,0.0,,1.6019760273396968,3.4263316818385633e-07,True,8192,X5_near,999
-experiments\phase_b_smoke_test\X5_near\seed_999\checkpoints\ckpt_16384,200,0,0.0,0.0,0.018845251197524133,1.0,0.0,0.0,,1.3182882246375085,0.0003719636334859049,True,16384,X5_near,999

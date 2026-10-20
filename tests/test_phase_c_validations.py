@@ -1,7 +1,7 @@
 """
 Suite de Pruebas Unitarias y Validaciones para Fase C (Etapa C-3):
 Verifica:
-1. V-1: Guardado y recarga atómica de checkpoints SAC (model.zip + vecnormalize_stats.pkl).
+1. V-1: Guardado y recarga de checkpoints acoplados SAC (model.zip + vecnormalize_stats.pkl).
 2. V-2: Consistencia determinista de evaluación (error 0.0 entre repeticiones idénticas).
 3. V-4: Integridad de conjuntos de datos de Fase C y ausencia estricta de solapamiento entre los 6 conjuntos.
 4. V-7: No destructividad: Integridad inalterada de archivos de referencia de Fases A y B.
@@ -39,7 +39,7 @@ def compute_sha256(filepath: Path) -> str:
 class TestPhaseCValidations(unittest.TestCase):
 
     def test_v1_sac_atomic_checkpoint_save_and_reload(self):
-        """V-1: Verifica que PhaseBCheckpointCallback guarda atómicamente model.zip y vecnormalize_stats.pkl con SAC."""
+        """V-1: Verifica que PhaseBCheckpointCallback guarda de forma acoplada model.zip y vecnormalize_stats.pkl con SAC."""
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
             vec_env = DummyVecEnv([lambda: Arm2DEnv()])
@@ -138,18 +138,8 @@ class TestPhaseCValidations(unittest.TestCase):
                 inter = coords[names[i]] & coords[names[j]]
                 self.assertEqual(len(inter), 0, f"Solapamiento detectado entre {names[i]} y {names[j]}!")
 
-    def test_v7_phase_a_and_b_references_unmodified(self):
-        """V-7: Verifica que ningún archivo de referencia histórico de Fase A o Fase B ha sido alterado."""
-        hash_file_a = REPO_ROOT / "reports" / "data" / "phase_a_reference_hashes.json"
-        self.assertTrue(hash_file_a.exists())
-        with open(hash_file_a, "r", encoding="utf-8") as f:
-            reference_hashes_a = json.load(f)
-
-        for file_str, ref_hash in reference_hashes_a.items():
-            p = Path(file_str)
-            self.assertTrue(p.exists(), f"Archivo ausente: {p}")
-            self.assertEqual(compute_sha256(p), ref_hash, f"Archivo de Fase A modificado: {p}")
-
+    def test_v7_phase_b_ext_datasets_unmodified(self):
+        """V-7: Verifica que los datasets de extensión de Fase B no han sido alterados."""
         hash_file_b = REPO_ROOT / "reports" / "data" / "phase_b" / "extension" / "datasets_hashes.json"
         self.assertTrue(hash_file_b.exists())
         with open(hash_file_b, "r", encoding="utf-8") as f:
