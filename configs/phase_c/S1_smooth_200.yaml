@@ -1,7 +1,7 @@
 # Experimento S1_smooth_200 (Fase C)
 experiment:
   name: S1_smooth_200
-  description: Fase C - Piloto SAC ligero (128x128 ReLU, w_a = 0.05, buffer 200k, learning_starts 2000, 200k pasos)
+  description: Fase C - Piloto SAC ligero (256x256 ReLU, w_a = 0.05, buffer 200k, learning_starts 2000, 200k pasos)
   author: Fase C
   phase: C
 env:
@@ -36,8 +36,8 @@ sac:
   train_freq: 1
   gradient_steps: 1
   ent_coef: auto
-  net_arch: 128x128_relu
+  net_arch: 256x256_relu
   num_envs: 1
 training:
-  total_timesteps: 200000
+  total_timesteps: 20000
   checkpoint_freq: 20000

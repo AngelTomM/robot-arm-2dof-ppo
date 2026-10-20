@@ -1,5 +1,5 @@
 """
-Punto de Entrada Único de Entrenamiento (Brazo Robótico 2 DOF).
+Entrenamiento (Brazo Robótico 2 DOF).
 
 Fuente Única de Verdad (SSOT) de la fase y el experimento: la RUTA del YAML.
   configs/phase_b/X3.yaml           ->  experiments/phase_b/X3/seed_<seed>/
