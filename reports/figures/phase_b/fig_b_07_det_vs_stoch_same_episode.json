@@ -1,0 +1,18 @@
+{
+  "figure_name": "fig_b_07_det_vs_stoch_same_episode.png",
+  "description": "Comparativa de trayectoria y velocidad determinista vs estoc\u00e1stica mostrando jitter.",
+  "phase": "B",
+  "timestamp": "2026-10-08T21:59:30.949338",
+  "python_version": "3.11.16 (main, Aug 25 2026, 13:59:19) [MSC v.1944 64 bit (AMD64)]",
+  "os_platform": "Windows-10-10.0.19045-SP0",
+  "libraries": {
+    "numpy": "1.26.4",
+    "pandas": "3.0.5",
+    "matplotlib": "3.11.1"
+  },
+  "script_path": "scripts\\generate_phase_b_figures.py",
+  "script_sha256": "db18362302e2c508183a7150e500355e02dbfe475549e55fd670a0568844275e",
+  "input_files_sha256": {
+    "step_data_val_geometry.csv": "369dab5e4b551cb89a0d810c42c37e24b4ca4b9e39ffd8b4f175f075e81ec552"
+  }
+}

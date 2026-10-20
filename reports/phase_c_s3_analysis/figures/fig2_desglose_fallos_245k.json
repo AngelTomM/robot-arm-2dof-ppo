@@ -1,0 +1,32 @@
+{
+    "figure": "fig2_desglose_fallos_245k.png",
+    "description": "Desglose apilado de modos de fallo en paso 245.760 sobre validation_c_500.json",
+    "models": [
+        "PPO X3",
+        "SAC S1",
+        "SAC S2_freq",
+        "SAC S2_wa",
+        "SAC S3_combined"
+    ],
+    "success_rate": [
+        93.53333333333332,
+        49.4,
+        58.93333333333334,
+        44.53333333333333,
+        84.53333333333333
+    ],
+    "entered_no_hold": [
+        2.0,
+        20.46666666666666,
+        17.66666666666666,
+        21.4,
+        6.13333333333333
+    ],
+    "never_entered": [
+        4.46666666666666,
+        30.13333333333333,
+        23.39999999999999,
+        34.06666666666667,
+        9.33333333333333
+    ]
+}

@@ -289,93 +289,67 @@ robot-arm-2dof-ppo/
 │   └── metodologia.md                       # Fundamento técnico y protocolo experimental
 ├── tests/                                   # Suite de 31 pruebas unitarias
 ├── requirements.txt                         # Dependencias fijadas (Python 3.11)
-├── .dvc/ + *.dvc                            # Versionado de datos con DVC (sección 8)
 ├── train.py                                 # raíz — ver arriba
 └── README.md                                # Página de talón (resumen, hallazgos y arranque rápido)
 ```
 
 ---
 
-## 8. Trabajo en Equipo con DVC (modelos y figuras compartidas)
+## 8. Carpeta Compartida de Google Drive (modelos y figuras)
 
-Los binarios generados (modelos `.zip`, `vecnormalize_stats.pkl`, TensorBoard,
-CSV/JSON de `experiments/` y las figuras PNG+JSON de `reports/figures/` y
-`reports/phase_c_s3_analysis/figures/`) **no viven en git**: se versionan con
-[DVC](https://dvc.org) y se sincronizan vía Google Drive. Git conserva el
-código, `configs/`, `docs/`, los CSV pequeños de `reports/data/` y los
-informes `.md`.
+Los binarios generados (modelos `.zip`, `vecnormalize_stats.pkl`, TensorBoard y
+figuras PNG) **no viajan en git**: se comparten a través de una carpeta de
+Google Drive cuya estructura replica la del repositorio. Git conserva el
+código, `configs/`, `docs/`, y los CSV/JSON de texto de `experiments/` y
+`reports/` (que sí son versionables y diferenciables en diffs).
 
-### 8.1 Remote y primer arranque (ya configurado en el repo)
-
-El remoto ya está fijado en `.dvc/config` (sin secretos; cada cuenta se
-autentica aparte la primera vez que hace push/pull):
-
-| Remoto | URL | Carpeta compartida |
-| :--- | :--- | :--- |
-| `storage` (por defecto) | `gdrive://1IEO1rKzjEdylb-TTwW7NywV8oNclvjnX` | <https://drive.google.com/drive/folders/1IEO1rKzjEdylb-TTwW7NywV8oNclvjnX> |
-
-Google bloquea el acceso desde apps "anónimas", así que se usa un **Client ID
-OAuth propio** del grupo (ya configurado en `.dvc/config`; la pantalla de
-consentimiento debe estar en modo *Testing* con las 3 cuentas como *Test
-users* — al ver "acceso bloqueado": *Advanced → Go to app*). El
-`client_secret` vive SOLO en `.dvc/config.local` (gitignored): si haces pull
-en una máquina nueva, el compañero de infra te lo pasa y lo añades a mano:
-
-```powershell
-dvc remote modify --local storage gdrive_client_secret <SECRETO>
-```
-
-Además, en el proyecto de Google Cloud (`339127141205`) debe estar
-**habilitada la Google Drive API**
-(<https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=339127141205>);
-tras crear o cambiar el cliente OAuth, Google tarda entre 5 minutos y un par
-de horas en propagar el cambio.
-
-Tras `git pull`, instala la dependencia y baja los datos versionados:
-
-```powershell
-pip install -r requirements.txt   # incluye dvc[gdrive]==3.67.1
-dvc pull                          # 1ª vez: abre el navegador para tu cuenta de Google
-```
-
-Para subir artefactos nuevos que hayas generado tú:
-
-```powershell
-dvc add <ruta>        # p. ej. experiments/phase_c/S2_freq, reports/figures
-dvc push              # sube los binarios a la carpeta de Drive compartida
-git add *.dvc && git commit -m "dvc: <descripcion>" && git push
-```
-
-Los `.dvc` son los "punteros" versionados: quien hace pull de git recibe el
-hash de los datos y `dvc pull` los materializa en el sitio correcto.
-
-### 8.2 Qué se gestiona con cada herramienta
-
-| Contenido | Vía |
+| Carpeta compartida | <https://drive.google.com/drive/folders/1IEO1rKzjEdylb-TTwW7NywV8oNclvjnX> |
 | :--- | :--- |
-| Código, `configs/`, `docs/`, `scripts/`, `tests/` | git |
-| `experiments/` completo (modelos, VecNormalize, TensorBoard, evals) | DVC (`experiments.dvc`) |
-| `reports/figures/` (PNG 300 dpi + JSON trazabilidad) | DVC (`reports/figures.dvc`) |
-| `reports/phase_c_s3_analysis/figures/` | DVC (`reports/phase_c_s3_analysis/figures.dvc`) |
-| `reports/data/` (CSV de evaluación, pequeños) e informes `.md` | git (diferenciables en diffs) |
 
-### 8.3 Flujo diario recomendado
+### 8.1 Estructura dentro de la carpeta (espejo del repositorio)
 
-1. `git pull && dvc pull` al empezar el día (trae modelos/figuras de los compañeros).
-2. Entrenar/evaluar/generar figuras normalmente (secciones 2-5).
-3. `dvc add <lo nuevo>` → `dvc push` → `git add` los `.dvc` → `git commit` → `git push`.
-4. Evitar editar los mismos `.dvc` a la vez entre varias personas: quien entrena
-   es quien hace `add`; los demás solo hacen `pull`.
+```text
+brazo-2dof-compartido/
+├── experiments/<fase>/<experimento>/seed_<seed>/   # igual que en el repo
+├── reports/figures/                                # PNG + JSON de trazabilidad
+└── reports/phase_c_s3_analysis/figures/
+```
 
-### 8.4 Caveats conocidos
+### 8.2 Convenciones de equipo
 
-- En carpeta de Drive "compartida normal" la cuota de cada archivo subido
-  cuenta contra quien lo sube: a escala actual (decenas de MB) es irrelevante.
-- DVC sube los tuyos localmente a `.dvc/cache/`: NO sincronizar el repo con
-  el cliente de Google Drive Desktop (duplicaría la caché).
-- La fase `a_agg` de figuras necesita el TensorBoard histórico de
-  `experiments/phase_a/*/seed_*/logs`; si tu máquina no tiene los logs,
-  `dvc pull` (de `experiments.dvc`) los trae y la fase vuelve a ser
-  reproducible. Sin logs, las tablas pierden las columnas de entrenamiento.
-- Si `dvc status` muestra cambios que no reconoces, `git status` de los
-  `.dvc` te dirá qué "puntero" cambió y quién lo subió.
+1. **Cada uno sube solo lo suyo**: quien entrena un experimento sube su carpeta
+   `experiments/<fase>/<experimento>/` a Drive. Nunca renombrar ni sobrescribir
+   carpetas de otros.
+2. **Verifica antes de sobrescribir**: si tienes que reemplazar algo, sube la
+   versión nueva junto a la antigua con sufijo de fecha (`_2026-10-20`) y
+   avisa al grupo; no hay historial que te salve.
+3. **Snapshots completos**: para mandar todo el árbol, un único ZIP con fecha
+   (`experiments_2026-10-20.zip`) pesa lo mismo y evita la subida de cientos
+   de ficheros sueltos por la web.
+4. **Cuota de Drive**: cada archivo cuenta contra la cuota de quien lo sube.
+   A escala actual (decenas de MB) no es problema, pero borrar lo obsoleto
+   ayuda.
+
+### 8.3 Flujo de trabajo
+
+```powershell
+# Cuando terminas de entrenar/evaluar/generar figuras:
+# 1) Copia las carpetas nuevas al mismo sitio dentro de la carpeta compartida
+# 2) Haz git commit de los CSV/JSON de texto que sí van a git y push
+
+# Cuando empiezas a trabajar:
+# 1) git pull (trae código + CSVs/JSONs de texto)
+# 2) Descarga de Drive lo que te falte (modelos de otros, figuras publicadas)
+```
+
+### 8.4 Caveats
+
+- **NO sincronizar el repositorio con el cliente Drive for Desktop**: crearía
+  conflictos con git y duplicaría archivos. La carpeta se gestiona desde el
+  navegador o copiado manual.
+- La estructura dentro de la carpeta compartida debe respetarse para que
+  cualquier réplica local encaje directamente en el repo (`experiments/...`,
+  `reports/figures/...`).
+- Si descargas una carpeta de un compañero, colócala bajo la misma ruta que
+  ocupa en el repo para que `train.py`, `evaluate_checkpoints.py` y
+  `generate_figures.py` la encuentren sin ajustes.

@@ -1,0 +1,7 @@
+{
+  "figure_id": "fig_c_failure_breakdown_final_ckpt",
+  "step": 655360,
+  "dataset": "validation_c_500.json",
+  "n_seeds": 3,
+  "reconciliation": "Suma de categor\u00edas = 100.0%"
+}

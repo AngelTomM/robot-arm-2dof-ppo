@@ -1,0 +1,26 @@
+{
+  "figure_id": "fig_c_sac_training_diagnostics",
+  "experiment": "S1",
+  "n_seeds": 3,
+  "metrics_summary": {
+    "seed_100": {
+      "critic_loss_final": 0.1448931097984314,
+      "actor_loss_final": -51.642120361328125,
+      "ent_coef_final": 0.017656510695815086,
+      "ep_rew_mean_final": 56.30944061279297
+    },
+    "seed_2026": {
+      "critic_loss_final": 0.2782941460609436,
+      "actor_loss_final": -50.07697677612305,
+      "ent_coef_final": 0.01775750145316124,
+      "ep_rew_mean_final": 68.35902404785156
+    },
+    "seed_42": {
+      "critic_loss_final": 2.845336437225342,
+      "actor_loss_final": -52.27635955810547,
+      "ent_coef_final": 0.018729858100414276,
+      "ep_rew_mean_final": 66.18408203125
+    }
+  },
+  "note": "Diagn\u00f3sticos extra\u00eddos de eventos TensorBoard de SAC. No comparables num\u00e9ricamente con p\u00e9rdidas PPO."
+}

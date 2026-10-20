@@ -1,0 +1,10 @@
+{
+  "agent": "X5_near",
+  "chosen_step": 327680,
+  "chosen_smoothed_success": 0.8046666666666668,
+  "max_step": 655360,
+  "max_smoothed_success": 0.8500000000000001,
+  "u_equiv_width": 0.06258499575875986,
+  "final_slope_status": "CRECIENDO_AL_FINAL",
+  "dataset": "validation_b2_500.json"
+}

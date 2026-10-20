@@ -1,0 +1,19 @@
+{
+  "figure_name": "fig_b_04_phase_plane_distance_speed.png",
+  "description": "Plano de fase de trayectorias e histograma de velocidad de entrada.",
+  "phase": "B",
+  "timestamp": "2026-10-08T21:59:28.135144",
+  "python_version": "3.11.16 (main, Aug 25 2026, 13:59:19) [MSC v.1944 64 bit (AMD64)]",
+  "os_platform": "Windows-10-10.0.19045-SP0",
+  "libraries": {
+    "numpy": "1.26.4",
+    "pandas": "3.0.5",
+    "matplotlib": "3.11.1"
+  },
+  "script_path": "scripts\\generate_phase_b_figures.py",
+  "script_sha256": "db18362302e2c508183a7150e500355e02dbfe475549e55fd670a0568844275e",
+  "input_files_sha256": {
+    "step_data_val_geometry.csv": "369dab5e4b551cb89a0d810c42c37e24b4ca4b9e39ffd8b4f175f075e81ec552",
+    "eval_val_c0_episodes.csv": "ff7600718921ed5355b37bf4820123404500010def92f523ea370d3c8f2c160b"
+  }
+}

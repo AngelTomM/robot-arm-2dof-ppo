@@ -1,0 +1,19 @@
+{
+  "figure_name": "fig_b_01_workspace_failure_map.png",
+  "description": "Mapa cartesiano de desenlaces sobre conjunto de validaci\u00f3n en 6 categor\u00edas.",
+  "phase": "B",
+  "timestamp": "2026-10-08T21:59:25.374540",
+  "python_version": "3.11.16 (main, Aug 25 2026, 13:59:19) [MSC v.1944 64 bit (AMD64)]",
+  "os_platform": "Windows-10-10.0.19045-SP0",
+  "libraries": {
+    "numpy": "1.26.4",
+    "pandas": "3.0.5",
+    "matplotlib": "3.11.1"
+  },
+  "script_path": "scripts\\generate_phase_b_figures.py",
+  "script_sha256": "db18362302e2c508183a7150e500355e02dbfe475549e55fd670a0568844275e",
+  "input_files_sha256": {
+    "eval_val_x5_near_phase_b_selected.csv": "0f8ae9b120e153c0cebac25c339e049038e27ba10cf0a4eedb920da80221a601",
+    "eval_val_x3_phase_b_selected.csv": "4a32e2d998b9e8b98871ff36875da3abb4d453cb7bc68268b5b20088bf159ecb"
+  }
+}

@@ -1,0 +1,25 @@
+{
+    "figure": "fig3_suavidad_y_salidas_245k.png",
+    "description": "Comparativa de variaci\u00f3n de acci\u00f3n ||\u0394a|| y salidas no deseadas de meta en paso 245.760",
+    "models": [
+        "PPO X3",
+        "SAC S1",
+        "SAC S2_freq",
+        "SAC S2_wa",
+        "SAC S3_combined"
+    ],
+    "action_delta_mean": [
+        0.0401662254133235,
+        0.0516802154718241,
+        0.0489690160817669,
+        0.0377695967216143,
+        0.0457080716003049
+    ],
+    "n_exits_mean": [
+        0.02,
+        0.6326666666666667,
+        0.2293333333333333,
+        0.2206666666666666,
+        0.0673333333333333
+    ]
+}

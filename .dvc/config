@@ -1,5 +1,0 @@
-[core]
-    remote = storage
-['remote "storage"']
-    url = gdrive://1IEO1rKzjEdylb-TTwW7NywV8oNclvjnX
-    gdrive_client_id = 339127141205-cahtv37r4tsgf3jsbu89lqn17dq82jv9.apps.googleusercontent.com

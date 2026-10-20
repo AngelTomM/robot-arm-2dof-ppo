@@ -1,0 +1,15 @@
+{
+  "title": "Perfiles temporales de distancia y delta de acci\u00f3n",
+  "dataset": "validation_b2_500.json",
+  "episodes": [
+    85,
+    480
+  ],
+  "agents": [
+    "X3",
+    "X4",
+    "X5",
+    "X6",
+    "C0_consistent_1_5"
+  ]
+}
