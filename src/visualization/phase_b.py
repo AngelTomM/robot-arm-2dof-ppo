@@ -24,13 +24,26 @@ PARÁMETROS CONFIGURABLES
 ========================
 FIG_B_DIR    : directorio de salida (``Path``). Por defecto
                reports/figures/phase_b; ``run(out_dir)`` / ``--out-dir``
-               sustituye su valor para una ejecución concreta.
+               sustituye su valor para una ejecución concreta
+               (``--data-dir`` hace lo propio con DATA_B_DIR).
 EXP_COLORS   : paleta por experimento (C0, X0, X3, X5_near, X5, X6).
                Mantener los tonos históricos: los JSON publicados los
-               asocian a las figuras ya publicadas.
+               asocian a las figuras ya publicadas. Los experimentos
+               ausentes en la paleta reciben un color del ciclo
+               neutro por orden de aparición (ver common.color_resolver),
+               p. ej. un modelo recién entrenado al invocar
+               ``run(..., experiments=["MiModelo"])``.
 CAT_COLORS /
 CATEGORIES   : paleta y orden canónico de las 6 categorías de desenlace
                (1. Éxito limpio ... 6. Fallo sin estabilizar).
+fig2/fig3/fig8 aceptan selección de experimentos y semillas
+               (``run(experiments=..., seeds=...)``; ``--experiments``,
+               ``--seeds``, ``--exps-dir``, ``--figures`` en el dispatcher);
+               sin banderas reproducen el estudio histórico
+               (["X5_near", "X3"], semillas [42, 100, 2026]). Las figuras
+               1 y 4-7 son monográficas (episodios curados) y mantienen
+               sus insumos fijos: se omiten con aviso si los CSV no
+               existen. ``selected_ckpts`` solo por biblioteca.
 spd_beams... : constantes estéticas internas de cada función de figura
                (tamaños de figura, anotaciones); no alterar salvo
                necesidad documentada.
@@ -91,6 +104,27 @@ CAT_COLORS = {
     "6. Fallo sin estabilizar": "#5dade2"   # Azul pizarra
 }
 
+# Resolución de color: canónicos de EXP_COLORS + ciclo neutro determinista
+# para nombres nuevos (common.color_resolver).
+get_exp_color = common.color_resolver(EXP_COLORS)
+
+# Guarda de insumos: las figuras monográficas se omiten con aviso cuando
+# sus CSV característicos no existen (p. ej. un --data-dir alternativo).
+REQUIRED_FIG1 = ["eval_val_c0_episodes.csv", "eval_val_x5_near_phase_a_det.csv",
+                 "eval_val_x5_near_phase_b_selected.csv", "eval_val_x3_phase_b_selected.csv"]
+REQUIRED_FIG4 = ["step_data_val_geometry.csv", "eval_val_c0_episodes.csv",
+                 "eval_val_x5_near_phase_b_selected.csv"]
+REQUIRED_FIG5_7 = ["step_data_val_geometry.csv"]
+
+
+def _required_inputs(file_names: list) -> bool:
+    missing = [DATA_B_DIR / name for name in file_names if not (DATA_B_DIR / name).exists()]
+    if missing:
+        print(f"  [OMITIDA] Faltan insumos en {DATA_B_DIR}: "
+              f"{', '.join(p.name for p in missing)}")
+        return False
+    return True
+
 CATEGORIES = [
     "1. Éxito limpio",
     "2. Éxito con patología",
@@ -108,6 +142,8 @@ def save_fig_with_metadata(fig, out_png_path: Path, input_files: list, descripti
 
 def generate_figure_1():
     print("\n--- Generando Figura 1: Mapa de Fallos en el Espacio de Trabajo ---")
+    if not _required_inputs(REQUIRED_FIG1):
+        return
     val_set, _ = save_and_get_datasets()
     targets = {ep["episode_id"]: (ep["target_x"], ep["target_y"], ep.get("target_r", np.sqrt(ep["target_x"]**2 + ep["target_y"]**2))) for ep in val_set}
 
@@ -169,17 +205,29 @@ def generate_figure_1():
 # ==============================================================================
 # FIGURA 2: CURVAS DE ENTRENAMIENTO POR AGENTE (FASE A vs FASE B)
 # ==============================================================================
-def generate_figure_2():
+def generate_figure_2(exps=None, seeds=None, experiments_root=None):
+    """
+    Curvas de entrenamiento por agente desde TensorBoard.
+
+    exps             : lista de experimentos (por defecto ["X5_near", "X3"]);
+                       se dibuja una fila por experimento.
+    seeds            : lista de semillas (por defecto [42, 100, 2026]).
+    experiments_root : raíz de las corridas para localizar los eventos
+                       (por defecto experiments/phase_b); p. ej. un
+                       experimento entrenado en otra fase indica su raíz
+                       correspondiente.
+    """
     print("\n--- Generando Figura 2: Curvas de Entrenamiento por Agente ---")
-    seeds = [42, 100, 2026]
-    exps = ["X5_near", "X3"]
-    
-    # Extraer curvas de TensorBoard de Fase B
+    seeds = seeds if seeds is not None else [42, 100, 2026]
+    exps = exps if exps is not None else ["X5_near", "X3"]
+    experiments_root = Path(experiments_root) if experiments_root is not None else REPO_ROOT / "experiments" / "phase_b"
+
+    # Extraer curvas de TensorBoard de la raíz indicada
     data_b = {}
     for exp in exps:
         data_b[exp] = {}
         for s in seeds:
-            tb_dir = REPO_ROOT / "experiments" / "phase_b" / exp / f"seed_{s}" / "logs"
+            tb_dir = experiments_root / exp / f"seed_{s}" / "logs"
             efs = list(tb_dir.glob("**/events.out.tfevents.*"))
             if efs:
                 ea = event_accumulator.EventAccumulator(str(efs[-1]), size_guidance={"scalars": 0})
@@ -187,7 +235,7 @@ def generate_figure_2():
                 tags = ea.Tags().get("scalars", [])
                 data_b[exp][s] = {t: [(e.step, e.value) for e in ea.Scalars(t)] for t in tags}
 
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10), dpi=300)
+    fig, axes = plt.subplots(len(exps), 3, figsize=(18, 5 * len(exps)), dpi=300, squeeze=False)
 
     tags_info = [
         ("rollout/ep_rew_mean", "Recompensa Media por Episodio", "Ep Rew Mean (no comparable entre X3 y X5_near)"),
@@ -196,7 +244,7 @@ def generate_figure_2():
     ]
 
     for row_idx, exp in enumerate(exps):
-        exp_col = EXP_COLORS[exp]
+        exp_col = get_exp_color(exp)
         for col_idx, (tag, title, ylabel) in enumerate(tags_info):
             ax = axes[row_idx, col_idx]
             
@@ -219,7 +267,8 @@ def generate_figure_2():
                 mean_curve = np.mean(vals_interp, axis=0)
                 std_curve = np.std(vals_interp, axis=0, ddof=1)
                 
-                ax.plot(common_steps, mean_curve, color=exp_col, linewidth=2.2, label="Media Multi-Semilla (n=3)")
+                ax.plot(common_steps, mean_curve, color=exp_col, linewidth=2.2,
+                        label=f"Media Multi-Semilla (n={len(curves)})")
                 ax.fill_between(common_steps, mean_curve - std_curve, mean_curve + std_curve, color=exp_col, alpha=0.18)
 
             # Marcar frontera de 303k pasos de Fase A
@@ -230,7 +279,8 @@ def generate_figure_2():
             ax.set_ylabel(ylabel, fontsize=9)
             ax.legend(loc="best", fontsize=8)
 
-    fig.suptitle("Figura B-2: Dinámica de Entrenamiento Fase B hasta 1.000.000 de Pasos (3 Semillas)\nNota: La recompensa solo es comparable dentro de una misma configuración.", fontsize=13, fontweight="bold")
+    n_seeds_txt = f"{len(seeds)} Semilla" + ("" if len(seeds) == 1 else "s")
+    fig.suptitle(f"Figura B-2: Dinámica de Entrenamiento Fase B hasta 1.000.000 de Pasos ({n_seeds_txt})\nNota: La recompensa solo es comparable dentro de una misma configuración.", fontsize=13, fontweight="bold")
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     out_p = FIG_B_DIR / "fig_b_02_agent_training_curves.png"
     save_fig_with_metadata(fig, out_p, [REPO_ROOT / "reports" / "data" / "phase_b" / "tanda_1_x5_near_summary.json"],
@@ -239,10 +289,29 @@ def generate_figure_2():
 # ==============================================================================
 # FIGURA 3: CURVA DE ÉXITO ESTRICTO DETERMINISTA CONTRA CHECKPOINTS (VALIDACIÓN)
 # ==============================================================================
-def generate_figure_3():
+def generate_figure_3(exps=None, seeds=None, agg_csv=None, raw_csv=None, selected_ckpts=None):
+    """
+    Curva de éxito estricto determinista vs checkpoints (validación).
+
+    exps / seeds    : experimentos y semillas a dibujar (por defecto los
+                      históricos ["X5_near", "X3"] y [42, 100, 2026]).
+    agg_csv/raw_csv : CSVs de evaluación (por defecto los de DATA_B_DIR;
+                      faltan solo si se analiza otra corrida via --data-dir).
+    selected_ckpts  : dict experimento->paso marcado como seleccionado por
+                      la regla 4.1; sin entrada para un experimento no se
+                      dibuja estrella. Por defecto {"X5_near": 901120,
+                      "X3": 409600}.
+    """
     print("\n--- Generando Figura 3: Curva de Éxito Estricto Determinista vs Checkpoints ---")
-    agg_df = pd.read_csv(DATA_B_DIR / "checkpoints_eval_validation_aggregated.csv")
-    raw_df = pd.read_csv(DATA_B_DIR / "checkpoints_eval_validation.csv")
+    exps = exps if exps is not None else ["X5_near", "X3"]
+    seeds = seeds if seeds is not None else [42, 100, 2026]
+    agg_csv = Path(agg_csv) if agg_csv is not None else DATA_B_DIR / "checkpoints_eval_validation_aggregated.csv"
+    raw_csv = Path(raw_csv) if raw_csv is not None else DATA_B_DIR / "checkpoints_eval_validation.csv"
+    if selected_ckpts is None:
+        selected_ckpts = {"X5_near": 901120, "X3": 409600}
+
+    agg_df = pd.read_csv(agg_csv)
+    raw_df = pd.read_csv(raw_csv)
 
     fig, (ax_main, ax_entry) = plt.subplots(2, 1, figsize=(14, 10), dpi=300, sharex=True, gridspec_kw={"height_ratios": [2.2, 1.0]})
 
@@ -252,36 +321,41 @@ def generate_figure_3():
     ax_main.axvline(303104, color="#7f8c8d", linestyle=":", linewidth=1.2, label="Límite Fase A (303k)")
     ax_entry.axvline(303104, color="#7f8c8d", linestyle=":", linewidth=1.2)
 
-    # Marcadores de selección
-    selected_ckpts = {"X5_near": 901120, "X3": 409600}
+    # Marcadores de selección (parametrizables; un experimento sin entrada
+    # simplemente no recibe estrella)
 
-    for exp_id in ["X5_near", "X3"]:
+    for exp_id in exps:
         sub = agg_df[agg_df["experiment"] == exp_id].sort_values("step")
         steps = sub["step"].values
         mean_succ = sub["mean_strict_success"].values * 100.0
         std_succ = sub["std_strict_success"].values * 100.0
-        col = EXP_COLORS[exp_id]
+        col = get_exp_color(exp_id)
 
         # Curva media
-        ax_main.plot(steps, mean_succ, color=col, linewidth=2.5, marker="o", markersize=4, label=f"{exp_id} Media (n=3)")
+        ax_main.plot(steps, mean_succ, color=col, linewidth=2.5, marker="o", markersize=4, label=f"{exp_id} Media (n={len(seeds)})")
         ax_main.fill_between(steps, mean_succ - std_succ, mean_succ + std_succ, color=col, alpha=0.15)
 
         # Semillas individuales con puntos sutiles
         raw_sub = raw_df[raw_df["experiment"] == exp_id]
-        for s in [42, 100, 2026]:
+        for s in seeds:
             s_df = raw_sub[raw_sub["seed"] == s].sort_values("step")
             ax_main.plot(s_df["step"], s_df["strict_success_rate"]*100, color=col, alpha=0.35, linewidth=0.9, linestyle="--")
 
-        # Marcar checkpoint seleccionado por la regla
-        sel_step = selected_ckpts[exp_id]
-        sel_row = sub[sub["step"] == sel_step].iloc[0]
-        sel_val = sel_row["mean_strict_success"] * 100.0
-        ax_main.scatter(sel_step, sel_val, color=col, s=160, marker="*", edgecolors="black", zorder=7,
-                        label=f"{exp_id} Seleccionado ({sel_step:,} p, {sel_val:.1f}%)")
-        ax_main.annotate(f"{exp_id}\n{sel_step:,} p\n{sel_val:.1f}%",
-                         (sel_step, sel_val), textcoords="offset points", xytext=(10, 10 if exp_id=="X5_near" else -30),
-                         fontsize=8.5, fontweight="bold", color=col,
-                         bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=col, alpha=0.9))
+        # Marcar checkpoint seleccionado por la regla (si hay entrada)
+        if exp_id in selected_ckpts and len(steps) > 0:
+            sel_step = selected_ckpts[exp_id]
+            sel_row = sub[sub["step"] == sel_step]
+            if sel_row.empty:
+                sel_step = sub["step"].iloc[-1]
+                sel_row = sub[sub["step"] == sel_step]
+            sel_row = sel_row.iloc[0]
+            sel_val = sel_row["mean_strict_success"] * 100.0
+            ax_main.scatter(sel_step, sel_val, color=col, s=160, marker="*", edgecolors="black", zorder=7,
+                            label=f"{exp_id} Seleccionado ({sel_step:,} p, {sel_val:.1f}%)")
+            ax_main.annotate(f"{exp_id}\n{sel_step:,} p\n{sel_val:.1f}%",
+                             (sel_step, sel_val), textcoords="offset points", xytext=(10, 10 if exp_id=="X5_near" else -30),
+                             fontsize=8.5, fontweight="bold", color=col,
+                             bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=col, alpha=0.9))
 
         # Fracción de episodios que entran al radio objetivo
         # En raw_df: entry fraction se puede aproximar por 1 - (fallos sin aproximación) o time_inside_030 > 0
@@ -316,6 +390,8 @@ def generate_figure_3():
 # ==============================================================================
 def generate_figure_4():
     print("\n--- Generando Figura 4: Plano de Fase (Distancia vs Velocidad Articular) ---")
+    if not _required_inputs(REQUIRED_FIG4):
+        return
     step_df = pd.read_csv(DATA_B_DIR / "step_data_val_geometry.csv")
     c0_episodes = classify_df_episodes(pd.read_csv(DATA_B_DIR / "eval_val_c0_episodes.csv"))
     x5b_episodes = classify_df_episodes(pd.read_csv(DATA_B_DIR / "eval_val_x5_near_phase_b_selected.csv"))
@@ -377,6 +453,8 @@ def generate_figure_4():
 # ==============================================================================
 def generate_figure_5():
     print("\n--- Generando Figura 5: Perfiles Temporales de Episodios Geométricos ---")
+    if not _required_inputs(REQUIRED_FIG5_7):
+        return
     step_df = pd.read_csv(DATA_B_DIR / "step_data_val_geometry.csv")
     det_steps = step_df[step_df["eval_mode"] == "deterministic"]
 
@@ -439,6 +517,8 @@ def generate_figure_5():
 # ==============================================================================
 def generate_figure_6():
     print("\n--- Generando Figura 6: Trayectorias Cartesianas 2D con Degradé ---")
+    if not _required_inputs(REQUIRED_FIG5_7):
+        return
     step_df = pd.read_csv(DATA_B_DIR / "step_data_val_geometry.csv")
     det_steps = step_df[(step_df["eval_mode"] == "deterministic") & (step_df["model_id"] == "X5_near_FaseB")]
     c0_steps = step_df[(step_df["eval_mode"] == "deterministic") & (step_df["model_id"] == "C0")]
@@ -501,6 +581,8 @@ def generate_figure_6():
 # ==============================================================================
 def generate_figure_7():
     print("\n--- Generando Figura 7: Determinista vs Estocástica sobre Mismo Episodio ---")
+    if not _required_inputs(REQUIRED_FIG5_7):
+        return
     step_df = pd.read_csv(DATA_B_DIR / "step_data_val_geometry.csv")
     x5b_steps = step_df[step_df["model_id"] == "X5_near_FaseB"]
 
@@ -553,16 +635,22 @@ def generate_figure_7():
 # ==============================================================================
 # FIGURA 8: DIAGNÓSTICOS PPO DE LA FASE B
 # ==============================================================================
-def generate_figure_8():
+def generate_figure_8(exps=None, seeds=None, experiments_root=None):
+    """
+    Diagnósticos internos de entrenamiento desde TensorBoard (análogos a
+    ``generate_figure_2`` en parametrización: ``exps``, ``seeds``,
+    ``experiments_root``).
+    """
     print("\n--- Generando Figura 8: Diagnósticos PPO de la Fase B ---")
-    seeds = [42, 100, 2026]
-    exps = ["X5_near", "X3"]
+    seeds = seeds if seeds is not None else [42, 100, 2026]
+    exps = exps if exps is not None else ["X5_near", "X3"]
+    experiments_root = Path(experiments_root) if experiments_root is not None else REPO_ROOT / "experiments" / "phase_b"
 
     raw_series = {}
     for exp in exps:
         raw_series[exp] = {}
         for s in seeds:
-            tb_dir = REPO_ROOT / "experiments" / "phase_b" / exp / f"seed_{s}" / "logs"
+            tb_dir = experiments_root / exp / f"seed_{s}" / "logs"
             efs = list(tb_dir.glob("**/events.out.tfevents.*"))
             if efs:
                 ea = event_accumulator.EventAccumulator(str(efs[-1]), size_guidance={"scalars": 0})
@@ -601,9 +689,9 @@ def generate_figure_8():
                 vals_interp = np.array(vals_interp)
                 mean_vals = np.mean(vals_interp, axis=0)
                 std_vals = np.std(vals_interp, axis=0, ddof=1)
-                col = EXP_COLORS[exp]
+                col = get_exp_color(exp)
 
-                ax.plot(common_steps, mean_vals, color=col, linewidth=2.0, label=f"{exp} (n=3)")
+                ax.plot(common_steps, mean_vals, color=col, linewidth=2.0, label=f"{exp} (n={len(curves)})")
                 ax.fill_between(common_steps, mean_vals - std_vals, mean_vals + std_vals, color=col, alpha=0.15)
 
         if is_log:
@@ -624,30 +712,60 @@ def generate_figure_8():
     save_fig_with_metadata(fig, out_p, [REPO_ROOT / "reports" / "data" / "phase_b" / "tanda_1_x5_near_summary.json"],
                            "Diagnósticos de optimización PPO (KL, clip, loss, critic, entropy).")
 
-def generate_all_figures():
-    generate_figure_1()
-    generate_figure_2()
-    generate_figure_3()
-    generate_figure_4()
-    generate_figure_5()
-    generate_figure_6()
-    generate_figure_7()
-    generate_figure_8()
+FIGURE_FUNCS = {1: generate_figure_1, 4: generate_figure_4, 5: generate_figure_5,
+                6: generate_figure_6, 7: generate_figure_7}
+
+
+def generate_all_figures(experiments=None, seeds=None, exps_dir=None,
+                         selected_ckpts=None, figures=None):
+    """
+    Genera el conjunto de figuras de Fase B; ``figures`` permite un
+    subconjunto (lista de enteros 1..8). ``experiments``/``seeds``/
+    ``exps_dir``/``selected_ckpts`` se aplican a las figuras 2, 3 y 8;
+    sin parámetros se reproduce el estudio histórico íntegro.
+    """
+    want = set(figures) if figures is not None else set(range(1, 9))
+    if 1 in want:
+        generate_figure_1()
+    if 2 in want:
+        generate_figure_2(exps=experiments, seeds=seeds, experiments_root=exps_dir)
+    if 3 in want:
+        generate_figure_3(exps=experiments, seeds=seeds, selected_ckpts=selected_ckpts)
+    for n in (4, 5, 6, 7):
+        if n in want:
+            FIGURE_FUNCS[n]()
+    if 8 in want:
+        generate_figure_8(exps=experiments, seeds=seeds, experiments_root=exps_dir)
     print("\n=======================================================")
-    print("=== TODAS LAS 8 FIGURAS DE FASE B GENERADAS CON ÉXITO ===")
+    print(f"=== FIGURAS DE FASE B GENERADAS CON ÉXITO (pedidas: {sorted(want)}) ===")
     print("=======================================================")
 
-def run(out_dir=None):
+def run(out_dir=None, experiments=None, seeds=None, exps_dir=None,
+        selected_ckpts=None, data_dir=None, figures=None):
     """
     Punto de entrada del módulo.
 
-    out_dir : ``None`` (por defecto ``FIG_B_DIR`` =
-              reports/figures/phase_b) o ruta alternativa de salida.
+    out_dir     : ``None`` (por defecto ``FIG_B_DIR`` =
+                  reports/figures/phase_b) o ruta alternativa de salida.
+    experiments : lista de experimentos a dibujar en las figuras 2/3/8
+                  (por defecto ``["X5_near", "X3"]``).
+    seeds       : lista de semillas (por defecto ``[42, 100, 2026]``).
+    exps_dir    : raíz alternativa del TensorBoard de las corridas
+                  (por defecto ``experiments/phase_b``).
+    selected_ckpts: dict experimento->paso destacado en la figura 3
+                  (solo por biblioteca; ``None`` usa los históricos).
+    data_dir    : ruta alternativa de los CSV de evaluación (por defecto
+                  ``reports/data/phase_b``).
+    figures     : subconjunto de figuras (lista de enteros; ``None`` = 1-8).
     """
+    global FIG_B_DIR, DATA_B_DIR
     if out_dir is not None:
-        global FIG_B_DIR
         FIG_B_DIR = Path(out_dir)
-    generate_all_figures()
+    if data_dir is not None:
+        DATA_B_DIR = Path(data_dir)
+    generate_all_figures(experiments=experiments, seeds=seeds,
+                         exps_dir=Path(exps_dir) if exps_dir is not None else None,
+                         selected_ckpts=selected_ckpts, figures=figures)
 
 
 if __name__ == "__main__":

@@ -176,6 +176,34 @@ python scripts/generate_figures.py --help              # referencia completa
 python scripts/generate_figures.py --phase <fase> [--out-dir <ruta>]
 ```
 
+Las fases `b` y `c` admiten además **banderas de selección** para dibujar modelos
+nuevos sin tocar código: `--experiments` (lista de modelos, p. ej. `X3,S7`),
+`--seeds`, `--exps-dir` (raíz alternativa de corridas para el TensorBoard),
+`--data-dir` (CSVs de evaluación alternativos, mismo esquema histórico de
+columnas) y `--figures` (subconjunto, p. ej. `1,3`). Sin banderas, la salida es
+idéntica al estudio histórico. Las fases monográficas (`a`, `a_agg`,
+`trajectories`, `b_ext`, `c_s3`) no las aceptan.
+
+Receta para un modelo recién entrenado (ejemplo con la config Fase C
+`S1_smooth_200` y presupuesto corto):
+
+```powershell
+# 1) Entrenar (la fase y el experimento se derivan de la ruta del config)
+python train.py --config configs/phase_c/S1_smooth_200.yaml --total_timesteps 8192 --checkpoint_freq 4096
+
+# 2) Evaluar los checkpoints -> CSV (fase c: bastón biblioteca sobre
+#    src.evaluation.checkpoints.run_phase_c_evaluation; fase b por corrida:
+#    python scripts/evaluate_checkpoints.py --phase b --exp_dir ... --config ...)
+
+# 3) Generar las figuras solo del modelo nuevo
+python scripts/generate_figures.py --phase c --data-dir <csvs> --experiments S1_smooth_200 --exps-dir experiments/phase_c/S1_smooth_200 --out-dir <figs>
+python scripts/generate_figures.py --phase b --data-dir <csvs> --experiments S1_smooth_200 --seeds 42 --figures 2,3 --out-dir <figs>
+```
+
+Los experimentos sin color canónico en la paleta (`EXP_COLORS`/`AGENT_COLORS`)
+reciben un color del ciclo neutro por orden de aparición
+(`src/visualization/common.color_resolver`).
+
 | Fase | Contenido | Insumos | Salida por defecto |
 | :--- | :--- | :--- | :--- |
 | `a` | Figuras históricas de la Fase A por experimento (fig1–fig4) | `reports/data/all_final_*.csv` | `reports/figures/` |
@@ -196,15 +224,15 @@ Resumen orientativo:
 - **`phase_a`**: `output_dir`; `exp_order` y `colors` (definidos dentro de `generate_all_plots`).
 - **`phase_a_agg`**: `DATA_DIR` (lecturas); `run(out_dir)` redirige las escrituras (`data_aggregated/`, `figures/aggregated/`, `ppo_diagnostics/`); `EXP_COLORS`, `REPLICATED_RL_EXPS`, `SEEDS`.
 - **`trajectories`**: `output_dir`; rutas de modelos (`x5_model_path` ... `x6_norm_path`); episodios de los casos canónicos (`final_dataset[0/5/10/12]`); horizonte de 200 pasos.
-- **`phase_b`**: `FIG_B_DIR`; `EXP_COLORS`, `CAT_COLORS`/`CATEGORIES` (mantener tonos históricos: los JSON publicados los asocian a las figuras ya publicadas).
+- **`phase_b`**: `FIG_B_DIR`/`DATA_B_DIR`; `EXP_COLORS`, `CAT_COLORS`/`CATEGORIES` (mantener tonos históricos: los JSON publicados los asocian a las figuras ya publicadas); figs 2/3/8 parametrizables (`experiments`, `seeds`, `exps_dir`, `selected_ckpts` solo por biblioteca); figs 1 y 4-7 monográficas (se omiten con aviso si faltan sus CSV).
 - **`phase_b_ext`**: `out_dir`; `AGENT_COLORS`; listas `main_agents` y `pilot_agents`.
-- **`phase_c`**: `data_dir`/`figures_dir`; `AGENT_COLORS`; `step_filter` (655360 por defecto; 245760 para el presupuesto del estudio S3; `None` sin filtro); `time_s1_sec`/`time_x3_sec` (4600.0 y 720.0 segundos medidos en GPU).
+- **`phase_c`**: `data_dir`/`figures_dir`; `AGENT_COLORS`; `experiments`/`sac_exp_dir`/`figures` (figs 1-3 y 5 parametrizables); `step_filter` (655360 por defecto; 245760 para el presupuesto del estudio S3; `None` sin filtro); `time_s1_sec`/`time_x3_sec` (4600.0 y 720.0 segundos medidos en GPU).
 - **`phase_c_s3`**: `out_dir`; `STEPS`, `SEEDS`, `COLORS`; `train_times`/`fps_vals` (tiempos de entrenamiento en minutos y FPS medios por modelo, medidos en GPU, de la fig4).
 
 ### 5.2 Notas de reproducción
 
-- **Aviso controlado**: si falta el insumo principal, los generadores `a` y `trajectories` avisan y terminan sin error ("no encontrado aún", "Modelos aún no listos"); el resto aborta con la excepción correspondiente.
-- **Opcionales**: en la fase `c`, `fig2` (diagnósticos SAC) se genera solo si existe `experiments/phase_c/S1/`.
+- **Aviso controlado**: si falta el insumo principal, los generadores `a` y `trajectories` avisan y terminan sin error ("no encontrado aún", "Modelos aún no listos"); el resto aborta con la excepción correspondiente. En la fase `b`, las figuras monográficas 1 y 4-7 se omiten con aviso ("[OMITIDA]") cuando sus CSV no existen (p. ej. con un `--data-dir` alternativo).
+- **Opcionales**: en la fase `c`, `fig2` (diagnósticos SAC) se genera solo si existe la corrida indicada (`--exps-dir`; por defecto `experiments/phase_c/S1/`); las figs 4-5 solo si existe `step_data_val_geometry.csv` en el `--data-dir`.
 - **`a_agg`**: las tablas y figuras se generan íntegras; la suite V01–V18 exige los logs históricos de TensorBoard (`experiments/phase_a/<exp>/seed_<seed>/logs/`); si no están presentes, la validación V12 se interrumpe tras la generación de artefactos.
 - **Trazabilidad JSON**: cada figura con metadatos escribe un `<figura>.json` junto al PNG. El campo `script_path` apunta ahora al módulo migrado en `src/visualization/` (procedencia real); los esquemas de claves son idénticos a los publicados.
 - La invocación directa de cada módulo (`python -m src.visualization.phase_b`) es equivalente al despachador.

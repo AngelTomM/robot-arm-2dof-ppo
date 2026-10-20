@@ -146,6 +146,35 @@ def save_fig_with_metadata(fig, out_png_path, input_files=None, description="",
         print(f">>> [GUARDADO] {out_png_path.name} y metadatos JSON.")
 
 
+# ciclo determinista para experimentos/agentes sin color canónico (p. ej.
+# un modelo recién entrenado): orden de aparición, estable por ejecución
+DEFAULT_COLOR_CYCLE = [
+    "#e67e22", "#2980b9", "#27ae60", "#c0392b",
+    "#8e44ad", "#16a085", "#f1c40f", "#7f8c8d",
+]
+
+
+def color_resolver(base_palette: dict, extra_cycle: list = None):
+    """
+    Construye una función ``f(nombre) -> color`` que resuelve la estética
+    compartida: los nombres canónicos usan su color histórico del
+    ``base_palette`` y los desconocidos (modelos nuevos no presentes en la
+    monografía) reciben por orden de primera aparición un color del ciclo
+    por defecto (estable dentro de la misma ejecución).
+    """
+    cycle = list(extra_cycle) if extra_cycle else list(DEFAULT_COLOR_CYCLE)
+    assigned: dict = {}
+
+    def resolver(name: str) -> str:
+        if name in base_palette:
+            return base_palette[name]
+        if name not in assigned:
+            assigned[name] = cycle[len(assigned) % len(cycle)]
+        return assigned[name]
+
+    return resolver
+
+
 def classify_episodes(df: pd.DataFrame, column: str = "outcome_category") -> pd.DataFrame:
     """
     Aplica la clasificación jerárquica de desenlaces de la Sección 10.1:

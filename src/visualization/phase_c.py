@@ -24,8 +24,18 @@ PARÁMETROS CONFIGURABLES
 ========================
 data_dir / figures_dir : insumos y salida (por defecto
                "reports/data/phase_c" y "reports/figures/phase_c");
-               ``run(out_dir)`` / ``--out-dir`` sustituye solo figures_dir.
-AGENT_COLORS : paleta (S1, X3, C0 y variantes estocásticas).
+               ``run(out_dir)`` / ``--out-dir`` sustituye solo figures_dir
+               (``--data-dir`` también admite insumos alternativos y
+               ``--exps-dir`` la corrida SAC de la figura 2).
+AGENT_COLORS : paleta (S1, X3, C0 y variantes estocásticas). Los agentes
+               ausentes en la paleta reciben un color del ciclo neutro por
+               orden de aparición (ver common.color_resolver), p. ej. un
+               modelo recién entrenado al invocar
+               ``run(..., experiments=["MiModelo"])``.
+experiments  : agentes a dibujar (nombres tal como aparecen en la columna
+               ``experiment`` de los CSV); sin bandera se usan los
+               históricos ["X3", "S1"] en las figuras 1 y 3.
+figures      : subconjunto de figuras (enteros 1..6; bandera ``--figures``).
 step_filter  : filtro de checkpoint de la figura de desglose de fallos
                (plot_fig3_failure_breakdown). Valores posibles:
                655360 (por defecto, checkpoint final del estudio),
@@ -58,24 +68,33 @@ AGENT_COLORS = {
     "X3_sto": "#aec7e8"    # Azul claro para estocástico
 }
 
+# Resolución de color: canónicos de AGENT_COLORS + ciclo neutro determinista
+# para agentes nuevos (common.color_resolver).
+get_agent_color = common.color_resolver(AGENT_COLORS)
+
 def save_fig_with_metadata(fig, output_png_path: Path, metadata: dict):
     """Guarda figura a 300 dpi con JSON de metadatos libres (Fase C)."""
     common.save_fig_with_metadata(fig, output_png_path, metadata=metadata)
 
 
-def plot_fig1_learning_curves(agg_df: pd.DataFrame, details_df: pd.DataFrame, out_dir: Path):
-    """Figura 1: Curva de éxito determinista y panel de truncamientos vs pasos."""
+def plot_fig1_learning_curves(agg_df: pd.DataFrame, details_df: pd.DataFrame, out_dir: Path,
+                              experiments=None):
+    """Figura 1: Curva de éxito determinista y panel de truncamientos vs pasos.
+
+    experiments : agentes a dibujar (por defecto los históricos
+                  ["X3", "S1"]; nombres no canónicos usan el ciclo neutro)."""
+    agents = experiments if experiments is not None else ["X3", "S1"]
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), dpi=300, sharex=True, gridspec_kw={"height_ratios": [2.5, 1.2]})
 
     # Panel superior: Éxito estricto
-    for agent in ["X3", "S1"]:
+    for agent in agents:
         sub_agg = agg_df[agg_df["experiment"] == agent].sort_values("step")
         if sub_agg.empty:
             continue
         x = sub_agg["step"] / 1000.0
         y = sub_agg["mean_success_rate"] * 100.0
         std = sub_agg["std_success_rate"] * 100.0
-        color = AGENT_COLORS[agent]
+        color = get_agent_color(agent)
 
         # Curva media con banda +- std
         ax1.plot(x, y, label=f"{agent} Media (n=3)", color=color, linewidth=2.5, marker="o", markersize=4.5)
@@ -88,11 +107,11 @@ def plot_fig1_learning_curves(agg_df: pd.DataFrame, details_df: pd.DataFrame, ou
             ax1.plot(s_sorted["step"] / 1000.0, s_sorted["success_rate"] * 100.0,
                      color=color, linestyle=":", alpha=0.45, linewidth=1.0)
 
-    # C0 Línea de referencia
+    # C0 Línea de referencia (etiqueta con su éxito observado)
     c0_sub = details_df[details_df["experiment"].str.startswith("C0")]
     if not c0_sub.empty:
         c0_succ = float(c0_sub["success_rate"].iloc[0]) * 100.0
-        ax1.axhline(c0_succ, color=AGENT_COLORS["C0"], linestyle="--", linewidth=1.8, label="C0 Analítico (100.0%)")
+        ax1.axhline(c0_succ, color=AGENT_COLORS["C0"], linestyle="--", linewidth=1.8, label=f"C0 Analítico ({c0_succ:.1f}%)")
 
     ax1.set_title("Fase C — Comparación Descriptiva de Aprendizaje: SAC (S1) vs PPO (X3)", fontsize=13, fontweight="bold")
     ax1.set_ylabel("Éxito Estricto (%) [Hold 20 pasos, v ≤ 0.10 rad/s]", fontsize=10.5)
@@ -101,13 +120,13 @@ def plot_fig1_learning_curves(agg_df: pd.DataFrame, details_df: pd.DataFrame, ou
     ax1.legend(loc="lower right", framealpha=0.9, fontsize=9.5)
 
     # Panel inferior: Truncamientos
-    for agent in ["X3", "S1"]:
+    for agent in agents:
         sub_agg = agg_df[agg_df["experiment"] == agent].sort_values("step")
         if sub_agg.empty:
             continue
         x = sub_agg["step"] / 1000.0
         y_trunc = sub_agg["mean_truncation_rate"] * 100.0
-        color = AGENT_COLORS[agent]
+        color = get_agent_color(agent)
         ax2.plot(x, y_trunc, label=f"{agent} Truncamientos", color=color, linewidth=2.0, linestyle="-")
 
     ax2.set_xlabel("Pasos de Interacción en el Entorno (miles de pasos, k)", fontsize=10.5)
@@ -120,7 +139,7 @@ def plot_fig1_learning_curves(agg_df: pd.DataFrame, details_df: pd.DataFrame, ou
         "figure_id": "fig_c_learning_curves_s1_vs_x3",
         "dataset": "validation_c_500.json",
         "eval_mode": "deterministic",
-        "n_seeds": 3,
+        "n_seeds": int(details_df[details_df["experiment"].isin(agents)]["seed"].nunique()),
         "x_units": "k timesteps",
         "y_units": "percentage (%)"
     }
@@ -230,15 +249,19 @@ def plot_fig2_sac_training_diagnostics(exp_s1_dir: Path, out_dir: Path):
 
     meta = {
         "figure_id": "fig_c_sac_training_diagnostics",
-        "experiment": "S1",
+        "experiment": exp_s1_dir.name,
         "n_seeds": len(metrics_summary),
         "metrics_summary": metrics_summary,
         "note": "Diagnósticos extraídos de eventos TensorBoard de SAC. No comparables numéricamente con pérdidas PPO."
     }
     save_fig_with_metadata(fig, out_dir / "fig_c_sac_training_diagnostics.png", meta)
 
-def plot_fig3_failure_breakdown(details_df: pd.DataFrame, out_dir: Path, step_filter: int = 655360):
-    """Figura 3: Partición exhaustiva de desenlaces en el checkpoint final."""
+def plot_fig3_failure_breakdown(details_df: pd.DataFrame, out_dir: Path, step_filter: int = 655360,
+                                experiments=None):
+    """Figura 3: Partición exhaustiva de desenlaces en el checkpoint final.
+
+    experiments : agentes a comparar (por defecto los históricos
+                  ["X3", "S1"])."""
     fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
 
     sub = details_df[(details_df["step"] == step_filter) & (details_df["seed"] != "analytic")]
@@ -247,7 +270,7 @@ def plot_fig3_failure_breakdown(details_df: pd.DataFrame, out_dir: Path, step_fi
         max_s = details_df[details_df["seed"] != "analytic"]["step"].max()
         sub = details_df[details_df["step"] == max_s]
 
-    agents = ["X3", "S1"]
+    agents = experiments if experiments is not None else ["X3", "S1"]
     x = np.arange(len(agents))
     width = 0.55
 
@@ -275,7 +298,10 @@ def plot_fig3_failure_breakdown(details_df: pd.DataFrame, out_dir: Path, step_fi
 
     ax.set_title(f"Fase C — Distribución de Desenlaces en Checkpoint Final ({step_filter:,} pasos)", fontsize=13, fontweight="bold")
     ax.set_xticks(x)
-    ax.set_xticklabels([f"PPO ({agents[0]})\n[Media n=3]", f"SAC ({agents[1]})\n[Media n=3]"], fontsize=11)
+    if experiments is None:
+        ax.set_xticklabels([f"PPO ({agents[0]})\n[Media n=3]", f"SAC ({agents[1]})\n[Media n=3]"], fontsize=11)
+    else:
+        ax.set_xticklabels([f"{a}\n[Media n={max(1, int(sub[sub['experiment'] == a]['seed'].nunique()))}]" for a in agents], fontsize=11)
     ax.set_ylabel("Porcentaje de Episodios (%) [Total = 100 %]", fontsize=11)
     ax.set_ylim(0, 105)
     ax.grid(axis="y", linestyle="--", alpha=0.6)
@@ -291,7 +317,7 @@ def plot_fig3_failure_breakdown(details_df: pd.DataFrame, out_dir: Path, step_fi
         "figure_id": "fig_c_failure_breakdown_final_ckpt",
         "step": step_filter,
         "dataset": "validation_c_500.json",
-        "n_seeds": 3,
+        "n_seeds": max(1, int(sub["seed"].nunique())),
         "reconciliation": "Suma de categorías = 100.0%"
     }
     save_fig_with_metadata(fig, out_dir / "fig_c_failure_breakdown_final_ckpt.png", meta)
@@ -433,49 +459,77 @@ def plot_fig6_compute_and_runtime(out_dir: Path, time_s1_sec: float = 4600.0, ti
     }
     save_fig_with_metadata(fig, out_dir / "fig_c_compute_cost_and_runtime_comparison.png", meta)
 
-def generate_all_phase_c_figures(data_dir: str = "reports/data/phase_c",
-                                 figures_dir: str = "reports/figures/phase_c"):
-    in_path = REPO_ROOT / data_dir
-    out_path = REPO_ROOT / figures_dir
+def generate_all_phase_c_figures(data_dir=None,
+                                 figures_dir=None,
+                                 experiments=None,
+                                 sac_exp_dir=None,
+                                 figures=None):
+    """
+    Genera las figuras de Fase C; ``figures`` permite un subconjunto
+    (lista de enteros 1..6). ``experiments`` filtra los agentes de las
+    figuras 1 y 3; ``sac_exp_dir`` apunta la corrida SAC de la figura 2
+    (por defecto experiments/phase_c/S1). Sin parámetros reproduce el
+    estudio histórico íntegro.
+    """
+    in_path = Path(data_dir) if data_dir is not None else REPO_ROOT / "reports" / "data" / "phase_c"
+    out_path = Path(figures_dir) if figures_dir is not None else REPO_ROOT / "reports" / "figures" / "phase_c"
     out_path.mkdir(parents=True, exist_ok=True)
 
     agg_csv = in_path / "checkpoints_eval_validation_aggregated.csv"
     det_csv = in_path / "checkpoints_eval_validation_details.csv"
     step_csv = in_path / "step_data_val_geometry.csv"
+    want = set(figures) if figures is not None else {1, 2, 3, 4, 5, 6}
 
     print(f"\n{'='*75}")
     print(" GENERADOR DE FIGURAS — FASE C (300 DPI + JSON)")
     print(f"{'='*75}\n")
 
-    if agg_csv.exists() and det_csv.exists():
+    if (agg_csv.exists() and det_csv.exists()) and (1 in want or 3 in want):
         agg_df = pd.read_csv(agg_csv)
         det_df = pd.read_csv(det_csv)
-        plot_fig1_learning_curves(agg_df, det_df, out_path)
-        plot_fig3_failure_breakdown(det_df, out_path)
+        if 1 in want:
+            plot_fig1_learning_curves(agg_df, det_df, out_path, experiments=experiments)
+        if 3 in want:
+            plot_fig3_failure_breakdown(det_df, out_path, experiments=experiments)
 
-    exp_s1_dir = REPO_ROOT / "experiments" / "phase_c" / "S1"
-    if exp_s1_dir.exists():
+    exp_s1_dir = Path(sac_exp_dir) if sac_exp_dir is not None else REPO_ROOT / "experiments" / "phase_c" / "S1"
+    if 2 in want and exp_s1_dir.exists():
         plot_fig2_sac_training_diagnostics(exp_s1_dir, out_path)
 
-    if step_csv.exists():
+    if step_csv.exists() and (4 in want or 5 in want):
         step_df = pd.read_csv(step_csv)
-        plot_fig4_canonical_trajectories(step_df, out_path)
-        plot_fig5_deterministic_vs_stochastic(step_df, out_path)
+        if 4 in want:
+            plot_fig4_canonical_trajectories(step_df, out_path)
+        if 5 in want:
+            plot_fig5_deterministic_vs_stochastic(step_df, out_path)
 
     # Figura 6 se puede generar siempre con los datos de cómputo medidos
-    plot_fig6_compute_and_runtime(out_path)
+    if 6 in want:
+        plot_fig6_compute_and_runtime(out_path)
 
     print(f"\n>>> [FIGURAS] Proceso completado en: {out_path}\n")
 
-def run(out_dir=None):
+def run(out_dir=None, data_dir=None, experiments=None, sac_exp_dir=None, figures=None):
     """
     Punto de entrada del módulo.
 
-    out_dir : ``None`` (por defecto reports/figures/phase_c vía figures_dir)
-              o ruta de salida (los insumos se mantienen en reports/data/phase_c).
+    out_dir     : ``None`` (por defecto reports/figures/phase_c) o ruta de
+                  salida alternativa.
+    data_dir    : ruta alternativa con los CSV de evaluación (por defecto
+                  reports/data/phase_c; mismo esquema histórico de columnas).
+    experiments : agentes a dibujar en las figuras 1 y 3 (por defecto
+                  ["X3", "S1"]).
+    sac_exp_dir : corrida SAC de la figura 2 (por defecto
+                  experiments/phase_c/S1; p. ej. un modelo nuevo indica
+                  experiments/<fase>/<exp>).
+    figures     : subconjunto de figuras (lista de enteros; ``None`` = 1-6).
     """
     generate_all_phase_c_figures(
-        figures_dir=str(out_dir) if out_dir is not None else "reports/figures/phase_c")
+        data_dir=data_dir,
+        figures_dir=str(out_dir) if out_dir is not None else None,
+        experiments=experiments,
+        sac_exp_dir=Path(sac_exp_dir) if sac_exp_dir is not None else None,
+        figures=figures)
 
 
 if __name__ == "__main__":
