@@ -9,11 +9,50 @@ import sys
 import json
 import argparse
 import math
+import zipfile
 import numpy as np
 import pygame
 import yaml
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, SAC
 from arm2d_env import Arm2DEnv
+
+
+def load_trained_model(model_path):
+    """Carga el modelo SB3 detectando el algoritmo desde su propio .zip.
+
+    Un zip de SB3 guarda en 'data' la clase de política serializada; el
+    campo '__module__' ('stable_baselines3.sac.policies' frente a
+    'stable_baselines3.common.policies') permite distinguir un SAC de un
+    PPO sin depender del nombre del fichero. Con retén: si los metadatos
+    no se pueden leer, se prueba PPO y después SAC.
+    """
+    algo = None
+    try:
+        with zipfile.ZipFile(model_path) as zf:
+            data = json.loads(zf.read("data").decode("utf-8"))
+        policy_module = str(data.get("policy_class", {}).get("__module__", ""))
+        algo = "SAC" if "sac" in policy_module else "PPO"
+    except Exception as e:
+        print(f">>> [AVISO] No se pudo leer el algoritmo del zip ({e}); probando ambos.")
+
+    if algo == "SAC":
+        print(">>> [MODELO] Algoritmo detectado: SAC")
+        return SAC.load(str(model_path))
+    if algo == "PPO":
+        print(">>> [MODELO] Algoritmo detectado: PPO")
+        try:
+            return PPO.load(str(model_path))
+        except Exception:
+            pass
+    # Retén: metadatos ilegibles o PPO fallido -> probar SAC (y viceversa)
+    for loader, nombre in ((PPO.load, "PPO"), (SAC.load, "SAC")):
+        try:
+            model = loader(str(model_path))
+            print(f">>> [MODELO] Algoritmo detectado (por retén): {nombre}")
+            return model
+        except Exception:
+            continue
+    raise ValueError(f"No se pudo cargar el modelo como PPO ni como SAC: {model_path}")
 
 
 def find_model_config(model_path, config_path=None):
@@ -51,7 +90,7 @@ def find_model_config(model_path, config_path=None):
 
 def interactive_render(model_path=None, config_path=None):
     print("=" * 60)
-    print(" SIMULADOR INTERACTIVO DE BRAZO ROBÓTICO 2D (PPO)")
+    print(" SIMULADOR INTERACTIVO DE BRAZO ROBÓTICO 2D (PPO/SAC)")
     print("=" * 60)
     print("Controles:")
     print(" - Click Izquierdo en la ventana : Mover el objetivo (Target) a esa posición")
@@ -105,7 +144,7 @@ def interactive_render(model_path=None, config_path=None):
     model = None
     if model_path and os.path.exists(model_path):
         print(f">>> Cargando modelo entrenado desde: {model_path}")
-        model = PPO.load(model_path)
+        model = load_trained_model(model_path)
     else:
         print(">>> [AVISO] No se encontró modelo. Ejecutando con acciones aleatorias.")
 
