@@ -314,6 +314,23 @@ autentica aparte la primera vez que hace push/pull):
 | :--- | :--- | :--- |
 | `storage` (por defecto) | `gdrive://1IEO1rKzjEdylb-TTwW7NywV8oNclvjnX` | <https://drive.google.com/drive/folders/1IEO1rKzjEdylb-TTwW7NywV8oNclvjnX> |
 
+Google bloquea el acceso desde apps "anónimas", así que se usa un **Client ID
+OAuth propio** del grupo (ya configurado en `.dvc/config`; la pantalla de
+consentimiento debe estar en modo *Testing* con las 3 cuentas como *Test
+users* — al ver "acceso bloqueado": *Advanced → Go to app*). El
+`client_secret` vive SOLO en `.dvc/config.local` (gitignored): si haces pull
+en una máquina nueva, el compañero de infra te lo pasa y lo añades a mano:
+
+```powershell
+dvc remote modify --local storage gdrive_client_secret <SECRETO>
+```
+
+Además, en el proyecto de Google Cloud (`339127141205`) debe estar
+**habilitada la Google Drive API**
+(<https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=339127141205>);
+tras crear o cambiar el cliente OAuth, Google tarda entre 5 minutos y un par
+de horas en propagar el cambio.
+
 Tras `git pull`, instala la dependencia y baja los datos versionados:
 
 ```powershell

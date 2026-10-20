@@ -14,3 +14,4 @@ pandas==3.0.6
 tabulate==0.10.0
 pytest==9.1.1
 dvc[gdrive]==3.67.1
+pyOpenSSL==26.4.0
