@@ -1,7 +1,7 @@
+# Experimento X2b (Fase B_ext)
 experiment:
   name: X2b
-  description: 'Añade normalización de recompensas (norm_obs: true, norm_reward: true)
-    sobre X2'
+  description: 'Añade normalización de recompensas (norm_obs: true, norm_reward: true) sobre X2'
   author: Fase A
   phase: B_ext
 env:
@@ -40,9 +40,6 @@ ppo:
   net_arch: 64x64_tanh
 training:
   total_timesteps: 655360
+  checkpoint_freq: 40960
   eval_freq: 5000
   n_eval_episodes: 15
-  save_freq: 50000
-  checkpoint_freq: 40960
-  rollout_size: 8192
-  checkpoint_rollout_k: 5

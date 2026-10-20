@@ -19,7 +19,7 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.phase_b_ext_eval_checkpoints import (
+from src.evaluation.checkpoints import (
     evaluate_single_checkpoint,
     evaluate_c0_controller
 )
@@ -64,6 +64,7 @@ def run_stage_b12_final_eval():
         print("\n>>> [PASO 2 y 3] Cargando evaluaciones completas desde final_b2_eval_details.csv (27 registros)...")
         df_detail = pd.read_csv(csv_detail_file)
     else:
+        all_records = []
         # 2. Evaluación de Controladores C0 (ambas versiones)
         print("\n>>> [PASO 2] Evaluando Controladores Analíticos C0 sobre Final B2...")
         ref_cfg_path = REPO_ROOT / "configs/phase_b/extension/X3.yaml"

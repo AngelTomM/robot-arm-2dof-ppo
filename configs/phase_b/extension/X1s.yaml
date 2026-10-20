@@ -1,3 +1,4 @@
+# Experimento X1s (Fase B_ext)
 experiment:
   name: X1s
   description: Solo log_std_init = -1.0 respecto de X1a (Hold 5 pasos, 0.3 rad/s)
@@ -23,6 +24,7 @@ env:
 normalization:
   norm_obs: false
   norm_reward: false
+  clip_obs: 10.0
 ppo:
   learning_rate: 0.00015
   n_steps: 2048
@@ -38,9 +40,6 @@ ppo:
   log_std_init: -1.0
 training:
   total_timesteps: 655360
+  checkpoint_freq: 40960
   eval_freq: 5000
   n_eval_episodes: 15
-  save_freq: 50000
-  checkpoint_freq: 40960
-  rollout_size: 8192
-  checkpoint_rollout_k: 5

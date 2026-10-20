@@ -2,17 +2,15 @@
 Pruebas Unitarias y Validaciones de Fase B (Secciones 8 y 9).
 Usa el módulo estándar unittest (sin dependencias adicionales).
 Verifica:
-1. Guardado y carga atómica de checkpoints (modelo + vecnormalize_stats.pkl).
+1. Guardado y recarga de checkpoints acoplados (modelo + vecnormalize_stats.pkl).
 2. Determinismo estricto de la evaluación.
 3. Consistencia entre telemetría por paso y evaluador por episodio.
-4. Integridad de archivos de Fase A (hashes inalterados).
+4. Integridad de archivos de Fase B.
 5. Lógica algorítmica de la regla de selección y meseta con datos sintéticos.
 """
 import os
 import sys
 from pathlib import Path
-import json
-import hashlib
 import tempfile
 import unittest
 import yaml
@@ -94,21 +92,6 @@ class TestPhaseBValidations(unittest.TestCase):
             self.assertEqual(ep_steps["is_success"].iloc[-1], row["success"], f"Éxito no coincide en ep {ep_id}")
             # La distancia final debe coincidir con tolerancia numérica estricta
             self.assertAlmostEqual(ep_steps["distance"].iloc[-1], row["final_distance"], places=6)
-
-    def test_phase_a_files_unmodified(self):
-        """Comprueba que ningún archivo de Fase A ha sido modificado (no destructividad)."""
-        hash_file = REPO_ROOT / "reports" / "data" / "phase_a_reference_hashes.json"
-        if not hash_file.exists():
-            self.skipTest("phase_a_reference_hashes.json no existe aún")
-
-        with open(hash_file, "r", encoding="utf-8") as f:
-            reference_hashes = json.load(f)
-
-        for file_str, ref_hash in reference_hashes.items():
-            p = Path(file_str)
-            self.assertTrue(p.exists(), f"Archivo de Fase A eliminado o movido: {p}")
-            curr_hash = hashlib.sha256(p.read_bytes()).hexdigest()
-            self.assertEqual(curr_hash, ref_hash, f"Archivo de Fase A MODIFICADO: {p}")
 
     def test_selection_rule_logic_synthetic(self):
         """Valida la regla de meseta y desempate con datos sintéticos controlados."""

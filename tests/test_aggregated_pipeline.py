@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from scripts.generate_phase_a_aggregated_plots import classify_episodes
+from src.visualization.phase_a_agg import classify_episodes
 
 class TestAggregatedPipeline(unittest.TestCase):
 

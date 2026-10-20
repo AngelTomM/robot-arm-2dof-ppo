@@ -1,0 +1,28 @@
+{
+    "figure": "fig4_eficiencia_computacional_245k.png",
+    "description": "Comparativa de tiempo wall-clock de entrenamiento y FPS vs \u00e9xito estricto en paso 245.760",
+    "train_times_minutes": {
+        "PPO X3": 7.61,
+        "SAC S1": 94.86,
+        "SAC S2_freq": 28.24,
+        "SAC S2_wa": 99.23
+    },
+    "mean_fps": {
+        "PPO X3": 1614.3,
+        "SAC S1": 129.7,
+        "SAC S2_freq": 435.1,
+        "SAC S2_wa": 124.1
+    },
+    "success_rate_245k": [
+        93.53,
+        49.4,
+        58.93,
+        44.53
+    ],
+    "models": [
+        "PPO X3",
+        "SAC S1",
+        "SAC S2_freq",
+        "SAC S2_wa"
+    ]
+}

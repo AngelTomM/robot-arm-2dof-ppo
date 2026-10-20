@@ -28,7 +28,7 @@ from src.evaluation.datasets import save_and_get_datasets
 from src.evaluation.metrics import wilson_score_interval
 from src.controllers.jacobian_controller import JacobianDampedController
 from scripts.phase_b_step_data import collect_step_telemetry_for_episodes
-from scripts.generate_phase_b_figures import classify_df_episodes, save_fig_with_metadata, CATEGORIES, CAT_COLORS
+from src.visualization.phase_b import classify_df_episodes, save_fig_with_metadata, CATEGORIES, CAT_COLORS
 
 def run_final_evaluation():
     _, final_set = save_and_get_datasets()

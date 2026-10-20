@@ -34,8 +34,11 @@ analysis/
 *.png
 
 # Modelos y Checkpoints pesados (ignorar modelos generados localmente excepto si se desea versionar un benchmark)
+# Modelos, Checkpoints y Estadísticas de normalización
 models/
+experiments/
 *.zip
+*.pkl
 
 # Pygame / Logs de ejecución
 *.log
