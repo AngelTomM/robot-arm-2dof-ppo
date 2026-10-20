@@ -289,6 +289,76 @@ robot-arm-2dof-ppo/
 │   └── metodologia.md                       # Fundamento técnico y protocolo experimental
 ├── tests/                                   # Suite de 31 pruebas unitarias
 ├── requirements.txt                         # Dependencias fijadas (Python 3.11)
+├── .dvc/ + *.dvc                            # Versionado de datos con DVC (sección 8)
 ├── train.py                                 # raíz — ver arriba
 └── README.md                                # Página de talón (resumen, hallazgos y arranque rápido)
 ```
+
+---
+
+## 8. Trabajo en Equipo con DVC (modelos y figuras compartidas)
+
+Los binarios generados (modelos `.zip`, `vecnormalize_stats.pkl`, TensorBoard,
+CSV/JSON de `experiments/` y las figuras PNG+JSON de `reports/figures/` y
+`reports/phase_c_s3_analysis/figures/`) **no viven en git**: se versionan con
+[DVC](https://dvc.org) y se sincronizan vía Google Drive. Git conserva el
+código, `configs/`, `docs/`, los CSV pequeños de `reports/data/` y los
+informes `.md`.
+
+### 8.1 Remote y primer arranque (ya configurado en el repo)
+
+El remoto ya está fijado en `.dvc/config` (sin secretos; cada cuenta se
+autentica aparte la primera vez que hace push/pull):
+
+| Remoto | URL | Carpeta compartida |
+| :--- | :--- | :--- |
+| `storage` (por defecto) | `gdrive://1IEO1rKzjEdylb-TTwW7NywV8oNclvjnX` | <https://drive.google.com/drive/folders/1IEO1rKzjEdylb-TTwW7NywV8oNclvjnX> |
+
+Tras `git pull`, instala la dependencia y baja los datos versionados:
+
+```powershell
+pip install -r requirements.txt   # incluye dvc[gdrive]==3.67.1
+dvc pull                          # 1ª vez: abre el navegador para tu cuenta de Google
+```
+
+Para subir artefactos nuevos que hayas generado tú:
+
+```powershell
+dvc add <ruta>        # p. ej. experiments/phase_c/S2_freq, reports/figures
+dvc push              # sube los binarios a la carpeta de Drive compartida
+git add *.dvc && git commit -m "dvc: <descripcion>" && git push
+```
+
+Los `.dvc` son los "punteros" versionados: quien hace pull de git recibe el
+hash de los datos y `dvc pull` los materializa en el sitio correcto.
+
+### 8.2 Qué se gestiona con cada herramienta
+
+| Contenido | Vía |
+| :--- | :--- |
+| Código, `configs/`, `docs/`, `scripts/`, `tests/` | git |
+| `experiments/` completo (modelos, VecNormalize, TensorBoard, evals) | DVC (`experiments.dvc`) |
+| `reports/figures/` (PNG 300 dpi + JSON trazabilidad) | DVC (`reports/figures.dvc`) |
+| `reports/phase_c_s3_analysis/figures/` | DVC (`reports/phase_c_s3_analysis/figures.dvc`) |
+| `reports/data/` (CSV de evaluación, pequeños) e informes `.md` | git (diferenciables en diffs) |
+
+### 8.3 Flujo diario recomendado
+
+1. `git pull && dvc pull` al empezar el día (trae modelos/figuras de los compañeros).
+2. Entrenar/evaluar/generar figuras normalmente (secciones 2-5).
+3. `dvc add <lo nuevo>` → `dvc push` → `git add` los `.dvc` → `git commit` → `git push`.
+4. Evitar editar los mismos `.dvc` a la vez entre varias personas: quien entrena
+   es quien hace `add`; los demás solo hacen `pull`.
+
+### 8.4 Caveats conocidos
+
+- En carpeta de Drive "compartida normal" la cuota de cada archivo subido
+  cuenta contra quien lo sube: a escala actual (decenas de MB) es irrelevante.
+- DVC sube los tuyos localmente a `.dvc/cache/`: NO sincronizar el repo con
+  el cliente de Google Drive Desktop (duplicaría la caché).
+- La fase `a_agg` de figuras necesita el TensorBoard histórico de
+  `experiments/phase_a/*/seed_*/logs`; si tu máquina no tiene los logs,
+  `dvc pull` (de `experiments.dvc`) los trae y la fase vuelve a ser
+  reproducible. Sin logs, las tablas pierden las columnas de entrenamiento.
+- Si `dvc status` muestra cambios que no reconoces, `git status` de los
+  `.dvc` te dirá qué "puntero" cambió y quién lo subió.

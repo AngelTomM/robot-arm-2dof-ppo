@@ -1,8 +1,0 @@
-{
-  "title": "Espacio de Pareto \u00c9xito vs Pasos",
-  "dataset": "validation_b2_500.json",
-  "metrics": {
-    "x": "steps_to_success_median",
-    "y": "strict_success_rate"
-  }
-}

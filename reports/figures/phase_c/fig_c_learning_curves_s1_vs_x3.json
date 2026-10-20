@@ -1,8 +1,0 @@
-{
-  "figure_id": "fig_c_learning_curves_s1_vs_x3",
-  "dataset": "validation_c_500.json",
-  "eval_mode": "deterministic",
-  "n_seeds": 3,
-  "x_units": "k timesteps",
-  "y_units": "percentage (%)"
-}
