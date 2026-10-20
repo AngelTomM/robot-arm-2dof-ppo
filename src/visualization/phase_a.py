@@ -1,9 +1,47 @@
 """
-Generación de Gráficos Oficiales y Trayectorias Reales de la Fase A (Sección 17.3).
+Figuras históricas de Fase A por experimento (Sección 17.3).
+
+FIGURAS GENERADAS
+=================
+fig1_strict_success_rates, fig2_pathological_behaviors,
+fig3_final_distance_distributions y fig4_steps_and_smoothness en
+reports/figures/ (raíz), a partir de los CSV consolidados finales.
+
+INSUMOS REQUERIDOS
+==================
+- reports/data/all_final_deterministic_episodes.csv
+- reports/data/all_final_stochastic_episodes.csv (opcional)
+- reports/data/master_comparison_table.csv
+
+USO
+===
+python scripts/generate_figures.py --phase a
+python scripts/generate_figures.py --phase a --out-dir reports/figures
+python -m src.visualization.phase_a                      # equivalente directo
+
+PARÁMETROS CONFIGURABLES
+========================
+output_dir : directorio de salida (por defecto "reports/figures");
+             también aceptado por ``run(out_dir)`` / ``--out-dir``.
+exp_order  : orden de experimentos en el eje X, definido dentro de
+             generate_all_plots (["X0", "X1a", "X2", "X3", "X5_near",
+             "X5", "X6", "C0"]).
+colors     : paleta por experimento (definida dentro de
+             generate_all_plots; mantener los tonos históricos).
+
+NOTA: este módulo conserva el formato histórico SIN JSON de trazabilidad
+(decisión de diseño: las figuras originales de Fase A no incorporan
+sidecar de metadatos).
 """
+
 import os
 import sys
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
+
+from src.visualization.common import apply_style
 import json
 import glob
 import math
@@ -12,11 +50,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-# Configuración estética global
-plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
-plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial"]
-plt.rcParams["axes.edgecolor"] = "#cccccc"
-plt.rcParams["axes.linewidth"] = 0.8
+## Configuración estética (compartida en common.py)
+apply_style()
 
 def generate_all_plots(output_dir: str = "reports/figures"):
     os.makedirs(output_dir, exist_ok=True)
@@ -161,5 +196,14 @@ def generate_all_plots(output_dir: str = "reports/figures"):
 
     print(f">>> [OK] Figuras generadas exitosamente en {output_dir}")
 
+def run(out_dir=None):
+    """
+    Punto de entrada del módulo.
+
+    out_dir : ``None`` (por defecto "reports/figures") o ruta de salida.
+    """
+    generate_all_plots(out_dir if out_dir is not None else "reports/figures")
+
+
 if __name__ == "__main__":
-    generate_all_plots()
+    run()

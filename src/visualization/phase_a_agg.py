@@ -1,8 +1,39 @@
 """
-Pipeline Integral de Análisis y Visualización Agregada por Semillas - Fase A.
-Genera métricas por semilla, agregación multi-semilla (n=3), validaciones y figuras en reports/figures/aggregated/.
-Preserva intactos todos los scripts, datos y figuras históricas existentes.
+Pipeline integral de análisis y visualización agregada por semillas - Fase A.
+
+Genera métricas por semilla y su agregación multi-semilla (n=3), las tablas
+en reports/data/aggregated/, las figuras fig_agg_01 ... fig_agg_07 y los
+diagnósticos PPO en reports/figures/aggregated/ppo_diagnostics/, y ejecuta
+las validaciones V01-V18 como parte del pipeline.
+
+INSUMOS REQUERIDOS
+==================
+- reports/data/all_final_deterministic_episodes.csv (+ _stochastic_)
+- reports/data/master_comparison_table.csv
+- reports/data/final_eval_set_300.json
+- Eventos de TensorBoard de experiments/phase_a (etiqueta train/...)
+
+USO
+===
+python scripts/generate_figures.py --phase a_agg
+python scripts/generate_figures.py --phase a_agg --out-dir <ruta_temporal>
+python -m src.visualization.phase_a_agg                  # equivalente directo
+
+PARÁMETROS CONFIGURABLES
+========================
+DATA_DIR     : raíz de los insumos CSV/JSON (lecturas; no se redirige).
+AGG_DATA_DIR : salida de las tablas agregadas (reports/data/aggregated).
+AGG_FIG_DIR /
+PPO_FIG_DIR  : salidas de figuras y diagnósticos PPO.
+               ``run(out_dir)`` redirige las tres rutas de ESCRITURA bajo
+               la ruta base indicada (``data_aggregated/``,
+               ``figures/aggregated/``, ``figures/aggregated/
+               ppo_diagnostics/``) sin alterar las rutas de lectura.
+EXP_COLORS   : paleta histórica por experimento (X1a...C0).
+REPLICATED_RL_EXPS / SEEDS : experimentos RL replicados (X1a, X2, X3,
+               X5_near, X5, X6) y semillas (42, 100, 2026).
 """
+
 import os
 import sys
 from pathlib import Path
@@ -20,8 +51,11 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from tensorboard.backend.event_processing import event_accumulator
 
+from src.visualization import common
+from src.visualization.common import apply_style, classify_episodes
+
 # Definición de rutas relativas con pathlib
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 DATA_DIR = REPO_ROOT / "reports" / "data"
 AGG_DATA_DIR = DATA_DIR / "aggregated"
@@ -29,11 +63,8 @@ FIGURES_DIR = REPO_ROOT / "reports" / "figures"
 AGG_FIG_DIR = FIGURES_DIR / "aggregated"
 PPO_FIG_DIR = AGG_FIG_DIR / "ppo_diagnostics"
 
-# Configuración estética global
-plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
-plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial"]
-plt.rcParams["axes.edgecolor"] = "#cccccc"
-plt.rcParams["axes.linewidth"] = 0.8
+## Configuración estética (compartida en common.py)
+apply_style()
 
 EXP_COLORS = {
     "X0": "#7f8c8d",       # Gris histórico
@@ -50,81 +81,13 @@ REPLICATED_RL_EXPS = ["X1a", "X2", "X3", "X5_near", "X5", "X6"]
 SEEDS = [42, 100, 2026]
 
 def save_fig_with_metadata(fig, out_png_path: Path, input_files: list, description: str):
-    """Guarda figura a 300 dpi junto con un JSON de trazabilidad completa."""
-    out_png_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_png_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
+    """Guarda figura a 300 dpi con JSON de trazabilidad (pipeline agregado)."""
+    common.save_fig_with_metadata(fig, out_png_path, input_files=input_files,
+                                  description=description)
 
-    file_hashes = {}
-    for f in input_files:
-        p = Path(f)
-        if p.exists() and p.is_file():
-            h = hashlib.sha256(p.read_bytes()).hexdigest()
-            file_hashes[p.name] = h
 
-    script_path = Path(__file__)
-    script_hash = hashlib.sha256(script_path.read_bytes()).hexdigest() if script_path.exists() else "N/A"
+# La clasificación jerárquica vive en common.py (import arriba).
 
-    meta = {
-        "figure_name": out_png_path.name,
-        "description": description,
-        "timestamp": datetime.datetime.now().isoformat(),
-        "python_version": sys.version,
-        "os_platform": platform.platform(),
-        "libraries": {
-            "numpy": np.__version__,
-            "pandas": pd.__version__,
-            "matplotlib": matplotlib.__version__
-        },
-        "script_path": str(script_path.relative_to(REPO_ROOT)),
-        "script_sha256": script_hash,
-        "input_files_sha256": file_hashes
-    }
-
-    json_path = out_png_path.with_suffix(".json")
-    with open(json_path, "w", encoding="utf-8") as fp:
-        json.dump(meta, fp, indent=2)
-
-def classify_episodes(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Aplica la clasificación jerárquica de desenlaces de la Sección 10.1:
-    1. Éxito limpio: success & ~ballistic_flag & ~oscillatory_flag
-    2. Éxito con patología: success & (ballistic_flag | oscillatory_flag)
-    3. Fallo oscilatorio: ~success & oscillatory_flag
-    4. Fallo balístico: ~success & ballistic_flag & ~oscillatory_flag
-    5. Fallo sin aproximación: ~success & ~osc & ~ball & (time_inside_030 == 0)
-    6. Fallo sin estabilizar: ~success & ~osc & ~ball & (time_inside_030 > 0)
-    7. No clasificable: NaNs en banderas requeridas o inconsistencias.
-    """
-    res = df.copy()
-    # Detección explícita de banderas no disponibles (NaN) sin castear a bool
-    # Evita que bool(np.nan) o .astype(bool) conviertan accidentalmente NaN en True
-    nan_flags = res["ballistic_flag"].isna() | res["oscillatory_flag"].isna() | res["success"].isna()
-
-    succ = res["success"].fillna(False).astype(bool)
-    ball = res["ballistic_flag"].fillna(False).astype(bool)
-    osc = res["oscillatory_flag"].fillna(False).astype(bool)
-    t_near = res["time_inside_030"].fillna(0).astype(int)
-
-    cat = np.full(len(res), "No clasificable", dtype=object)
-
-    valid_mask = ~nan_flags
-    mask_cat1 = valid_mask & succ & (~ball) & (~osc)
-    mask_cat2 = valid_mask & succ & (ball | osc)
-    mask_cat3 = valid_mask & (~succ) & osc
-    mask_cat4 = valid_mask & (~succ) & ball & (~osc)
-    mask_cat5 = valid_mask & (~succ) & (~osc) & (~ball) & (t_near == 0)
-    mask_cat6 = valid_mask & (~succ) & (~osc) & (~ball) & (t_near > 0)
-
-    cat[mask_cat1] = "1. Éxito limpio"
-    cat[mask_cat2] = "2. Éxito con patología"
-    cat[mask_cat3] = "3. Fallo oscilatorio"
-    cat[mask_cat4] = "4. Fallo balístico"
-    cat[mask_cat5] = "5. Fallo sin aproximación"
-    cat[mask_cat6] = "6. Fallo sin estabilizar"
-
-    res["outcome_category"] = cat
-    return res
 
 def get_tb_event_file(exp_id: str, seed: int) -> Path:
     """Resuelve la ruta exacta del log de TensorBoard (usa estrictamente _2 para seed_42 en X5 y X5_near)."""
@@ -1290,7 +1253,7 @@ def run_18_validations(per_seed_df: pd.DataFrame = None, agg_df: pd.DataFrame = 
     v_results["V07_Train_Success_Window"] = (v07_ok, "train/success_rate_window verificado dinámicamente en TensorBoard: 18 ejecuciones con exactamente 50 puntos en [0.0, 1.0].")
 
     # 8. Checkpoint: verificación de que no utiliza el conjunto final de evaluación
-    train_code = (REPO_ROOT / "src" / "training" / "train_phase_a.py").read_text(encoding="utf-8")
+    train_code = (REPO_ROOT / "train.py").read_text(encoding="utf-8")
     callbacks_code = (REPO_ROOT / "src" / "training" / "callbacks.py").read_text(encoding="utf-8")
     no_leak = ("final_eval_set_300" not in train_code) and ("final_eval_set_300" not in callbacks_code)
     eval_callback_15 = ("n_eval_episodes" in train_code) and ("PhaseAEvalCallback" in train_code)
@@ -1338,8 +1301,8 @@ def run_18_validations(per_seed_df: pd.DataFrame = None, agg_df: pd.DataFrame = 
     v_results["V14_Unidades_Correctas"] = ("DECLARATIVA", "Declaración metodológica: adhesión a unidades SI canónicas en tablas y gráficos: distancia [m], vel. angular [rad/s], tiempo [pasos], suavidad [||Delta a||] adimensional.")
 
     # 15. Compatibilidad
-    v15 = Path(REPO_ROOT / "scripts" / "generate_phase_a_plots.py").exists()
-    v_results["V15_Compatibilidad_Scripts_Previos"] = (v15, "Los scripts y figuras históricas se preservan 100% inalterados.")
+    v15 = Path(REPO_ROOT / "src" / "visualization" / "phase_a.py").exists()
+    v_results["V15_Compatibilidad_Scripts_Previos"] = (v15, "El módulo de figuras históricas (src/visualization/phase_a.py) y las figuras históricas se preservan 100% inalterados.")
 
     # 16. Verificación manual dinámica
     x5n_sub = df_det[df_det["experiment_id"] == "X5_near"]
@@ -1420,5 +1383,24 @@ def main():
     print(" PROCESAMIENTO Y VALIDACIÓN COMPLETADOS EXITOSAMENTE")
     print("=" * 90)
 
-if __name__ == "__main__":
+def run(out_dir=None):
+    """
+    Punto de entrada del módulo.
+
+    out_dir : ``None`` (rutas históricas: tablas en
+              reports/data/aggregated y figuras en reports/figures/aggregated)
+              o ruta base alternativa: las TRES rutas de escritura se redirigen
+              bajo ella (``data_aggregated/``, ``figures/aggregated/`` y
+              ``figures/aggregated/ppo_diagnostics/``) sin alterar las lecturas.
+    """
+    if out_dir is not None:
+        base = Path(out_dir)
+        global AGG_DATA_DIR, AGG_FIG_DIR, PPO_FIG_DIR
+        AGG_DATA_DIR = base / "data_aggregated"
+        AGG_FIG_DIR = base / "figures" / "aggregated"
+        PPO_FIG_DIR = AGG_FIG_DIR / "ppo_diagnostics"
     main()
+
+
+if __name__ == "__main__":
+    run()

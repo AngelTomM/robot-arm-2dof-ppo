@@ -1,8 +1,41 @@
 """
-Pipeline Integral de Generación de Figuras de Fase B:
-Genera las 8 figuras requeridas para la Fase B en reports/figures/phase_b/ a 300 dpi con JSONs de trazabilidad.
-Cumple estrictamente con la no-destructividad y el aislamiento en rutas de Fase B.
+Figuras oficiales de Fase B (300 dpi + JSON de trazabilidad).
+
+FIGURAS GENERADAS
+=================
+fig_b_01 ... fig_b_08 en reports/figures/phase_b/: éxito vs pasos,
+determinista vs estocástico, desenlaces por categoría, distribuciones de
+velocidad, distancia/suavidad, trayectorias superpuestas, tabla de
+criterios de aceptación y diagnósticos internos de PPO.
+
+INSUMOS REQUERIDOS
+==================
+- Eventos de TensorBoard bajo experiments/phase_b/<exp>/seed_<seed>/
+- reports/data/phase_b/tanda_1_x5_near_summary.json
+- Datasets canónicos (src.evaluation.datasets)
+
+USO
+===
+python scripts/generate_figures.py --phase b
+python scripts/generate_figures.py --phase b --out-dir <ruta_temporal>
+python -m src.visualization.phase_b                     # equivalente directo
+
+PARÁMETROS CONFIGURABLES
+========================
+FIG_B_DIR    : directorio de salida (``Path``). Por defecto
+               reports/figures/phase_b; ``run(out_dir)`` / ``--out-dir``
+               sustituye su valor para una ejecución concreta.
+EXP_COLORS   : paleta por experimento (C0, X0, X3, X5_near, X5, X6).
+               Mantener los tonos históricos: los JSON publicados los
+               asocian a las figuras ya publicadas.
+CAT_COLORS /
+CATEGORIES   : paleta y orden canónico de las 6 categorías de desenlace
+               (1. Éxito limpio ... 6. Fallo sin estabilizar).
+spd_beams... : constantes estéticas internas de cada función de figura
+               (tamaños de figura, anotaciones); no alterar salvo
+               necesidad documentada.
 """
+
 import os
 import sys
 from pathlib import Path
@@ -19,22 +52,26 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from tensorboard.backend.event_processing import event_accumulator
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from src.evaluation.metrics import wilson_score_interval
 from src.evaluation.datasets import save_and_get_datasets
+from src.visualization import common
+from src.visualization.common import apply_style, classify_episodes
+
+
+def classify_df_episodes(df):
+    """Alias de compatibilidad de la Fase B (usa ``outcome_category``)."""
+    return classify_episodes(df, column="outcome_category")
 
 # Rutas de datos y figuras
 DATA_B_DIR = REPO_ROOT / "reports" / "data" / "phase_b"
 FIG_B_DIR = REPO_ROOT / "reports" / "figures" / "phase_b"
 FIG_B_DIR.mkdir(parents=True, exist_ok=True)
 
-# Configuración estética
-plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
-plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial"]
-plt.rcParams["axes.edgecolor"] = "#cccccc"
-plt.rcParams["axes.linewidth"] = 0.8
+## Configuración estética (compartida en common.py)
+apply_style()
 
 EXP_COLORS = {
     "C0": "#2980b9",        # Azul
@@ -64,65 +101,11 @@ CATEGORIES = [
 ]
 
 def save_fig_with_metadata(fig, out_png_path: Path, input_files: list, description: str):
-    """Guarda figura a 300 dpi junto con un JSON de trazabilidad completa."""
-    out_png_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_png_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
+    """Guarda figura a 300 dpi con JSON de trazabilidad (metadatos de Fase B)."""
+    common.save_fig_with_metadata(fig, out_png_path, input_files=input_files,
+                                  description=description, phase="B", verbose=True)
 
-    file_hashes = {}
-    for f in input_files:
-        p = Path(f)
-        if p.exists() and p.is_file():
-            file_hashes[p.name] = hashlib.sha256(p.read_bytes()).hexdigest()
 
-    script_path = Path(__file__)
-    script_hash = hashlib.sha256(script_path.read_bytes()).hexdigest() if script_path.exists() else "N/A"
-
-    meta = {
-        "figure_name": out_png_path.name,
-        "description": description,
-        "phase": "B",
-        "timestamp": datetime.datetime.now().isoformat(),
-        "python_version": sys.version,
-        "os_platform": platform.platform(),
-        "libraries": {
-            "numpy": np.__version__,
-            "pandas": pd.__version__,
-            "matplotlib": matplotlib.__version__
-        },
-        "script_path": str(script_path.relative_to(REPO_ROOT)),
-        "script_sha256": script_hash,
-        "input_files_sha256": file_hashes
-    }
-
-    json_path = out_png_path.with_suffix(".json")
-    with open(json_path, "w", encoding="utf-8") as fp:
-        json.dump(meta, fp, indent=2)
-    print(f">>> [GUARDADO] {out_png_path.name} y metadatos JSON.")
-
-def classify_df_episodes(df: pd.DataFrame) -> pd.DataFrame:
-    """Aplica la clasificación jerárquica de desenlaces de la Fase A."""
-    res = df.copy()
-    nan_flags = res["ballistic_flag"].isna() | res["oscillatory_flag"].isna() | res["success"].isna()
-    succ = res["success"].fillna(False).astype(bool)
-    ball = res["ballistic_flag"].fillna(False).astype(bool)
-    osc = res["oscillatory_flag"].fillna(False).astype(bool)
-    t_near = res["time_inside_030"].fillna(0).astype(int)
-
-    cat = np.full(len(res), "No clasificable", dtype=object)
-    valid_mask = ~nan_flags
-    cat[valid_mask & succ & (~ball) & (~osc)] = "1. Éxito limpio"
-    cat[valid_mask & succ & (ball | osc)] = "2. Éxito con patología"
-    cat[valid_mask & (~succ) & osc] = "3. Fallo oscilatorio"
-    cat[valid_mask & (~succ) & ball & (~osc)] = "4. Fallo balístico"
-    cat[valid_mask & (~succ) & (~osc) & (~ball) & (t_near == 0)] = "5. Fallo sin aproximación"
-    cat[valid_mask & (~succ) & (~osc) & (~ball) & (t_near > 0)] = "6. Fallo sin estabilizar"
-    res["outcome_category"] = cat
-    return res
-
-# ==============================================================================
-# FIGURA 1: MAPA DE FALLOS EN EL ESPACIO DE TRABAJO (VALIDACIÓN)
-# ==============================================================================
 def generate_figure_1():
     print("\n--- Generando Figura 1: Mapa de Fallos en el Espacio de Trabajo ---")
     val_set, _ = save_and_get_datasets()
@@ -654,5 +637,18 @@ def generate_all_figures():
     print("=== TODAS LAS 8 FIGURAS DE FASE B GENERADAS CON ÉXITO ===")
     print("=======================================================")
 
-if __name__ == "__main__":
+def run(out_dir=None):
+    """
+    Punto de entrada del módulo.
+
+    out_dir : ``None`` (por defecto ``FIG_B_DIR`` =
+              reports/figures/phase_b) o ruta alternativa de salida.
+    """
+    if out_dir is not None:
+        global FIG_B_DIR
+        FIG_B_DIR = Path(out_dir)
     generate_all_figures()
+
+
+if __name__ == "__main__":
+    run()

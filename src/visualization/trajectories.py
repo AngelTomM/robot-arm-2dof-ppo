@@ -1,14 +1,47 @@
 """
-Generación de Trayectorias Cartesianas Reales Representativas (Sección 17.3).
-Selecciona episodios reales clasificados según las definiciones operativas de la Sección 9.6:
-1. Llegada estable
-2. Llegada balística
-3. Oscilación persistente
-4. Episodio truncado
+Trayectorias cartesianas reales representativas (Sección 17.3).
+
+Simula con los modelos PPO entrenados (acción determinista, VecNormalize
+congelado con training=False y norm_reward=False) los 4 casos canónicos de
+la Sección 9.6: llegada estable, llegada balística, oscilación persistente
+y episodio truncado; genera fig5_representative_real_trajectories.png
+(2x2, 300 dpi).
+
+INSUMOS REQUERIDOS
+==================
+- Datasets finales (src.evaluation.datasets.save_and_get_datasets)
+- experiments/phase_a/X5/seed_42/models/best_model/best_model.zip
+- experiments/phase_a/X5/seed_42/models/best_model/vecnormalize_stats.pkl
+- experiments/phase_a/X1a/seed_42/models/best_model/best_model.zip (opcional)
+- experiments/phase_a/X6_wa05/seed_42/models/best_model/{best_model.zip,
+  vecnormalize_stats.pkl} (opcional)
+
+USO
+===
+python scripts/generate_figures.py --phase trajectories
+python scripts/generate_figures.py --phase trajectories --out-dir reports/figures
+python -m src.visualization.trajectories                # equivalente directo
+
+PARÁMETROS CONFIGURABLES
+========================
+output_dir : directorio de salida (por defecto "reports/figures");
+             también aceptado por ``run(out_dir)`` / ``--out-dir``.
+x5_model_path ... x6_norm_path : rutas de modelos y de estadísticas de
+             normalización (editables en plot_real_examples).
+Casos canónicos y episodios usados: final_dataset[0] (estable, X5),
+final_dataset[5] (balística, X5), final_dataset[10] (truncado, X1a),
+final_dataset[12] (oscilatorio, X6_wa05).
+simulate_trajectory (env_cfg) : fija success_mode="hold",
+target_radius=0.06, velocity_tolerance=0.10, hold_steps=20;
+horizonte de simulación de 200 pasos.
 """
+
 import os
 import sys
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 import math
 import numpy as np
 import pandas as pd
@@ -152,5 +185,14 @@ def plot_real_examples(output_dir: str = "reports/figures"):
     plt.close(fig)
     print(">>> [OK] Figuras de trayectorias representativas generadas.")
 
+def run(out_dir=None):
+    """
+    Punto de entrada del módulo (requiere modelos PPO entrenados).
+
+    out_dir : ``None`` (por defecto "reports/figures") o ruta de salida.
+    """
+    plot_real_examples(out_dir if out_dir is not None else "reports/figures")
+
+
 if __name__ == "__main__":
-    plot_real_examples()
+    run()

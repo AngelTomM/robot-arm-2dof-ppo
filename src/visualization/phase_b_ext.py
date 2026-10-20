@@ -1,12 +1,41 @@
 """
-Pipeline Integral de Generación de Figuras para Fase B (Extensión):
-- Curvas de aprendizaje comparativas (agentes principales y pilotos).
-- Gráficos de barras de éxito estricto con intervalos de Wilson al 95%.
-- Frontera de Pareto (Éxito vs Suavidad y Éxito vs Pasos).
-- Trayectorias cartesianas y series temporales de acciones en episodios canónicos.
-- Figuras individuales de selección de checkpoint por agente.
-- 300 dpi con metadatos JSON para cada figura generada.
+Figuras de la extensión de Fase B (300 dpi + JSON de trazabilidad).
+
+FIGURAS GENERADAS
+=================
+- Curvas de aprendizaje: 7 agentes principales y pilotos n=1.
+- Barras de éxito estricto con intervalos de Wilson al 95 %.
+- Fronteras de Pareto (suavidad y velocidad).
+- Trayectorias y series temporales de acciones en episodios canónicos.
+- Selección formal de checkpoint por agente (Regla 4.1).
+
+Salida: reports/figures/phase_b/extension/ (PNG + JSON por figura).
+
+INSUMOS REQUERIDOS
+==================
+reports/data/phase_b/extension/{checkpoints_eval_validation_aggregated.csv,
+checkpoints_eval_validation.csv, selected_checkpoints.json,
+step_data_val_geometry.csv}
+
+USO
+===
+python scripts/generate_figures.py --phase b_ext
+python scripts/generate_figures.py --phase b_ext --out-dir <ruta_temporal>
+python -m src.visualization.phase_b_ext                  # equivalente directo
+
+PARÁMETROS CONFIGURABLES
+========================
+out_dir      : directorio de salida (por defecto
+               reports/figures/phase_b/extension); aceptado por
+               ``run(out_dir)`` / ``--out-dir``.
+AGENT_COLORS : paleta por agente (X1a ... X6, C0_consistent_1_5,
+               C0_historical_2_0). Mantener los tonos históricos.
+main_agents  : ["X1a", "X2", "X3", "X4", "X5", "X5_near", "X6"]
+               (curvas de agentes principales, n=3).
+pilot_agents : ["X1a", "X1b", "X1c", "X1s", "X2b"]
+               (curvas de pilotos n=1 vs referencia X1a).
 """
+
 import os
 import sys
 from pathlib import Path
@@ -19,10 +48,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from src.evaluation.metrics import wilson_score_interval
+from src.visualization import common
 
 AGENT_COLORS = {
     "X1a": "#7f7f7f",       # gris (base relu grande)
@@ -41,14 +71,9 @@ AGENT_COLORS = {
 }
 
 def save_fig_with_metadata(fig, output_png_path: Path, metadata: dict):
-    output_png_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_png_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
+    """Guarda figura a 300 dpi con JSON de metadatos libres (extensión)."""
+    common.save_fig_with_metadata(fig, output_png_path, metadata=metadata)
 
-    json_path = output_png_path.with_suffix(".json")
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=2)
-    print(f"  [FIG OK] Guardada: {output_png_path.name}")
 
 def plot_learning_curves_main(agg_df: pd.DataFrame, out_dir: Path):
     main_agents = ["X1a", "X2", "X3", "X4", "X5", "X5_near", "X6"]
@@ -432,8 +457,10 @@ def plot_agent_selection_figures(selected_ckpts: list, agg_df: pd.DataFrame, out
         }
         save_fig_with_metadata(fig, out_dir / f"fig_agent_{agent}_selection.png", meta_sel)
 
-def run_generate_all_figures():
-    out_dir = REPO_ROOT / "reports" / "figures" / "phase_b" / "extension"
+def run_generate_all_figures(out_dir=None):
+    """Genera todas las figuras; ``out_dir`` ``None`` usa la ruta histórica."""
+    out_dir = (Path(out_dir) if out_dir is not None
+               else REPO_ROOT / "reports" / "figures" / "phase_b" / "extension")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     agg_csv = REPO_ROOT / "reports/data/phase_b/extension/checkpoints_eval_validation_aggregated.csv"
@@ -465,8 +492,18 @@ def run_generate_all_figures():
     plot_agent_selection_figures(selected_ckpts, agg_df, out_dir)
 
     print(f"\n================================================================================")
-    print(f"=== TODAS LAS FIGURAS GENERADAS EXITOSAMENTE EN: {out_dir.relative_to(REPO_ROOT)} ===")
+    print(f"=== TODAS LAS FIGURAS GENERADAS EXITOSAMENTE EN: {out_dir} ===")
     print(f"================================================================================")
 
+def run(out_dir=None):
+    """
+    Punto de entrada del módulo.
+
+    out_dir : ``None`` (por defecto reports/figures/phase_b/extension)
+              o ruta alternativa de salida.
+    """
+    run_generate_all_figures(out_dir)
+
+
 if __name__ == "__main__":
-    run_generate_all_figures()
+    run()

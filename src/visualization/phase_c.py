@@ -1,23 +1,53 @@
 """
-Pipeline de Generación de Figuras para Fase C (300 dpi + Metadatos JSON):
-1. fig_c_learning_curves_s1_vs_x3.png: Curva de éxito determinista vs pasos (S1 vs X3 y C0) + panel de truncamientos.
-2. fig_c_sac_training_diagnostics.png: Diagnósticos de entrenamiento propios de SAC (pérdidas actor/crítico, ent_coef, recompensa).
-3. fig_c_failure_breakdown_final_ckpt.png: Partición de desenlaces en el checkpoint final (655.360) reconciliada al 100%.
-4. fig_c_canonical_geometric_trajectories.png: Planos de fase y series temporales en 4 episodios geométricos (S1, X3, C0).
-5. fig_c_deterministic_vs_stochastic_profiles.png: Comparativa determinista vs estocástica en velocidad articular.
-6. fig_c_compute_cost_and_runtime_comparison.png: Tiempos de reloj y pasos de gradiente (SAC vs PPO).
+Figuras de Fase C (SAC) - 300 dpi + JSON de trazabilidad.
+
+FIGURAS GENERADAS
+=================
+fig_c_learning_curves_s1_vs_x3, fig_c_sac_training_diagnostics,
+fig_c_failure_breakdown_final_ckpt, fig_c_canonical_geometric_trajectories,
+fig_c_deterministic_vs_stochastic_profiles y
+fig_c_compute_cost_and_runtime_comparison en reports/figures/phase_c/.
+
+INSUMOS REQUERIDOS
+==================
+- reports/data/phase_c/{checkpoints_eval_validation_aggregated.csv,
+  checkpoints_eval_validation_details.csv, step_data_val_geometry.csv}
+- experiments/phase_c/S1/ (diagnósticos de entrenamiento SAC, opcional)
+
+USO
+===
+python scripts/generate_figures.py --phase c
+python scripts/generate_figures.py --phase c --out-dir <ruta_temporal>
+python -m src.visualization.phase_c                      # equivalente directo
+
+PARÁMETROS CONFIGURABLES
+========================
+data_dir / figures_dir : insumos y salida (por defecto
+               "reports/data/phase_c" y "reports/figures/phase_c");
+               ``run(out_dir)`` / ``--out-dir`` sustituye solo figures_dir.
+AGENT_COLORS : paleta (S1, X3, C0 y variantes estocásticas).
+step_filter  : filtro de checkpoint de la figura de desglose de fallos
+               (plot_fig3_failure_breakdown). Valores posibles:
+               655360 (por defecto, checkpoint final del estudio),
+               245760 (último checkpoint del presupuesto del estudio S3)
+               o None (sin filtro).
+time_s1_sec / time_x3_sec : tiempos de entrenamiento de referencia
+               (segundos, medidos en GPU) usados en la fig6;
+               por defecto 4600.0 y 720.0.
 """
+
 import os
 import sys
 from pathlib import Path
 import json
 import numpy as np
 import pandas as pd
+from src.visualization import common
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 AGENT_COLORS = {
@@ -29,23 +59,9 @@ AGENT_COLORS = {
 }
 
 def save_fig_with_metadata(fig, output_png_path: Path, metadata: dict):
-    output_png_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_png_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
+    """Guarda figura a 300 dpi con JSON de metadatos libres (Fase C)."""
+    common.save_fig_with_metadata(fig, output_png_path, metadata=metadata)
 
-    def _default_conv(o):
-        if isinstance(o, (np.integer, np.int64, np.int32)):
-            return int(o)
-        if isinstance(o, (np.floating, np.float64, np.float32)):
-            return float(o)
-        if isinstance(o, np.ndarray):
-            return o.tolist()
-        return str(o)
-
-    json_path = output_png_path.with_suffix(".json")
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=2, default=_default_conv)
-    print(f"  [FIGURA OK] Guardada: {output_png_path.name}")
 
 def plot_fig1_learning_curves(agg_df: pd.DataFrame, details_df: pd.DataFrame, out_dir: Path):
     """Figura 1: Curva de éxito determinista y panel de truncamientos vs pasos."""
@@ -451,5 +467,16 @@ def generate_all_phase_c_figures(data_dir: str = "reports/data/phase_c",
 
     print(f"\n>>> [FIGURAS] Proceso completado en: {out_path}\n")
 
+def run(out_dir=None):
+    """
+    Punto de entrada del módulo.
+
+    out_dir : ``None`` (por defecto reports/figures/phase_c vía figures_dir)
+              o ruta de salida (los insumos se mantienen en reports/data/phase_c).
+    """
+    generate_all_phase_c_figures(
+        figures_dir=str(out_dir) if out_dir is not None else "reports/figures/phase_c")
+
+
 if __name__ == "__main__":
-    generate_all_phase_c_figures()
+    run()
