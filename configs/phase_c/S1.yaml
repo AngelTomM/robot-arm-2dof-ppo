@@ -1,7 +1,8 @@
+# Experimento S1 (Fase C)
 experiment:
   name: S1
-  description: "Fase C - Agente SAC (256x256 ReLU, smooth_precision, VecNormalize)"
-  author: "Fase C"
+  description: Fase C - Agente SAC (256x256 ReLU, smooth_precision, VecNormalize)
+  author: Fase C
   phase: C
 env:
   l1: 1.0

@@ -1,7 +1,9 @@
+# Experimento S3_combined (Fase C)
 experiment:
   name: S3_combined
-  description: "Fase C - Agente SAC Paquete Combinado (train_freq=4, w_a=0.05, target_entropy=-1.0, 256x256 ReLU, smooth_precision, VecNormalize)"
-  author: "Fase C"
+  description: Fase C - Agente SAC Paquete Combinado (train_freq=4, w_a=0.05, target_entropy=-1.0, 256x256 ReLU,
+    smooth_precision, VecNormalize)
+  author: Fase C
   phase: C
 env:
   l1: 1.0

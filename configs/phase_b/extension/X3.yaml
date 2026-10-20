@@ -1,7 +1,7 @@
+# Experimento X3 (Fase B_ext)
 experiment:
   name: X3
-  description: Arquitectura profunda 256x256 ReLU con batch_size 64 y VecNormalize
-    (obs)
+  description: Arquitectura profunda 256x256 ReLU con batch_size 64 y VecNormalize (obs)
   author: Fase A
   phase: B_ext
 env:
@@ -39,9 +39,6 @@ ppo:
   net_arch: 256x256_relu
 training:
   total_timesteps: 655360
+  checkpoint_freq: 40960
   eval_freq: 5000
   n_eval_episodes: 15
-  save_freq: 50000
-  checkpoint_freq: 40960
-  rollout_size: 8192
-  checkpoint_rollout_k: 5

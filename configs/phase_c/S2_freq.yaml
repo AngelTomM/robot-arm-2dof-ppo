@@ -1,7 +1,8 @@
+# Experimento S2_freq (Fase C)
 experiment:
   name: S2_freq
-  description: "Fase C - Agente SAC Unifactorial (train_freq=4, 256x256 ReLU, smooth_precision, VecNormalize)"
-  author: "Fase C"
+  description: Fase C - Agente SAC Unifactorial (train_freq=4, 256x256 ReLU, smooth_precision, VecNormalize)
+  author: Fase C
   phase: C
 env:
   l1: 1.0

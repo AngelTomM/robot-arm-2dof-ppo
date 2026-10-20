@@ -1,7 +1,8 @@
+# Experimento S2_wa (Fase C)
 experiment:
   name: S2_wa
-  description: "Fase C - Agente SAC Unifactorial (w_a=0.10, 256x256 ReLU, smooth_precision, VecNormalize)"
-  author: "Fase C"
+  description: Fase C - Agente SAC Unifactorial (w_a=0.10, 256x256 ReLU, smooth_precision, VecNormalize)
+  author: Fase C
   phase: C
 env:
   l1: 1.0
@@ -20,7 +21,7 @@ env:
     success_bonus: 15.0
     near_zone_threshold: 0.3
     velocity_penalty_near: 0.15
-    w_a: 0.10
+    w_a: 0.1
 normalization:
   norm_obs: true
   norm_reward: false

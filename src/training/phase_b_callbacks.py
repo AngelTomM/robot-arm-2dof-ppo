@@ -1,5 +1,5 @@
 """
-Callbacks para Fase B: Guardado atómico acoplado de Checkpoints (Modelo + VecNormalize).
+Callbacks para Fase B: Guardado acoplado y consistente de checkpoints (modelo + VecNormalize).
 Asegura que cada checkpoint conserve de manera sincronizada e íntegra sus estadísticas de normalización.
 """
 import os

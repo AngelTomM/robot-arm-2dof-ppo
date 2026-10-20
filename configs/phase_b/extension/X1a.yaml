@@ -1,3 +1,4 @@
+# Experimento X1a (Fase B_ext)
 experiment:
   name: X1a
   description: Hold relajado (5 pasos, 0.3 rad/s) con bonus al completar la permanencia
@@ -23,6 +24,7 @@ env:
 normalization:
   norm_obs: false
   norm_reward: false
+  clip_obs: 10.0
 ppo:
   learning_rate: 0.00015
   n_steps: 2048
@@ -37,9 +39,6 @@ ppo:
   net_arch: 64x64_tanh
 training:
   total_timesteps: 655360
+  checkpoint_freq: 40960
   eval_freq: 5000
   n_eval_episodes: 15
-  save_freq: 50000
-  checkpoint_freq: 40960
-  rollout_size: 8192
-  checkpoint_rollout_k: 5
