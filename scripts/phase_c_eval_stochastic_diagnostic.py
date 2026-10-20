@@ -9,7 +9,7 @@ import sys
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.phase_c_eval_checkpoints import evaluate_single_checkpoint
+from src.evaluation.checkpoints import evaluate_single_checkpoint
 
 def main():
     val_file = REPO_ROOT / "data" / "datasets" / "phase_c" / "validation_c_500.json"
@@ -37,7 +37,8 @@ def main():
             if ckpt_dir.exists():
                 print(f"Evaluando estocástico: {agent} seed {seed}...", end="", flush=True)
                 row, _ = evaluate_single_checkpoint(
-                    ckpt_dir, val_dataset, env_cfg, eval_mode="stochastic", algo_hint=algo
+                    ckpt_dir, val_dataset, env_cfg, dataset_name="validation_c",
+                    eval_mode="stochastic", algo_hint=algo, schema="c"
                 )
                 row["experiment"] = agent
                 row["seed"] = seed

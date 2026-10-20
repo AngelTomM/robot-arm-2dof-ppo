@@ -18,7 +18,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.phase_b_ext_eval_checkpoints import (
+from src.evaluation.checkpoints import (
     evaluate_single_checkpoint,
     evaluate_c0_controller,
     extract_step_from_dirname
@@ -174,7 +174,7 @@ def run_batch_eval_validation(max_step_filter: int = 655360,
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
-    parser = argparse.ArgumentParser(description="Evaluación masiva en Validación B2")
+    parser = argparse.ArgumentParser(description="Evaluación de checkpoints (Validación B2)")
     parser.add_argument("--max_step", type=int, default=655360)
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--output_dir", type=str, default="reports/data/phase_b/extension")

@@ -1,5 +1,5 @@
 """
-Evaluación Masiva de Checkpoints sobre el Conjunto de VALIDACIÓN (Fase B):
+Evaluación de Checkpoints sobre el Conjunto de VALIDACIÓN (Fase B):
 - Procesa los 150 checkpoints (25 checkpoints * 3 semillas * 2 experimentos: X5_near y X3).
 - Evalúa estrictamente sobre data/datasets/validation_set_200.json en modo DETERMINISTA.
 - NUNCA lee el conjunto final (final_eval_set_300).
@@ -15,7 +15,7 @@ import numpy as np
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.phase_b_eval_checkpoints import evaluate_experiment_checkpoints
+from src.evaluation.checkpoints import evaluate_experiment_checkpoints
 
 def run_batch_evaluation():
     exps = [
@@ -43,7 +43,7 @@ def run_batch_evaluation():
 
     combined_df = pd.concat(all_dfs, ignore_index=True)
     combined_df.to_csv(out_csv, index=False)
-    print(f"\n>>> [OK] Evaluación masiva guardada en: {out_csv} ({len(combined_df)} checkpoints evaluados)")
+    print(f"\n>>> [OK] Evaluación de checkpoints guardada en: {out_csv} ({len(combined_df)} checkpoints evaluados)")
 
     # Calcular agregación inter-semilla por experimento y por paso
     agg_records = []
