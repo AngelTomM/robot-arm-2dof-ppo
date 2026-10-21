@@ -376,22 +376,7 @@ brazo-2dof-compartido/
 └── reports/phase_c_s3_analysis/figures/
 ```
 
-### 8.2 Convenciones de equipo
-
-1. **Cada uno sube solo lo suyo**: quien entrena un experimento sube su carpeta
-   `experiments/<fase>/<experimento>/` a Drive. Nunca renombrar ni sobrescribir
-   carpetas de otros.
-2. **Verifica antes de sobrescribir**: si tienes que reemplazar algo, sube la
-   versión nueva junto a la antigua con sufijo de fecha (`_2026-10-20`) y
-   avisa al grupo; no hay historial que te salve.
-3. **Snapshots completos**: para mandar todo el árbol, un único ZIP con fecha
-   (`experiments_2026-10-20.zip`) pesa lo mismo y evita la subida de cientos
-   de ficheros sueltos por la web.
-4. **Cuota de Drive**: cada archivo cuenta contra la cuota de quien lo sube.
-   A escala actual (decenas de MB) no es problema, pero borrar lo obsoleto
-   ayuda.
-
-### 8.3 Flujo de trabajo
+### 8.2 Flujo de trabajo
 
 ```powershell
 # Cuando terminas de entrenar/evaluar/generar figuras:
@@ -402,15 +387,3 @@ brazo-2dof-compartido/
 # 1) git pull (trae código + CSVs/JSONs de texto)
 # 2) Descarga de Drive lo que te falte (modelos de otros, figuras publicadas)
 ```
-
-### 8.4 Caveats
-
-- **NO sincronizar el repositorio con el cliente Drive for Desktop**: crearía
-  conflictos con git y duplicaría archivos. La carpeta se gestiona desde el
-  navegador o copiado manual.
-- La estructura dentro de la carpeta compartida debe respetarse para que
-  cualquier réplica local encaje directamente en el repo (`experiments/...`,
-  `reports/figures/...`).
-- Si descargas una carpeta de un compañero, colócala bajo la misma ruta que
-  ocupa en el repo para que `train.py`, `evaluate_checkpoints.py` y
-  `generate_figures.py` la encuentren sin ajustes.
