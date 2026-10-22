@@ -62,31 +62,23 @@ def make_env_fn(cfg: dict, rank: int, base_seed: int):
         return Monitor(env)
     return _init
 
-
-def parse_net_arch(spec, default_activation=nn.ReLU) -> dict:
-    """
-    Construye el diccionario 'policy_kwargs' para SB3 (MlpPolicy).
-    Soporta diccionario estructurado (layers, hidden_activation) o formato legado tipo '256x256_relu'.
-
-    Nota sobre la salida: La capa final no se modifica porque está fijada por el diseño matemático
-    del algoritmo en SB3 (lineal/Identity en PPO para parametrizar la media gaussiana; tanh en SAC
-    mediante TanhSquashedDistribution para acotar la acción continua a [-1, 1]).
-    Modificarla externamente resulta contraproducente.
-    """
-    ACTIVATION_MAP = {
-        "relu": nn.ReLU,
-        "tanh": nn.Tanh,
-        "elu": nn.ELU,
-        "leaky_relu": nn.LeakyReLU,
-        "gelu": nn.GELU,
-        "selu": nn.SELU,
-        "sigmoid": nn.Sigmoid,
-        "silu": nn.SiLU,
-        "swish": nn.SiLU,
-        "identity": nn.Identity,
-        "linear": nn.Identity,
-        "none": nn.Identity,
+# Convierte especificaciones de arquitectura de red en policy_kwargs
+ACTIVATION_MAP = {
+    "relu": nn.ReLU,
+    "tanh": nn.Tanh,
+    "elu": nn.ELU,
+    "leaky_relu": nn.LeakyReLU,
+    "gelu": nn.GELU,
+    "selu": nn.SELU,
+    "sigmoid": nn.Sigmoid,
+    "silu": nn.SiLU,
+    "swish": nn.SiLU,
+    "identity": nn.Identity,
+    "linear": nn.Identity,
+    "none": nn.Identity,
     }
+# Funcion arquitectura de red
+def parse_net_arch(spec, default_activation=nn.ReLU) -> dict:
 
     if isinstance(spec, dict):
         layers = spec.get("layers", [256, 256])

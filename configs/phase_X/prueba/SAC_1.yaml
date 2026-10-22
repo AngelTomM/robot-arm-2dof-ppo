@@ -53,6 +53,7 @@ sac:
     layers: [512, 512]
     hidden_activation: leaky_relu
     # SAC: salida tanh acotada [-1, 1] implícita en SAC (TanhSquashedDistribution)
+    
 # Parametros del proceso de entrenamiento
 training:
   total_timesteps: 300000
