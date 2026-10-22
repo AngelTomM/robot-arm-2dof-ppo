@@ -62,23 +62,24 @@ def make_env_fn(cfg: dict, rank: int, base_seed: int):
         return Monitor(env)
     return _init
 
-# Convierte especificaciones de arquitectura de red en policy_kwargs
-ACTIVATION_MAP = {
-    "relu": nn.ReLU,
-    "tanh": nn.Tanh,
-    "elu": nn.ELU,
-    "leaky_relu": nn.LeakyReLU,
-    "gelu": nn.GELU,
-    "selu": nn.SELU,
-    "sigmoid": nn.Sigmoid,
-    "silu": nn.SiLU,
-    "swish": nn.SiLU,
-    "identity": nn.Identity,
-    "linear": nn.Identity,
-    "none": nn.Identity,
-    }
+
 # Funcion arquitectura de red
 def parse_net_arch(spec, default_activation=nn.ReLU) -> dict:
+
+    ACTIVATION_MAP = {
+        "relu": nn.ReLU,
+        "tanh": nn.Tanh,
+        "elu": nn.ELU,
+        "leaky_relu": nn.LeakyReLU,
+        "gelu": nn.GELU,
+        "selu": nn.SELU,
+        "sigmoid": nn.Sigmoid,
+        "silu": nn.SiLU,
+        "swish": nn.SiLU,
+        "identity": nn.Identity,
+        "linear": nn.Identity,
+        "none": nn.Identity,
+    }
 
     if isinstance(spec, dict):
         layers = spec.get("layers", [256, 256])
