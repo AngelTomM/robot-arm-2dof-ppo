@@ -37,7 +37,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from arm2d_env import Arm2DEnv  # noqa: E402
-from src.training.callbacks import PhaseATrainingCallback, PhaseAEvalCallback  # noqa: E402
+from src.training.callbacks import LQRMetricsCallback, VecNormalizeSyncEvalCallback  # noqa: E402
 from src.training.phase_b_callbacks import PhaseBCheckpointCallback  # noqa: E402
 
 
@@ -180,16 +180,16 @@ def run_training(cfg: dict, config_path: Path, seed: int, device: str,
     checkpoint_cb = PhaseBCheckpointCallback(save_freq=ckpt_freq,
                                              save_path=str(checkpoints_dir), verbose=1)
 
-    callbacks = []
+    callbacks = [LQRMetricsCallback(window_size=100)]
     eval_freq = int(train_cfg.get("eval_freq", 0))
     if eval_freq > 0:
         # Entorno de evaluación: VecNormalize en modo inference
-        # (training=False, norm_reward=False; sincronizado por PhaseAEvalCallback).
+        # (training=False, norm_reward=False; sincronizado por VecNormalizeSyncEvalCallback).
         eval_env = DummyVecEnv([make_env_fn(cfg, rank=999, base_seed=seed + 9999)])
         if norm_obs or norm_reward:
             eval_env = VecNormalize(eval_env, norm_obs=norm_obs, norm_reward=False,
                                     clip_obs=clip_obs, training=False)
-        callbacks.append(PhaseAEvalCallback(
+        callbacks.append(VecNormalizeSyncEvalCallback(
             eval_env,
             best_model_save_path=str(models_dir / "best_model"),
             log_path=str(logs_dir),
@@ -197,7 +197,6 @@ def run_training(cfg: dict, config_path: Path, seed: int, device: str,
             n_eval_episodes=int(train_cfg.get("n_eval_episodes", 15)),
             deterministic=True, render=False,
         ))
-        callbacks.append(PhaseATrainingCallback(window_size=100))
     callbacks.append(checkpoint_cb)
 
     # 3. Instanciar el agente

@@ -1,9 +1,7 @@
 """
 Entorno de Simulación 2D para Brazo Robótico de 2 Grados de Libertad (2 DOF)
-Compatible con Gymnasium, Stable-Baselines3 y configurable por YAML / Diccionario.
-
-Fase A: Preservación de comportamiento histórico y soporte para modo 'hold',
-descomposición de recompensas y métricas operativas avanzadas.
+Fase D: Proceso de Decisión de Markov (MDP) Continuo con Regulación Lyapunov / LQR.
+Compatible con Gymnasium y Stable-Baselines3.
 
 Cinemática Directa:
   Base en (0, 0)
@@ -20,7 +18,9 @@ import pygame
 
 class Arm2DEnv(gym.Env):
     """
-    Entorno Gymnasium configurable para un brazo planar 2 DOF.
+    Entorno Gymnasium para un brazo planar 2 DOF bajo formulación MDP continua.
+    Recompensa principal: lyapunov_lqr (función cuadrática continua sin horizonte discontinuo).
+    Recompensa secundaria aislada: distance_only (-distance).
     """
     metadata = {
         "render_modes": ["human", "rgb_array"],
@@ -43,38 +43,31 @@ class Arm2DEnv(gym.Env):
 
         self.dt = float(env_cfg.get("dt", 0.05))
         self.max_speed = float(env_cfg.get("max_speed", 2.0))
-        self.target_radius = float(env_cfg.get("target_radius", 0.08))
+        self.target_radius = float(env_cfg.get("target_radius", 0.06))
         self.max_steps = int(env_cfg.get("max_steps", 200))
 
-        # Flags de Modo de Éxito y Recompensa (Fase A)
-        # success_mode: "touch" (histórico) | "hold"
-        self.success_mode = str(env_cfg.get("success_mode", "touch"))
-        # Parámetros de Hold
-        self.hold_steps = int(env_cfg.get("hold_steps", 20))
-        self.velocity_tolerance = float(env_cfg.get("velocity_tolerance", 0.1))
+        # Validación estricta de Modo de Éxito (solo 'none' en Fase D)
+        raw_success_mode = env_cfg.get("success_mode", "none")
+        if raw_success_mode is None or str(raw_success_mode).strip().lower() == "none":
+            self.success_mode = "none"
+        else:
+            raise ValueError(
+                f"success_mode='{raw_success_mode}' no es válido en Fase D. "
+                "Solo se admite 'none' (MDP puro sin horizonte discontinuo por hold/touch)."
+            )
 
-        # Tipo de Recompensa
-        # "distance_only", "smooth_precision", "energy_efficient", "historical", "x5_near", "x5_vel", "x6_smooth"
-        self.reward_type = str(env_cfg.get("reward_type", "distance_only"))
-        
-        # Parámetros de Recompensa
-        self.dist_coef = float(reward_params.get("distance_penalty_coef", 1.0))
-        self.action_coef = float(reward_params.get("action_penalty_coef", 0.01))
-        self.success_bonus = float(reward_params.get("success_bonus", 5.0))
-        self.near_threshold = float(reward_params.get("near_zone_threshold", 0.25))
-        self.vel_near_penalty = float(reward_params.get("velocity_penalty_near", 0.1))
-        
-        # Parámetros Nuevos de Fase A (X5, X6)
-        self.w_v = float(reward_params.get("w_v", 0.0))
-        self.sigma_v = float(reward_params.get("sigma_v", 0.15))
-        self.w_a = float(reward_params.get("w_a", 0.0))
-        self.r_near_mode = str(reward_params.get("r_near_mode", "historical")) # "historical", "none", "non_positive"
+        # Validación estricta de Tipo de Recompensa
+        self.reward_type = str(env_cfg.get("reward_type", "lyapunov_lqr")).strip().lower()
+        if self.reward_type not in ["lyapunov_lqr", "distance_only"]:
+            raise ValueError(
+                f"reward_type='{self.reward_type}' no está soportado en Fase D. "
+                "Solo se admiten 'lyapunov_lqr' (principal) y 'distance_only' (secundaria)."
+            )
 
-        # Parámetros de Estabilización Asintótica Cuadrática Continua (Lyapunov / LQR)
-        # Formulación tipo MDP completamente observable: V(x) cuadrático sobre error cartesiano, velocidad y esfuerzo
-        self.w_pos = float(reward_params.get("w_pos", 1.0))          # Ponderador de error de posición cartesiano
-        self.w_vel = float(reward_params.get("w_vel", 0.05))         # Ponderador de energía cinética / velocidad articular
-        self.w_ctrl = float(reward_params.get("w_ctrl", 0.01))       # Ponderador de esfuerzo de control u^T R u
+        # Parámetros de Recompensa Lyapunov / LQR
+        self.w_pos = float(reward_params.get("w_pos", env_cfg.get("w_pos", 1.0)))
+        self.w_vel = float(reward_params.get("w_vel", env_cfg.get("w_vel", 0.05)))
+        self.w_ctrl = float(reward_params.get("w_ctrl", env_cfg.get("w_ctrl", 0.01)))
 
         # --- 2. Espacio de Acciones [-1.0, 1.0] ---
         self.action_space = spaces.Box(
@@ -84,11 +77,11 @@ class Arm2DEnv(gym.Env):
             dtype=np.float32
         )
 
-        # --- 3. Espacio de Observaciones (10 dimensiones) ---
+        # --- 3. Espacio de Observaciones (10 dimensiones cinemáticas intactas) ---
         obs_high = np.array([
-            1.0, 1.0, 1.0, 1.0,               # cos1, sin1, cos2, sin2
-            self.max_speed, self.max_speed,   # velocidades dtheta1, dtheta2
-            self.max_reach, self.max_reach,   # target_x, target_y
+            1.0, 1.0, 1.0, 1.0,                     # cos1, sin1, cos2, sin2
+            self.max_speed, self.max_speed,         # velocidades dtheta1, dtheta2
+            self.max_reach, self.max_reach,         # target_x, target_y
             2 * self.max_reach, 2 * self.max_reach  # dist_x, dist_y
         ], dtype=np.float32)
 
@@ -105,21 +98,6 @@ class Arm2DEnv(gym.Env):
         self.dtheta2 = 0.0
         self.target = np.zeros(2, dtype=np.float32)
         self.step_count = 0
-
-        # Variables de Métricas y Hold de Fase A
-        self.hold_counter = 0
-        self.hold_counter_max = 0
-        self.prev_action = None
-        self.has_prev_action = False
-        
-        self.first_entry_step = None
-        self.joint_speed_at_first_entry = None
-        self.ee_speed_at_first_entry = None
-        self.was_inside_target = False
-        self.n_exits = 0
-        self.n_cross = 0
-        self.prev_error_vec = None
-        self.time_inside_near = 0
 
         # --- 5. Renderizado (Pygame) ---
         self.render_mode = render_mode
@@ -146,9 +124,10 @@ class Arm2DEnv(gym.Env):
         return np.array([[j11, j12], [j21, j22]], dtype=np.float32)
 
     def _get_obs(self):
-        """Construye el vector de observación actual (10 dimensiones)."""
-        _, end_effector = self._forward_kinematics(self.theta1, self.theta2)
-        dist_vec = self.target - end_effector
+        """Construye el vector de observación actual (10 dimensiones cinemáticas puras)."""
+        x_ee = self.l1 * math.cos(self.theta1) + self.l2 * math.cos(self.theta1 + self.theta2)
+        y_ee = self.l1 * math.sin(self.theta1) + self.l2 * math.sin(self.theta1 + self.theta2)
+        dist_vec = self.target - np.array([x_ee, y_ee], dtype=np.float32)
 
         return np.array([
             math.cos(self.theta1),
@@ -164,7 +143,7 @@ class Arm2DEnv(gym.Env):
         ], dtype=np.float32)
 
     def reset(self, seed=None, options=None):
-        """Reinicia el estado del entorno."""
+        """Reinicia el estado del entorno de forma determinista o aleatoria."""
         super().reset(seed=seed)
 
         self.theta1 = float(self.np_random.uniform(-math.pi, math.pi))
@@ -180,30 +159,14 @@ class Arm2DEnv(gym.Env):
             target_r * math.sin(target_angle)
         ], dtype=np.float32)
 
-        # Reiniciar contadores y métricas de Fase A
-        self.hold_counter = 0
-        self.hold_counter_max = 0
-        self.prev_action = None
-        self.has_prev_action = False
-
-        self.first_entry_step = None
-        self.joint_speed_at_first_entry = None
-        self.ee_speed_at_first_entry = None
-        self.was_inside_target = False
-        self.n_exits = 0
-        self.n_cross = 0
-        self.prev_error_vec = None
-        self.time_inside_near = 0
-
         _, end_effector = self._forward_kinematics(self.theta1, self.theta2)
         distance = float(np.linalg.norm(self.target - end_effector))
 
         obs = self._get_obs()
         info = {
-            "is_success": False,
             "distance": distance,
-            "hold_counter": 0,
-            "hold_counter_max": 0
+            "joint_speed": 0.0,
+            "step_count": 0,
         }
 
         if self.render_mode == "human":
@@ -212,36 +175,24 @@ class Arm2DEnv(gym.Env):
         return obs, info
 
     def set_state_and_target(self, theta1, theta2, target_x, target_y):
-        """Permite fijar estados y objetivos específicos (para tests y datasets)."""
+        """Permite fijar estados y objetivos específicos (para tests y datasets reproducibles)."""
         self.theta1 = float((theta1 + math.pi) % (2 * math.pi) - math.pi)
         self.theta2 = float((theta2 + math.pi) % (2 * math.pi) - math.pi)
         self.dtheta1 = 0.0
         self.dtheta2 = 0.0
         self.target = np.array([target_x, target_y], dtype=np.float32)
         self.step_count = 0
-        self.hold_counter = 0
-        self.hold_counter_max = 0
-        self.prev_action = None
-        self.has_prev_action = False
-        self.first_entry_step = None
-        self.joint_speed_at_first_entry = None
-        self.ee_speed_at_first_entry = None
-        self.was_inside_target = False
-        self.n_exits = 0
-        self.n_cross = 0
-        self.prev_error_vec = None
-        self.time_inside_near = 0
         return self._get_obs()
 
     def step(self, action):
-        """Aplica acción, calcula dinámica y evalúa recompensa y permanencia."""
+        """Aplica acción, calcula dinámica continua y evalúa recompensa MDP."""
         self.step_count += 1
 
         action = np.clip(action, -1.0, 1.0)
         self.dtheta1 = float(action[0] * self.max_speed)
         self.dtheta2 = float(action[1] * self.max_speed)
 
-        # 1. Integración Euler (mismo orden histórico exacto)
+        # 1. Integración Euler (orden numérico determinista idéntico)
         self.theta1 += self.dtheta1 * self.dt
         self.theta2 += self.dtheta2 * self.dt
         self.theta1 = (self.theta1 + math.pi) % (2 * math.pi) - math.pi
@@ -252,140 +203,36 @@ class Arm2DEnv(gym.Env):
         error_vec = self.target - end_effector
         distance = float(np.linalg.norm(error_vec))
 
-        # 3. Velocidades
-        joint_speed = float(math.sqrt(self.dtheta1**2 + self.dtheta2**2))
-        jac = self.get_jacobian(self.theta1, self.theta2)
-        ee_vel = jac @ np.array([self.dtheta1, self.dtheta2], dtype=np.float32)
-        ee_speed = float(np.linalg.norm(ee_vel))
+        # 3. Velocidad Articular (norma euclidiana)
+        joint_speed = float(np.linalg.norm([self.dtheta1, self.dtheta2]))
 
-        # 4. Evaluación de Condición de Éxito
-        inside_target = (distance < self.target_radius)
-        slow_enough = (joint_speed < self.velocity_tolerance)
-
-        if self.success_mode == "hold":
-            if inside_target and slow_enough:
-                self.hold_counter += 1
-            else:
-                self.hold_counter = 0
-            
-            if self.hold_counter > self.hold_counter_max:
-                self.hold_counter_max = self.hold_counter
-            
-            is_success = (self.hold_counter >= self.hold_steps)
-        else:
-            # Modo histórico por contacto ("touch")
-            is_success = inside_target
-
-        # 5. Métricas Operativas de Fase A
-        # (a) Primera entrada en target
-        if inside_target and (self.first_entry_step is None):
-            self.first_entry_step = self.step_count
-            self.joint_speed_at_first_entry = joint_speed
-            self.ee_speed_at_first_entry = ee_speed
-
-        # (b) Salidas tras primera entrada
-        if self.first_entry_step is not None:
-            if self.was_inside_target and not inside_target:
-                self.n_exits += 1
-        self.was_inside_target = inside_target
-
-        # (c) Tiempo en región cercana (d < 0.30)
-        if distance < 0.30:
-            self.time_inside_near += 1
-
-        # (d) Cruces de signo de vector de error en d < 0.30
-        if distance < 0.30 and (self.prev_error_vec is not None):
-            if float(np.dot(error_vec, self.prev_error_vec)) < 0.0:
-                self.n_cross += 1
-        self.prev_error_vec = error_vec
-
-        # (e) Variación de acción (Convención Sección 14)
-        if self.has_prev_action:
-            delta_action = action - self.prev_action
-            delta_action_norm = float(np.linalg.norm(delta_action))
-            delta_action_sq = float(np.sum(np.square(delta_action)))
-        else:
-            delta_action = np.zeros_like(action)
-            delta_action_norm = None # No definido en paso 0
-            delta_action_sq = 0.0
-
-        # --- 6. Cálculo Descompuesto de Recompensa ---
-        reward_dist = -self.dist_coef * distance
-        reward_action = -self.action_coef * float(np.sum(np.square(action)))
-        reward_near = 0.0
-        reward_vel = 0.0
-        reward_smooth = 0.0
-        reward_success = 0.0
-
-        # Cálculo de términos según reward_type
-        if self.reward_type in ["smooth_precision", "historical", "x5_near", "x5_vel", "x6_smooth"]:
-            if distance < self.near_threshold:
-                if self.r_near_mode == "none" or self.reward_type == "x5_near":
-                    # X5-near diagnóstico: sin término positivo
-                    reward_near = -self.vel_near_penalty * (abs(self.dtheta1) + abs(self.dtheta2))
-                elif self.r_near_mode == "non_positive":
-                    reward_near = min(0.0, 1.0 - (distance / self.near_threshold)) - self.vel_near_penalty * (abs(self.dtheta1) + abs(self.dtheta2))
-                else:
-                    # Histórico
-                    reward_near = (1.0 - (distance / self.near_threshold)) - self.vel_near_penalty * (abs(self.dtheta1) + abs(self.dtheta2))
-
-        elif self.reward_type == "energy_efficient":
-            reward_action = -0.1 * float(np.sum(np.square(action)))
-
-        elif self.reward_type == "lyapunov_lqr":
-            # Recompensa continua estacionaria basada en teoría de control óptimo / función candidata de Lyapunov
-            # V(s, a) = e^T Q e + q_dot^T M q_dot + u^T R u (función de costo cuadrática continua)
-            # Como recompensa r(s, a) = -V(s, a), compatible estrictamente con un proceso de decisión de Markov (MDP)
-            # sin memoria oculta, sin discontinuidades de zona ni contadores de tiempo (hold).
+        # 4. Cálculo Descompuesto de Recompensa (solo 2 opciones permitidas)
+        if self.reward_type == "lyapunov_lqr":
             reward_dist = -self.w_pos * (distance ** 2)
             reward_vel = -self.w_vel * (joint_speed ** 2)
             reward_action = -self.w_ctrl * float(np.sum(np.square(action)))
+        elif self.reward_type == "distance_only":
+            reward_dist = -distance
+            reward_vel = 0.0
+            reward_action = 0.0
+        else:
+            raise ValueError(f"reward_type='{self.reward_type}' no soportado.")
 
-        # Penalización Gaussiana de Velocidad (X5)
-        if self.w_v > 0.0:
-            gauss_factor = math.exp(-(distance**2) / (2.0 * (self.sigma_v**2)))
-            reward_vel = -self.w_v * gauss_factor * (joint_speed**2)
+        total_reward = float(reward_dist + reward_vel + reward_action)
 
-        # Penalización de Suavidad (X6)
-        if self.w_a > 0.0 and self.has_prev_action:
-            reward_smooth = -self.w_a * delta_action_sq
-
-        # Bonificación de Éxito (otorgada al completar is_success)
-        if is_success:
-            reward_success = self.success_bonus
-
-        total_reward = reward_dist + reward_action + reward_near + reward_vel + reward_smooth + reward_success
-
-        # Actualizar acción previa para el siguiente paso
-        self.prev_action = np.copy(action)
-        self.has_prev_action = True
-
-        terminated = bool(is_success)
-        truncated = bool(self.step_count >= self.max_steps and not terminated)
+        # 5. Horizonte fijo: terminated siempre False en Fase D (corta por horizonte)
+        terminated = False
+        truncated = bool(self.step_count >= self.max_steps)
 
         obs = self._get_obs()
         info = {
-            "is_success": is_success,
             "distance": distance,
-            "step_count": self.step_count,
-            "hold_counter": self.hold_counter,
-            "hold_counter_max": self.hold_counter_max,
             "joint_speed": joint_speed,
-            "ee_speed": ee_speed,
-            "first_entry_step": self.first_entry_step,
-            "joint_speed_at_first_entry": self.joint_speed_at_first_entry,
-            "ee_speed_at_first_entry": self.ee_speed_at_first_entry,
-            "n_exits": self.n_exits,
-            "n_cross": self.n_cross,
-            "time_inside_near": self.time_inside_near,
-            "delta_action_norm": delta_action_norm,
-            "reward_dist": reward_dist,
-            "reward_action": reward_action,
-            "reward_near": reward_near,
-            "reward_vel": reward_vel,
-            "reward_smooth": reward_smooth,
-            "reward_success": reward_success,
-            "total_reward": total_reward
+            "action_norm_sq": float(np.sum(np.square(action))),
+            "reward_dist": float(reward_dist),
+            "reward_vel": float(reward_vel),
+            "reward_action": float(reward_action),
+            "step_count": self.step_count,
         }
 
         if self.render_mode == "human":

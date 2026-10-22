@@ -1,7 +1,7 @@
-# 📐 Metodología — Brazo Robótico 2 DOF
+# 📐 Metodología — Brazo Robótico 2 DOF (Fase D: MDP Continuo con Regulación LQR)
 
-Fundamento técnico del proyecto: modelo físico, representación de estados, criterio operativo de éxito, diseño de funciones de recompensa y protocolo experimental (normalización, checkpoints y evaluación).
-Para los análisis monográficos por fase, consulte los informes en [`reports/`](../reports/). Para el uso operativo del código, consulte [`docs/manual-de-uso.md`](manual-de-uso.md).
+Fundamento técnico del proyecto: modelo cinemático, transición desde POMDP (*hold*) hacia MDP continuo puro, formulación de recompensa cuadrática de regulación LQR y protocolo de evaluación dual desacoplada.
+Para el uso operativo del código, consulte [`docs/manual-de-uso.md`](manual-de-uso.md).
 
 ---
 
@@ -32,82 +32,73 @@ $$J(\boldsymbol{\theta}) = \begin{bmatrix}
 L_1 \cos(\theta_1) + L_2 \cos(\theta_1 + \theta_2) & L_2 \cos(\theta_1 + \theta_2)
 \end{bmatrix}$$
 
-### 1.3 Espacio de Estados y Acciones
-* **Acciones continuas** $\mathbf{a}_t \in [-1.0, 1.0]^2$: mapeadas directamente a velocidad angular articular:
+### 1.3 Espacio de Estados y Acciones (10D Cinemático Puro)
+* **Acciones continuas** $\mathbf{a}_t \in [-1.0, 1.0]^2$: mapeadas linealmente a velocidad angular articular:
   $$\dot{\boldsymbol{\theta}}_t = \mathbf{a}_t \cdot v_{max} \quad (v_{max} = 1.5\text{ rad/s}, \, \Delta t = 0.05\text{ s})$$
-* **Observación** $\mathbf{s}_t \in \mathbb{R}^{10}$:
+* **Vector de Observación** $\mathbf{s}_t \in \mathbb{R}^{10}$:
   $$[\cos\theta_1, \, \sin\theta_1, \, \cos\theta_2, \, \sin\theta_2, \, \dot{\theta}_1, \, \dot{\theta}_2, \, x_{tgt}, \, y_{tgt}, \, \Delta x_{ee}, \, \Delta y_{ee}]$$
+  donde $\Delta x_{ee} = x_{tgt} - x_{ee}$ y $\Delta y_{ee} = y_{tgt} - y_{ee}$.
 
 ---
 
-## 2. Criterio Operativo de Éxito Estricto (*Hold*)
+## 2. Transición hacia la Fase D: De POMDP a MDP Continuo Puro
 
-Para considerar un episodio como **exitoso**, el efector final debe satisfacer simultáneamente:
-1. **Zona de Precisión:** distancia euclídea al blanco $d = \|\mathbf{x}_{ee} - \mathbf{x}_{tgt}\| \le r_{tgt} = 0.06\text{ m}$.
-2. **Condición de Frenado:** velocidad angular conjunta $\|\dot{\boldsymbol{\theta}}\| \le v_{tol} = 0.10\text{ rad/s}$.
-3. **Persistencia Temporal (*Hold*):** mantener las dos condiciones anteriores de forma ininterrumpida durante $N_{hold}$ pasos consecutivos ($N_{hold} = 20$ en los experimentos de referencia de Fase A; $N_{hold} = 5$ en Fase B y C, $v_{tol} = 0.3\text{ rad/s}$).
-4. **Horizonte:** completar la estabilización antes del límite de $T_{max} = 200$ pasos ($10.0\text{ s}$).
+### 2.1 El Problema del Paradigma Anterior (*Hold Condition* como POMDP)
+En las Fases A, B y C del proyecto, el éxito se definía mediante un contador temporal acumulativo (*hold counter*): mantener $d \le 0.06\text{ m}$ y $\|\dot{\boldsymbol{\theta}}\| \le 0.10\text{ rad/s}$ durante $N=20$ pasos consecutivos para gatillar una terminación temprana con bono terminal $+15.0$.
 
-Cualquier episodio que agote el horizonte sin consolidar el *hold* se clasifica como **truncado**. La transición desde el criterio clásico de mero contacto (*touch*, $d < 0.08\text{ m}$) se motivó porque dicha condición incentivaba atravesar el objetivo a máxima velocidad, generando etiquetas de éxito no representativas de estabilidad real.
+Dicha formulación introducía severas patologías teóricas y empíricas:
+1. **Parcial Observabilidad (POMDP):** El contador de pasos $N$ era una variable de estado oculta ajena al vector de observación de 10 dimensiones. Dos estados con idéntica pose cinemática $(\boldsymbol{\theta}, \dot{\boldsymbol{\theta}})$ tenían valores de función de valor $V(s)$ radicalmente diferentes dependiendo de si el contador interno estaba en $k=0$ o $k=19$.
+2. **Explotación de Recompensa y Parálisis:** El corte terminal anticipado incentivaba estrategias subóptimas de llegada abrupta o parálisis en fronteras de zona.
 
----
-
-## 3. Diseño de Funciones de Recompensa
-
-La recompensa descompuesta en cada paso $t$ está dada por:
-$$R_t = R_{dist} + R_{action} + R_{near} + R_{vel} + R_{smooth} + R_{success}$$
-
-| Término | Expresión | Nota |
-| :--- | :---: | :--- |
-| Distancia ($R_{dist}$) | $-1.0 \cdot d$ | Gradiente continuo negativo hacia el objetivo. |
-| Esfuerzo de control ($R_{action}$) | $-0.02 \|\mathbf{a}_t\|^2$ | Penalización por saturación de actuadores. |
-| Proximidad ($R_{near}$) | $(1.0 - d / 0.30) - 0.15 (|\dot{\theta}_1| + |\dot{\theta}_2|)$ | Activo en $d < 0.30\text{ m}$; configurable mediante `r_near_mode` (`historical`, `none`, `non_positive`). |
-| Velocidad gaussiana ($R_{vel}$, X5) | $-w_v \exp\!\left(-\dfrac{d^2}{2\sigma_v^2}\right) \|\dot{\boldsymbol{\theta}}\|^2$ | $w_v = 0.10$, $\sigma_v = 0.15$ en la configuración de referencia. |
-| Suavidad ($R_{smooth}$, X6) | $-w_a \|\mathbf{a}_t - \mathbf{a}_{t-1}\|^2$ | $w_a = 0.01$ en X6; barrido $w_a \in \{0.01, 0.1, 0.5\}$ en X6_wa*. |
-| Éxito ($R_{success}$) | $+15.0 \cdot \mathbb{I}_{succ}$ | Otorgado únicamente al consolidar el *hold*. |
-
-### 3.1 Diagnóstico Empírico de los Términos
-
-* **Efecto de $R_{near}$:** en la Fase A se hipotetizó que el término positivo $(1 - d/0.30)$ era perjudicial ("trampa de recompensa"). La evaluación posterior a igual presupuesto demostró lo contrario: suprimirlo (`X5_near`) redujo la tasa de éxito en $14.93$ puntos porcentuales, por lo que actúa como un *reward shaping* denso e indispensable para la convergencia temprana.
-* **Valores elevados de $w_v$:** imponer $w_v \ge 1.0$ produce **parálisis cinemática**, pues el coste de aproximarse con velocidad supera la ganancia de proximidad. El valor óptimo en el barrido fue $w_v = 0.10$.
-* **Recompensa `smooth_precision`:** combinación de referencia de las fases B y C (sin barrido adicional); es la base del agente líder.
+### 2.2 Formulación Fase D: MDP Puro con Regulación LQR
+La Fase D elimina por completo el concepto de corte por éxito temprano:
+* **Horizonte Fijo:** Todos los episodios duran estrictamente $T_{max} = 200$ pasos ($10.0\text{ s}$).
+* **Señal de Terminación:** `terminated = False` siempre; solo se emite `truncated = True` al alcanzar $T_{max}$.
+* **Propiedad de Markov Restaurada:** El par $(\mathbf{s}_t, \mathbf{a}_t)$ determina de forma completa y determinista la distribución de transición y la recompensa instantánea.
 
 ---
 
-## 4. Protocolo Experimental
+## 3. Funciones de Recompensa
 
-### 4.1 Fases del proyecto
+### 3.1 Recompensa Principal: `lyapunov_lqr`
+La señal principal de aprendizaje modela una función cuadrática de costo de regulación óptima (LQR / Función de Lyapunov de control):
+$$r(s_t, a_t) = -w_{\text{pos}} \|\mathbf{x}_{ee} - \mathbf{x}_{tgt}\|^2 - w_{\text{vel}} \|\dot{\boldsymbol{\theta}}_t\|^2 - w_{\text{ctrl}} \|\mathbf{a}_t\|^2$$
+donde:
+* $\|\mathbf{x}_{ee} - \mathbf{x}_{tgt}\|$ es la distancia euclidiana cartesiana al objetivo.
+* $\|\dot{\boldsymbol{\theta}}_t\|_2 = \sqrt{\dot{\theta}_1^2 + \dot{\theta}_2^2}$ es la norma euclidiana de la velocidad articular (`joint_speed`).
+* $\|\mathbf{a}_t\|_2^2 = a_1^2 + a_2^2$ es el esfuerzo de control instantáneo.
+* Pesos canónicos: $w_{\text{pos}} = 1.0$, $w_{\text{vel}} = 0.05$, $w_{\text{ctrl}} = 0.01$.
 
-| Fase | Algoritmo | Presupuesto | Objetivo |
-| :--- | :---: | :---: | :--- |
-| **A** | PPO | 300.000 pasos | Diagnóstico: estabilización del criterio *hold*, arquitectura, normalización y barridos de recompensa (X1a–X6_wa05). |
-| **B** | PPO | 1.000.000 de pasos | Confirmación a presupuesto extendido de los candidatos (X3, X5_near). |
-| **B (extensión)** | PPO | 655.360 pasos | Evaluación multi-semilla ($n=500$ episodios × 3 semillas) y selección formal del agente líder (X4). |
-| **C** | SAC | 245.760–655.360 pasos | Estudio unifactorial (frecuencia de entrenamiento, suavidad) y paquete combinado (S1, S2_freq, S2_wa, S3_combined). |
+Esta función proporciona un gradiente suave en todo el espacio de trabajo, penaliza el movimiento residual cerca del objetivo y evita la saturación de los actuadores sin requerir discontinuidades ni zonas no lineales.
 
-### 4.2 Normalización y política de checkpoints
-
-* Se demostró que desacoplar la red neuronal de las estadísticas de `VecNormalize` distorsiona gravemente la evaluación: las observaciones normalizadas con estadísticas obsoletas dejan de ser comparables entre checkpoints.
-* Toda la pipeline vigente aplica **guardado acoplado**: en cada checkpoint se persisten simultáneamente `model.zip` y `vecnormalize_stats.pkl` del mismo paso de entrenamiento, de modo que la recarga de cualquier punto de la curva de aprendizaje reproduce con exactitud el estado normalizado correspondiente.
-* El entorno de evaluación se ejecuta en modo inferencia (`training=False`, `norm_reward=False`) y recibe las estadísticas sincronizadas desde el entorno de entrenamiento (`sync_envs_normalization`).
-
-### 4.3 Congelamiento de datasets y evaluación
-
-* Los datasets de evaluación ($n=200$, $n=300$, $n=500$) se generan una única vez con semillas documentadas y se fijan con hashes SHA-256; el separador por conjunto (validación / evaluación final) se verifica mediante test para impedir solapamientos y fuga de información.
-* La métrica principal es la **tasa de éxito estricta** con intervalo de Wilson al 95%; la comparación entre agentes se resuelve con el **intervalo de indistinguibilidad operacional** ($U_{equiv} = 3.16$ pp), calculado por el script de selección formal.
-* La evaluación se ejecuta en dos modos separados: determinista (acción media de la política) y estocástico (muestreo), sin mezcla de modos dentro de una misma ejecución.
-* La selección del *best_model* durante el entrenamiento se basa en la tasa de éxito de la evaluación en línea ($n_{eval}=15$ episodios por defecto), que utiliza objetivos aleatorios y no el dataset congelado final, garantizando la independencia entre selección de checkpoint y evaluación terminal.
-
-### 4.4 Reproducibilidad y configuración
-
-* Cada experimento deriva su fase e identificador de la **ruta del archivo YAML** (fuente única de verdad) y escribe la salida en `experiments/<fase>/<exp_id>/seed_<seed>/`.
-* El archivo `experiment_meta.json` registra el config completo y parámetros efectivos de la ejecución; `train_metrics.json` registra el tiempo y el rendimiento medio.
-* Las semillas se fijan de forma global (Python, NumPy, torch y CUDA) para reproducibilidad determinista.
+### 3.2 Recompensa Secundaria Aislada: `distance_only`
+Como control y baseline secundario comparativo, se conserva la recompensa puramente geométrica:
+$$r(s_t, a_t) = -\|\mathbf{x}_{ee} - \mathbf{x}_{tgt}\|$$
+con penalizaciones de velocidad y control fijadas estrictamente en $0.0$.
 
 ---
 
-## 5. Referencias a Monografías
+## 4. Protocolo de Evaluación Dual Desacoplada
 
-* Fase A: [`reports/phase_a_report.md`](../reports/phase_a_report.md)
-* Fase B y Extensión: [`reports/phase_b_report.md`](../reports/phase_b_report.md)
-* Fase C: [`reports/phase_c_report.md`](../reports/phase_c_report.md)
+Para evitar que la normalización de recompensas de `VecNormalize` contamine las métricas de desempeño, la evaluación se ejecuta siempre sobre la **trayectoria física cruda**:
+
+### 4.1 Métrica Principal — Opción 2 (Estabilización en la Ventana Final $k=20$)
+Examina el comportamiento asintótico en los últimos 20 pasos del episodio ($t \in [T-19, T]$):
+$$\bar{d}_{20} = \frac{1}{20}\sum_{t=T-19}^T d_t, \qquad \bar{v}_{20} = \frac{1}{20}\sum_{t=T-19}^T \|\dot{\boldsymbol{\theta}}_t\|_2$$
+$$\text{is\_success} = \mathbb{I}\left(\bar{d}_{20} \le 0.06\text{ m} \;\wedge\; \bar{v}_{20} \le 0.10\text{ rad/s}\right)$$
+
+### 4.2 Métrica Comparativa — Opción 3 (Costo Acumulado Integral LQR Canónico)
+Calcula el costo integral acumulado en cada paso a partir de la cinemática cruda usando pesos fijos universales:
+$$J_{\text{LQR}} = -\sum_{t=1}^{T} \left(1.0 \cdot d_t^2 + 0.05 \cdot \|\dot{\boldsymbol{\theta}}_t\|_2^2 + 0.01 \cdot \|\mathbf{a}_t\|_2^2\right)$$
+Esta métrica permite comparar rigurosamente en la misma escala física modelos entrenados con `lyapunov_lqr`, modelos entrenados con `distance_only`, y el controlador analítico `C0`.
+
+---
+
+## 5. Agentes y Benchmarking
+
+* **`PPO_1`:** Agente PPO con política Gaussiana continua y ventaja GAE.
+* **`SAC_1`:** Agente Soft Actor-Critic con exploración por máxima entropía y doble crítico Q.
+* **`C0` (Jacobiano Amortiguado DLS):** Controlador cinemático analítico:
+  $$\dot{\boldsymbol{\theta}}_{cmd} = J^T (J J^T + \lambda^2 I)^{-1} \cdot K_p (\mathbf{x}_{tgt} - \mathbf{x}_{ee})$$
+  con $K_p = 3.0$ y amortiguamiento Levenberg-Marquardt $\lambda = 0.01$.
+

@@ -102,9 +102,9 @@ def interactive_render(model_path=None, config_path=None):
     # Resolver ruta de modelo por defecto si no se proporcionó
     if not model_path:
         default_paths = [
-            "models/exp2_smooth_precision/best_model/best_model.zip",
-            "models/exp1_baseline/best_model/best_model.zip",
-            "models/PPO/best_model/best_model.zip"
+            "experiments/phase_X/prueba/PPO_1/seed_42/models/model.zip",
+            "experiments/phase_X/prueba/SAC_1/seed_42/models/model.zip",
+            "experiments/phase_X/smoke/PPO/seed_42/models/model.zip"
         ]
         for p in default_paths:
             if os.path.exists(p):
@@ -179,6 +179,21 @@ def interactive_render(model_path=None, config_path=None):
             action = env.action_space.sample()
 
         obs, reward, terminated, truncated, info = env.step(action)
+
+        # HUD en pantalla (Telemetría continua LQR)
+        if env.screen is not None:
+            try:
+                pygame.font.init()
+                font = pygame.font.SysFont("Consolas", 14)
+                dist_s = font.render(f"Dist:  {info['distance']:.4f} m", True, (240, 240, 240))
+                spd_s = font.render(f"Speed: {info['joint_speed']:.4f} rad/s", True, (240, 240, 240))
+                rew_s = font.render(f"Rew:   {reward:.4f}", True, (46, 204, 113) if reward > -0.1 else (231, 76, 60))
+                env.screen.blit(dist_s, (15, 15))
+                env.screen.blit(spd_s, (15, 35))
+                env.screen.blit(rew_s, (15, 55))
+                pygame.display.flip()
+            except Exception:
+                pass
 
         if (terminated or truncated) and not manual_target:
             obs, info = env.reset()

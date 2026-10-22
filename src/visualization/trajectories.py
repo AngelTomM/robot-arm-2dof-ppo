@@ -1,39 +1,11 @@
 """
-Trayectorias cartesianas reales representativas (Sección 17.3).
+Trayectorias cartesianas representativas para Fase D (MDP Continuo con Regulación LQR).
 
-Simula con los modelos PPO entrenados (acción determinista, VecNormalize
-congelado con training=False y norm_reward=False) los 4 casos canónicos de
-la Sección 9.6: llegada estable, llegada balística, oscilación persistente
-y episodio truncado; genera fig5_representative_real_trajectories.png
-(2x2, 300 dpi).
-
-INSUMOS REQUERIDOS
-==================
-- Datasets finales (src.evaluation.datasets.save_and_get_datasets)
-- experiments/phase_a/X5/seed_42/models/best_model/best_model.zip
-- experiments/phase_a/X5/seed_42/models/best_model/vecnormalize_stats.pkl
-- experiments/phase_a/X1a/seed_42/models/best_model/best_model.zip (opcional)
-- experiments/phase_a/X6_wa05/seed_42/models/best_model/{best_model.zip,
-  vecnormalize_stats.pkl} (opcional)
-
-USO
-===
-python scripts/generate_figures.py --phase trajectories
-python scripts/generate_figures.py --phase trajectories --out-dir reports/figures
-python -m src.visualization.trajectories                # equivalente directo
-
-PARÁMETROS CONFIGURABLES
-========================
-output_dir : directorio de salida (por defecto "reports/figures");
-             también aceptado por ``run(out_dir)`` / ``--out-dir``.
-x5_model_path ... x6_norm_path : rutas de modelos y de estadísticas de
-             normalización (editables en plot_real_examples).
-Casos canónicos y episodios usados: final_dataset[0] (estable, X5),
-final_dataset[5] (balística, X5), final_dataset[10] (truncado, X1a),
-final_dataset[12] (oscilatorio, X6_wa05).
-simulate_trajectory (env_cfg) : fija success_mode="hold",
-target_radius=0.06, velocity_tolerance=0.10, hold_steps=20;
-horizonte de simulación de 200 pasos.
+Simula agentes entrenados (PPO/SAC) bajo evaluación determinista y genera
+fig5_representative_real_trajectories.png visualizando:
+  - Trayectoria completa del efector final.
+  - Ventana de estabilización de los últimos k=20 pasos (destacada).
+  - Zona meta de radio r=0.06m y métricas duales (Opción 2 y Opción 3 J_LQR).
 """
 
 import os
@@ -47,19 +19,19 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, SAC
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from arm2d_env import Arm2DEnv
 from src.evaluation.datasets import save_and_get_datasets
+from src.evaluation.metrics import compute_stabilization_metrics, compute_lqr_canonical_cost
+
 
 def simulate_trajectory(model, norm_stats_path, ep_meta, env_cfg=None):
     merged_cfg = env_cfg.copy() if env_cfg else {}
     if "env" not in merged_cfg:
         merged_cfg["env"] = {}
-    merged_cfg["env"]["success_mode"] = "hold"
-    merged_cfg["env"]["target_radius"] = 0.06
-    merged_cfg["env"]["velocity_tolerance"] = 0.10
-    merged_cfg["env"]["hold_steps"] = 20
+    merged_cfg["env"]["reward_type"] = "lyapunov_lqr"
+    merged_cfg["env"]["success_mode"] = "none"
     merged_cfg["env"]["max_steps"] = 200
 
     env = Arm2DEnv(config=merged_cfg)
@@ -77,6 +49,7 @@ def simulate_trajectory(model, norm_stats_path, ep_meta, env_cfg=None):
     elbow_positions = []
     distances = []
     joint_speeds = []
+    actions = []
 
     for step in range(200):
         elbow, ee = env._forward_kinematics(env.theta1, env.theta2)
@@ -87,6 +60,7 @@ def simulate_trajectory(model, norm_stats_path, ep_meta, env_cfg=None):
 
         policy_obs = norm_wrapper.normalize_obs(obs) if norm_wrapper else obs
         action, _ = model.predict(policy_obs, deterministic=True)
+        actions.append(np.copy(action))
         next_obs, reward, terminated, truncated, info = env.step(action)
         obs = next_obs
 
@@ -97,76 +71,85 @@ def simulate_trajectory(model, norm_stats_path, ep_meta, env_cfg=None):
             break
 
     env.close()
+
+    stab = compute_stabilization_metrics(distances, joint_speeds, k=20)
+    lqr = compute_lqr_canonical_cost(distances, joint_speeds, actions)
+
     return {
         "ee_traj": np.array(ee_positions),
         "elbow_traj": np.array(elbow_positions),
         "target": np.array(env.target),
-        "target_radius": env.target_radius,
+        "target_radius": 0.06,
         "terminated": terminated,
         "truncated": truncated,
-        "is_success": info["is_success"],
+        "is_success": stab["is_success"],
+        "mean_dist_20": stab["mean_dist_last_k"],
+        "mean_vel_20": stab["mean_vel_last_k"],
+        "j_lqr": lqr["j_lqr"],
         "info": info
     }
 
-def plot_real_examples(output_dir: str = "reports/figures"):
+
+def plot_real_examples(output_dir: str = "reports/figures/phase_X"):
     os.makedirs(output_dir, exist_ok=True)
     _, final_dataset = save_and_get_datasets()
 
-    # Cargar modelos representativos
-    # X5 para llegada estable y balística
-    x5_model_path = "experiments/phase_a/X5/seed_42/models/best_model/best_model.zip"
-    x5_norm_path = "experiments/phase_a/X5/seed_42/models/best_model/vecnormalize_stats.pkl"
-    # X1a para truncamiento
-    x1_model_path = "experiments/phase_a/X1a/seed_42/models/best_model/best_model.zip"
-    # X6_wa05 para oscilación
-    x6_model_path = "experiments/phase_a/X6_wa05/seed_42/models/best_model/best_model.zip"
-    x6_norm_path = "experiments/phase_a/X6_wa05/seed_42/models/best_model/vecnormalize_stats.pkl"
-
-    if not os.path.exists(x5_model_path):
-        print(">>> Modelos aún no listos para trazado.")
-        return
-
-    m_x5 = PPO.load(x5_model_path)
-    m_x1 = PPO.load(x1_model_path) if os.path.exists(x1_model_path) else None
-    m_x6 = PPO.load(x6_model_path) if os.path.exists(x6_model_path) else None
-
-    # Simular 4 casos reales
-    # Caso 1: Estable (X5, ep 0)
-    traj_stable = simulate_trajectory(m_x5, x5_norm_path, final_dataset[0])
-    # Caso 2: Balística (X5, ep 5)
-    traj_ballistic = simulate_trajectory(m_x5, x5_norm_path, final_dataset[5])
-    # Caso 3: Truncado (X1a, ep 10)
-    traj_trunc = simulate_trajectory(m_x1, None, final_dataset[10]) if m_x1 else traj_stable
-    # Caso 4: Oscilatorio (X6_wa05, ep 12)
-    traj_osc = simulate_trajectory(m_x6, x6_norm_path, final_dataset[12]) if m_x6 else traj_stable
-
-    fig, axes = plt.subplots(2, 2, figsize=(12, 12), dpi=300)
-    cases = [
-        (axes[0, 0], traj_stable, "1. Llegada Estable (Éxito + Hold Completo)", "#2ecc71"),
-        (axes[0, 1], traj_ballistic, "2. Llegada Balística (Entrada Rápida v > 0.3 rad/s)", "#e74c3c"),
-        (axes[1, 0], traj_osc, "3. Oscilación Persistente (Sobrepaso múltiple)", "#f39c12"),
-        (axes[1, 1], traj_trunc, "4. Episodio Truncado (Sin Estabilización en 200p)", "#7f8c8d")
+    # Buscar modelos disponibles en orden de prioridad
+    candidate_paths = [
+        ("PPO_1", "experiments/phase_X/prueba/PPO_1/seed_42/models/best_model/best_model.zip",
+         "experiments/phase_X/prueba/PPO_1/seed_42/models/best_model/vecnormalize_stats.pkl"),
+        ("SAC_1", "experiments/phase_X/prueba/SAC_1/seed_42/models/best_model/best_model.zip",
+         None),
     ]
 
-    for ax, data, title, color in cases:
-        # Espacio de trabajo
+    selected_model = None
+    selected_norm = None
+    for label, m_path, n_path in candidate_paths:
+        if os.path.exists(m_path):
+            try:
+                selected_model = PPO.load(m_path)
+            except Exception:
+                selected_model = SAC.load(m_path)
+            selected_norm = n_path if (n_path and os.path.exists(n_path)) else None
+            print(f">>> [TRAJECTORIES] Usando modelo {label} desde {m_path}")
+            break
+
+    if selected_model is None:
+        print(">>> [TRAJECTORIES] Modelos Phase D aún no listos para trazado.")
+        return
+
+    # Simular 4 episodios representativos
+    ep_indices = [0, 5, 10, 15]
+    trajs = []
+    for idx in ep_indices:
+        t = simulate_trajectory(selected_model, selected_norm, final_dataset[idx])
+        trajs.append(t)
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 12), dpi=300)
+    flat_axes = axes.flatten()
+
+    for ax, data, ep_idx in zip(flat_axes, trajs, ep_indices):
         circle_reach = patches.Circle((0, 0), 2.0, color="#ecf0f1", fill=True, zorder=0)
         ax.add_patch(circle_reach)
         ax.plot([0], [0], "ko", markersize=8, label="Base (0,0)")
 
-        # Target y Tolerancia
         tgt = data["target"]
         tgt_circle = patches.Circle((tgt[0], tgt[1]), data["target_radius"], color="#27ae60", alpha=0.3, zorder=1)
         ax.add_patch(tgt_circle)
         ax.plot(tgt[0], tgt[1], "g*", markersize=12, label=f"Meta (r={data['target_radius']}m)")
 
-        # Trayectoria efector final
         ee_tr = data["ee_traj"]
-        ax.plot(ee_tr[:, 0], ee_tr[:, 1], "-", color=color, linewidth=2.5, label="Trayectoria Efector", zorder=3)
-        ax.plot(ee_tr[0, 0], ee_tr[0, 1], "o", color="#34495e", markersize=8, label="Inicio Efector")
-        ax.plot(ee_tr[-1, 0], ee_tr[-1, 1], "s", color=color, markersize=8, label="Fin Efector")
+        # Trayectoria general (pasos iniciales)
+        k_stab = min(20, len(ee_tr))
+        if len(ee_tr) > k_stab:
+            ax.plot(ee_tr[:-k_stab, 0], ee_tr[:-k_stab, 1], "-", color="#2980b9", linewidth=2.0, alpha=0.6, label="Aproximación")
+        # Ventana de estabilización k=20 pasos finales destacada
+        ax.plot(ee_tr[-k_stab:, 0], ee_tr[-k_stab:, 1], "-", color="#e74c3c" if not data["is_success"] else "#27ae60",
+                linewidth=3.2, label=f"Últimos {k_stab} pasos (Estabilización)", zorder=4)
 
-        # Brazo en posición final
+        ax.plot(ee_tr[0, 0], ee_tr[0, 1], "o", color="#34495e", markersize=8, label="Inicio Efector")
+        ax.plot(ee_tr[-1, 0], ee_tr[-1, 1], "s", color="#2c3e50", markersize=8, label="Fin Efector")
+
         if len(ee_tr) > 0 and len(data["elbow_traj"]) > 0:
             elbow_fin = data["elbow_traj"][-1]
             ee_fin = ee_tr[-1]
@@ -174,25 +157,28 @@ def plot_real_examples(output_dir: str = "reports/figures"):
             ax.plot([elbow_fin[0], ee_fin[0]], [elbow_fin[1], ee_fin[1]], color="#f39c12", linewidth=3, alpha=0.7)
             ax.plot(elbow_fin[0], elbow_fin[1], "o", color="#2c3e50", markersize=6)
 
+        status_str = "ÉXITO" if data["is_success"] else "NO ESTABILIZADO"
+        title = f"Episodio {ep_idx} ({status_str})\n" \
+                f"d_20={data['mean_dist_20']*100:.1f}cm, v_20={data['mean_vel_20']:.2f}rad/s, J_LQR={data['j_lqr']:.1f}"
+
         ax.set_xlim(-2.2, 2.2)
         ax.set_ylim(-2.2, 2.2)
         ax.set_aspect("equal")
-        ax.set_title(title, fontsize=11, fontweight="bold")
-        ax.legend(loc="upper right", fontsize=8)
+        ax.set_title(title, fontsize=10, fontweight="bold")
+        ax.legend(loc="upper right", fontsize=7)
 
     plt.tight_layout()
-    fig.savefig(os.path.join(output_dir, "fig5_representative_real_trajectories.png"))
+    fig_path = os.path.join(output_dir, "figX_representative_real_trajectories.png")
+    fig.savefig(fig_path)
     plt.close(fig)
-    print(">>> [OK] Figuras de trayectorias representativas generadas.")
+    print(f">>> [OK] Figuras de trayectorias representativas guardadas en: {fig_path}")
+
 
 def run(out_dir=None):
-    """
-    Punto de entrada del módulo (requiere modelos PPO entrenados).
-
-    out_dir : ``None`` (por defecto "reports/figures") o ruta de salida.
-    """
-    plot_real_examples(out_dir if out_dir is not None else "reports/figures")
+    """Punto de entrada del módulo."""
+    plot_real_examples(out_dir if out_dir is not None else "reports/figures/phase_X")
 
 
 if __name__ == "__main__":
     run()
+

@@ -92,12 +92,8 @@ except Exception:
     event_accumulator = None
     _HAS_TB = False
 
-# Columnas de recompensa por componentes que produce el evaluador formal;
-# su suma es la recompensa TOTAL por episodio (recompensas individuales).
-_REWARD_COMPONENT_COLS = [
-    "reward_distance_sum", "reward_near_sum", "reward_action_sum",
-    "reward_velocity_sum", "reward_smoothness_sum", "reward_success_sum",
-]
+# Columnas de costo LQR y recompensas
+_REWARD_COMPONENT_COLS = ["lqr_j_pos", "lqr_j_vel", "lqr_j_ctrl"]
 
 
 # ---------------------------------------------------------------------------
@@ -300,24 +296,21 @@ def _evaluate_checkpoints(agents: dict, data_dir: Path, refresh: bool = False):
             step = extract_step_from_dirname(c_dir.name)
             summ, episodes_df = evaluate_single_checkpoint(
                 c_dir, val_dataset, info["cfg"], dataset_name="validation",
-                algo_hint=info["algo"], schema="b")
-            n_comp = [c for c in _REWARD_COMPONENT_COLS if c in episodes_df.columns]
-            mean_tot_reward = (float(episodes_df[n_comp].sum(axis=1).mean())
-                               if n_comp else float("nan"))
+                algo_hint=info["algo"], schema="d")
+            j_lqr = float(summ.get("mean_j_lqr", np.nan))
             rows.append({
                 "experiment": label, "algorithm": info["algo"], "seed": info["seed"],
                 "step": step, "checkpoint_dir": str(Path.cwd() / c_dir),
                 "n_episodes": int(summ["total_episodes"]),
-                "strict_success_rate": summ["strict_success_rate"],
+                "success_rate": summ["success_rate"],
                 "ci_low": summ["ci_low"], "ci_high": summ["ci_high"],
-                "mean_total_reward": mean_tot_reward,
-                "truncation_rate": summ["truncation_rate"],
-                "ballistic_rate": summ["ballistic_rate"],
-                "oscillatory_rate": summ["oscillatory_rate"],
+                "mean_dist_last_20": summ.get("mean_dist_last_20", np.nan),
+                "mean_vel_last_20": summ.get("mean_vel_last_20", np.nan),
+                "mean_j_lqr": j_lqr,
                 "has_vecnormalize": bool(summ["has_vecnormalize"]),
             })
-            print(f"    paso {step:>7,} | éxito={summ['strict_success_rate']*100:5.1f}% "
-                  f"| recompensa media={mean_tot_reward:8.2f}")
+            print(f"    paso {step:>7,} | éxito Op2={summ['success_rate']*100:5.1f}% "
+                  f"| J_LQR={j_lqr:8.2f}")
     df = pd.DataFrame(rows)
     if not df.empty:
         data_dir.mkdir(parents=True, exist_ok=True)
@@ -327,7 +320,7 @@ def _evaluate_checkpoints(agents: dict, data_dir: Path, refresh: bool = False):
 
 
 def _fig_checkpoints(ckpt_df: pd.DataFrame, agents: dict, colors: dict, out_dir: Path):
-    """Fig 5: éxito estricto por checkpoint (formal) con mejor marcado."""
+    """Fig 5: éxito Opción 2 y costo LQR canónico Opción 3 por checkpoint."""
     fig, ax = plt.subplots(figsize=(9.5, 5.5), dpi=300)
     best_by_success = {}
     for label in agents:
@@ -335,38 +328,39 @@ def _fig_checkpoints(ckpt_df: pd.DataFrame, agents: dict, colors: dict, out_dir:
         if g.empty:
             continue
         c = colors[label]
-        y = g["strict_success_rate"]
+        y = g["success_rate"]
         err_low, err_high = (y - g["ci_low"]).abs(), (g["ci_high"] - y).abs()
         ax.errorbar(g["step"], y, yerr=[err_low, err_high], marker="o", markersize=5,
                     color=c, linewidth=1.6, capsize=3, label=f"{label} ({agents[label]['algo']})")
-        x_best = g.loc[g["strict_success_rate"].idxmax()]
+        x_best = g.loc[g["success_rate"].idxmax()]
         best_by_success[label] = {
             "step": int(x_best["step"]),
-            "success_rate": float(x_best["strict_success_rate"]),
+            "success_rate": float(x_best["success_rate"]),
             "checkpoint_dir": str(x_best["checkpoint_dir"]),
         }
-        ax.scatter([x_best["step"]], [x_best["strict_success_rate"]], color=c,
+        ax.scatter([x_best["step"]], [x_best["success_rate"]], color=c,
                    marker="*", s=380, zorder=5, edgecolor="black", linewidths=0.7,
                    label=f"mejor {label} por éxito: ckpt_{int(x_best['step']):,}")
-    # eje secundario: recompensa media por checkpoint (línea tenue)
+    # eje secundario: costo integral J_LQR por checkpoint (línea tenue)
     ax2 = ax.twinx()
     for label in agents:
         g = ckpt_df[ckpt_df["experiment"] == label].sort_values("step")
-        if not g.empty:
-            ax2.plot(g["step"], g["mean_total_reward"], linestyle="--", color=colors[label],
+        if not g.empty and "mean_j_lqr" in g:
+            ax2.plot(g["step"], g["mean_j_lqr"], linestyle="--", color=colors[label],
                      alpha=0.45, linewidth=1.2, marker=".", markersize=4)
-    ax2.set_ylabel("Recompensa media por episodio (eval. formal)", color="#777777")
+    ax2.set_ylabel("Costo acumulado canónico J_LQR (Opción 3)", color="#777777")
     ax2.tick_params(axis="y", colors="#777777")
     ax.set_xlabel("Timestep del checkpoint")
-    ax.set_ylabel("Tasa de éxito estricta (hold) ± IC Wilson 95%")
-    ax.set_title("Selección de checkpoint: éxito estricto formal (dataset n=200)")
+    ax.set_ylabel("Tasa de éxito Opción 2 (Estabilización k=20) ± IC Wilson 95%")
+    ax.set_title("Selección de checkpoint: Estabilización k=20 (Opción 2) y Costo LQR (Opción 3)")
     ax.legend(fontsize=8, loc="lower right")
     common.save_fig_with_metadata(
         fig, out_dir / "figX_05_checkpoint_success_curve.png",
-        description="Éxito estricto y recompensa media por checkpoint (líneas "
-                    "punteadas = recompensa en eje secundario; estrella = mejor por éxito).",
+        description="Éxito de estabilización (Opción 2) y costo integral J_LQR (Opción 3) "
+                    "por checkpoint (líneas punteadas = J_LQR en eje secundario; estrella = mejor por éxito).",
         phase="X")
     return best_by_success
+
 
 
 # ---------------------------------------------------------------------------
