@@ -63,14 +63,50 @@ def make_env_fn(cfg: dict, rank: int, base_seed: int):
     return _init
 
 
-def parse_net_arch(spec: str, default_activation=nn.ReLU) -> dict:
+def parse_net_arch(spec, default_activation=nn.ReLU) -> dict:
     """
-    Convierte especificaciones tipo '256x256_relu' o '64x64_tanh' en policy_kwargs.
+    Construye el diccionario 'policy_kwargs' para SB3 (MlpPolicy).
+    Soporta diccionario estructurado (layers, hidden_activation) o formato legado tipo '256x256_relu'.
+
+    Nota sobre la salida: La capa final no se modifica porque está fijada por el diseño matemático
+    del algoritmo en SB3 (lineal/Identity en PPO para parametrizar la media gaussiana; tanh en SAC
+    mediante TanhSquashedDistribution para acotar la acción continua a [-1, 1]).
+    Modificarla externamente resulta contraproducente.
     """
-    spec = str(spec or "256x256_relu").strip().lower()
-    match = re.match(r"^(\d+)x(\d+)", spec)
+    ACTIVATION_MAP = {
+        "relu": nn.ReLU,
+        "tanh": nn.Tanh,
+        "elu": nn.ELU,
+        "leaky_relu": nn.LeakyReLU,
+        "gelu": nn.GELU,
+        "selu": nn.SELU,
+        "sigmoid": nn.Sigmoid,
+        "silu": nn.SiLU,
+        "swish": nn.SiLU,
+        "identity": nn.Identity,
+        "linear": nn.Identity,
+        "none": nn.Identity,
+    }
+
+    if isinstance(spec, dict):
+        layers = spec.get("layers", [256, 256])
+        if not isinstance(layers, list) or not all(isinstance(x, int) and x > 0 for x in layers):
+            layers = [256, 256]
+
+        act_name = str(spec.get("hidden_activation", "relu")).strip().lower()
+        activation_fn = ACTIVATION_MAP.get(act_name, default_activation)
+
+        policy_kwargs = {
+            "net_arch": layers,
+            "activation_fn": activation_fn,
+        }
+        return policy_kwargs
+
+    # Compatibilidad hacia atrás con especificaciones tipo cadena (ej. '256x256_relu')
+    spec_str = str(spec or "256x256_relu").strip().lower()
+    match = re.match(r"^(\d+)x(\d+)", spec_str)
     sizes = [int(match.group(1)), int(match.group(2))] if match else [256, 256]
-    activation = nn.Tanh if "tanh" in spec else default_activation
+    activation = nn.Tanh if "tanh" in spec_str else default_activation
     return {"net_arch": sizes, "activation_fn": activation}
 
 

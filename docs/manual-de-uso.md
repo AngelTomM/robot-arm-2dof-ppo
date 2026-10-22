@@ -55,7 +55,26 @@ python train.py --config <ruta_del_yaml> [--seed <n>] [--device <s>] [--total_ti
 | `--total_timesteps` | del YAML | Sustituye el presupuesto de pasos de `training.total_timesteps`. |
 | `--checkpoint_freq` | del YAML | Sustituye la frecuencia de guardado de `training.checkpoint_freq`. |
 
-### 2.3 Derivación de la fase (SSOT)
+### 2.3 Configuración de la Red Neuronal (`net_arch`)
+
+Bajo la sección del algoritmo (`ppo:` o `sac:`), la arquitectura de la red puede definirse de dos formas:
+
+1. **Estructura detallada (recomendada):**
+   ```yaml
+   net_arch:
+     layers: [256, 256, 128]      # Lista de neuronas por capa oculta
+     hidden_activation: relu       # Función de activación de capas ocultas
+   ```
+   Funciones de activación soportadas: `relu`, `tanh`, `elu`, `leaky_relu`, `gelu`, `selu`, `sigmoid`, `silu` (o `swish`), `identity` (o `linear`).
+
+   *Nota sobre la activación de salida:* No se parametriza en el YAML porque está determinada por la formulación de cada algoritmo en Stable-Baselines3. En PPO, la salida es lineal (`Identity`) para parametrizar la media de la distribución gaussiana no acotada; en SAC, se aplica una transformación `tanh` integrada (`TanhSquashedDistribution`) para acotar la acción continua al rango $[-1, 1]$. Modificar estas capas finales resulta contraproducente.
+
+2. **Formato resumido (heredado):**
+   ```yaml
+   net_arch: 256x256_relu   # o 64x64_tanh
+   ```
+
+### 2.4 Derivación de la fase (SSOT)
 
 | Ruta del config | Fase derivada | Directorio de salida |
 | :--- | :---: | :--- |
@@ -66,7 +85,7 @@ python train.py --config <ruta_del_yaml> [--seed <n>] [--device <s>] [--total_ti
 
 De forma genérica: la fase es la ruta del config relativa a `configs/` aplanada con `_`, y la salida se escribe en `experiments/<fase>/<exp_id>/seed_<n>/`.
 
-### 2.4 Ejemplos por fase
+### 2.5 Ejemplos por fase
 
 ```powershell
 # Fase A — diagnóstico (PPO, 300.000 pasos)
@@ -82,7 +101,7 @@ python train.py --config configs/phase_b/extension/X4.yaml --seed 42
 python train.py --config configs/phase_c/S1.yaml --seed 42
 ```
 
-### 2.5 Artefactos de salida
+### 2.6 Artefactos de salida
 
 Cada ejecución escribe exclusivamente en `experiments/<fase>/<exp_id>/seed_<n>/`:
 
@@ -96,7 +115,7 @@ Cada ejecución escribe exclusivamente en `experiments/<fase>/<exp_id>/seed_<n>/
 | `experiment_meta.json` | Metadatos: config fuente, fase, algoritmo, semilla, dispositivo, y parámetros completos. |
 | `train_metrics.json` | Tiempo de entrenamiento, rendimiento medio (FPS) y pasos de los checkpoints guardados. |
 
-### 2.6 Callbacks y telemetría
+### 2.7 Callbacks y telemetría
 
 - `PhaseATrainingCallback`: registra en TensorBoard la tasa de éxito y la longitud de permanencia (*hold*) en ventanas de 100 episodios.
 - `PhaseAEvalCallback`: evaluación periódica en línea (activa únicamente si el YAML define `training.eval_freq > 0`), con sincronización de las estadísticas de `VecNormalize` al entorno de evaluación en modo inferencia.

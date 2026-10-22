@@ -70,6 +70,12 @@ class Arm2DEnv(gym.Env):
         self.w_a = float(reward_params.get("w_a", 0.0))
         self.r_near_mode = str(reward_params.get("r_near_mode", "historical")) # "historical", "none", "non_positive"
 
+        # Parámetros de Estabilización Asintótica Cuadrática Continua (Lyapunov / LQR)
+        # Formulación tipo MDP completamente observable: V(x) cuadrático sobre error cartesiano, velocidad y esfuerzo
+        self.w_pos = float(reward_params.get("w_pos", 1.0))          # Ponderador de error de posición cartesiano
+        self.w_vel = float(reward_params.get("w_vel", 0.05))         # Ponderador de energía cinética / velocidad articular
+        self.w_ctrl = float(reward_params.get("w_ctrl", 0.01))       # Ponderador de esfuerzo de control u^T R u
+
         # --- 2. Espacio de Acciones [-1.0, 1.0] ---
         self.action_space = spaces.Box(
             low=-1.0,
@@ -325,6 +331,15 @@ class Arm2DEnv(gym.Env):
 
         elif self.reward_type == "energy_efficient":
             reward_action = -0.1 * float(np.sum(np.square(action)))
+
+        elif self.reward_type == "lyapunov_lqr":
+            # Recompensa continua estacionaria basada en teoría de control óptimo / función candidata de Lyapunov
+            # V(s, a) = e^T Q e + q_dot^T M q_dot + u^T R u (función de costo cuadrática continua)
+            # Como recompensa r(s, a) = -V(s, a), compatible estrictamente con un proceso de decisión de Markov (MDP)
+            # sin memoria oculta, sin discontinuidades de zona ni contadores de tiempo (hold).
+            reward_dist = -self.w_pos * (distance ** 2)
+            reward_vel = -self.w_vel * (joint_speed ** 2)
+            reward_action = -self.w_ctrl * float(np.sum(np.square(action)))
 
         # Penalización Gaussiana de Velocidad (X5)
         if self.w_v > 0.0:
