@@ -28,7 +28,15 @@ def evaluate_on_dataset(agent, dataset: list, dataset_name: str,
       2. Métrica Comparativa: Costo acumulado canónico LQR (Opción 3).
     Retorna (episodes_df, aggregate_metrics).
     """
-    merged_cfg = env_config.copy() if env_config else {}
+    if env_config is None:
+        try:
+            from src.utils.config import load_env_config
+            merged_cfg = load_env_config()
+        except Exception:
+            merged_cfg = {"env": {}}
+    else:
+        merged_cfg = env_config.copy()
+
     if "env" not in merged_cfg:
         merged_cfg["env"] = {}
 

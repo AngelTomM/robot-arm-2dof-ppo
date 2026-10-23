@@ -1,0 +1,39 @@
+# ==============================================================================
+# CONFIGURACIÓN DEL AGENTE: PPO_1 (Fase D)
+# ==============================================================================
+experiment:
+  description: PPO con recompensa continua cuadratica (Lyapunov/LQR) y horizonte fijo sin hold (MDP)
+  phase: phase_D
+
+# Referencia al entorno físico común
+env_config: configs/environment.yaml
+
+# Preprocesamiento y normalización
+normalization:
+  norm_obs: true
+  norm_reward: false
+  clip_obs: 10.0
+
+# Hiperparámetros del algoritmo PPO
+ppo:
+  learning_rate: 0.00015
+  n_steps: 2048
+  batch_size: 64
+  n_epochs: 10
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.002
+  max_grad_norm: 0.5
+  num_envs: 4
+
+  net_arch:
+    layers: [256, 256, 128]
+    hidden_activation: relu
+
+# Parámetros del proceso de entrenamiento
+training:
+  total_timesteps: 300000
+  checkpoint_freq: 50000
+  eval_freq: 5000
+  n_eval_episodes: 15

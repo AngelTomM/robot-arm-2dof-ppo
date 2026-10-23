@@ -1,0 +1,29 @@
+# ==============================================================================
+# CONFIGURACIÓN UNIFICADA DEL ENTORNO FÍSICO Y MDP (FASE D)
+# ==============================================================================
+# Parámetros físicos, cinemáticos y de recompensa invariantes durante la evaluación
+# comparativa de agentes de RL (PPO, SAC) y controladores analíticos (Jacobiano C0).
+
+env:
+  # Parámetros cinemáticos y geométricos de los eslabones
+  l1: 1.0
+  l2: 1.0
+
+  # Restricciones mecánicas y dinámicas
+  joint2_limit_deg: 170.0  # Límite angular en articulación 2 (|theta2| <= 170.0 deg)
+  max_speed: 1.5           # Velocidad angular máxima permitida (|dtheta| <= 1.5 rad/s)
+  target_radius: 0.06      # Radio de la zona objetivo (m)
+  max_steps: 200           # Límite de pasos temporales por episodio
+  dt: 0.05                 # Período de muestreo / integración de Euler (s)
+
+  # Formulación MDP continuo
+  success_mode: none       # MDP puro de horizonte fijo sin terminación anticipada
+  reward_type: lyapunov_lqr
+
+  # Ponderaciones de la función de recompensa continua (Lyapunov / LQR)
+  reward_params:
+    w_pos: 1.0             # Ponderación del error cartesiano ||p_target - p_ee||^2
+    w_vel: 0.05            # Ponderación de disipación de energía cinética ||q_dot||^2
+    w_ctrl: 0.01           # Ponderación de esfuerzo de control ||u||^2
+    w_v: 0.0               # Penalización gaussiana de velocidad desactivada
+    w_a: 0.0               # Penalización por cambio de acción desactivada

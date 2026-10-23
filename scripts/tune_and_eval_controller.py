@@ -15,12 +15,17 @@ import pandas as pd
 from src.controllers.jacobian_controller import JacobianDampedController
 from src.evaluation.datasets import save_and_get_datasets
 from src.evaluation.evaluator import evaluate_on_dataset
+from src.utils.config import load_env_config
 
 
 def main():
     print("=" * 80)
     print(" AJUSTE Y EVALUACIÓN DEL CONTROLADOR CINEMÁTICO JACOBIANO (C0) - FASE D")
     print("=" * 80)
+
+    env_cfg = load_env_config()
+    print(f">>> [ENTORNO] Configuración común cargada desde: {env_cfg.get('env_config_resolved')}")
+    print(f">>> [ENTORNO] max_speed: {env_cfg['env'].get('max_speed')} rad/s | joint2_limit: {env_cfg['env'].get('joint2_limit_deg')} deg")
 
     val_dataset, final_dataset = save_and_get_datasets()
 
@@ -38,8 +43,8 @@ def main():
     print("\n>>> [1/2] Iniciando barrido de hiperparámetros sobre VALIDACIÓN (200 episodios)...")
     for kp in kp_candidates:
         for lmb in lambda_candidates:
-            ctrl = JacobianDampedController(kp=kp, lambda_damping=lmb, max_speed=2.0)
-            df_val, metrics = evaluate_on_dataset(ctrl, val_dataset, dataset_name="validation")
+            ctrl = JacobianDampedController(kp=kp, lambda_damping=lmb, env_config=env_cfg)
+            df_val, metrics = evaluate_on_dataset(ctrl, val_dataset, dataset_name="validation", env_config=env_cfg)
 
             succ_rate = metrics["success_rate"]
             j_lqr = metrics["j_lqr_mean"]
@@ -86,8 +91,8 @@ def main():
 
     # 2. Evaluación Final con Parámetros Congelados sobre el Conjunto FINAL (300 episodios)
     print("\n>>> [2/2] Evaluando C0 congelado sobre el conjunto FINAL (300 episodios)...")
-    final_ctrl = JacobianDampedController(kp=chosen_kp, lambda_damping=chosen_lmb, max_speed=2.0)
-    df_final, final_metrics = evaluate_on_dataset(final_ctrl, final_dataset, dataset_name="final")
+    final_ctrl = JacobianDampedController(kp=chosen_kp, lambda_damping=chosen_lmb, env_config=env_cfg)
+    df_final, final_metrics = evaluate_on_dataset(final_ctrl, final_dataset, dataset_name="final", env_config=env_cfg)
 
     df_final.insert(0, "experiment_id", "C0")
     df_final.insert(1, "kp", chosen_kp)

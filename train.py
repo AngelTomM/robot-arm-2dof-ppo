@@ -39,6 +39,7 @@ if str(REPO_ROOT) not in sys.path:
 from arm2d_env import Arm2DEnv  # noqa: E402
 from src.training.callbacks import LQRMetricsCallback, VecNormalizeSyncEvalCallback  # noqa: E402
 from src.training.phase_b_callbacks import PhaseBCheckpointCallback  # noqa: E402
+from src.utils.config import load_config  # noqa: E402
 
 
 # ----------------------------------------------------------------------------
@@ -298,7 +299,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="Entrenamiento unificado PPO/SAC (Brazo Robótico 2 DOF)")
     parser.add_argument("--config", type=str, required=True,
-                        help="Ruta al YAML del experimento (p. ej. configs/phase_b/X3.yaml)")
+                        help="Ruta al YAML del experimento (p. ej. configs/phase_D/prueba/PPO_1.yaml)")
+    parser.add_argument("--env-config", type=str, default=None,
+                        help="Ruta opcional al YAML del entorno común (sobreescribe la referencia en el agente)")
     parser.add_argument("--seed", type=int, default=42, help="Semilla aleatoria")
     parser.add_argument("--device", type=str, default="auto",
                         help="Dispositivo de cómputo: auto, cpu, cuda, ...")
@@ -312,8 +315,7 @@ def main():
     if not config_path.is_file():
         parser.error(f"No existe el archivo de configuración: {config_path}")
 
-    with open(config_path, "r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
+    cfg = load_config(config_path, env_config_path=args.env_config)
 
     run_training(cfg, config_path, seed=args.seed, device=args.device,
                  total_timesteps_override=args.total_timesteps,

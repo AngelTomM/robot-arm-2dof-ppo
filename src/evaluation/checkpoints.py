@@ -26,6 +26,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from src.evaluation.evaluator import evaluate_on_dataset
 from src.evaluation.metrics import wilson_score_interval
 from src.controllers.jacobian_controller import JacobianDampedController
+from src.utils.config import load_config, load_env_config
 
 
 def extract_step_from_dirname(dir_name: str) -> int:
@@ -149,12 +150,19 @@ def evaluate_single_checkpoint(ckpt_dir: Path, val_dataset: list, env_cfg: dict 
     return summary, episodes_df
 
 
-def evaluate_c0_controller(val_dataset: list, env_cfg: dict = None, max_speed: float = 1.5,
+def evaluate_c0_controller(val_dataset: list, env_cfg: dict = None, max_speed: float = None,
                            label: str = "v1.5", dataset_name: str = "validation") -> tuple:
     """
     Evalúa el controlador cinemático analítico C0 bajo las métricas duales canónicas.
     """
-    c0 = JacobianDampedController(kp=3.0, lambda_damping=0.01, max_speed=max_speed)
+    if env_cfg is None:
+        try:
+            env_cfg = load_env_config()
+        except Exception:
+            env_cfg = {"env": {}}
+
+    speed = max_speed if max_speed is not None else float(env_cfg.get("env", {}).get("max_speed", 1.5))
+    c0 = JacobianDampedController(kp=3.0, lambda_damping=0.01, max_speed=speed, env_config=env_cfg)
     episodes_df, _ = evaluate_on_dataset(
         agent=c0,
         dataset=val_dataset,
@@ -177,10 +185,13 @@ def evaluate_experiment_checkpoints(exp_dir: Path, cfg_path: Path = None, output
     """
     Evalúa todos los checkpoints ordenados por timesteps para una corrida.
     """
-    env_cfg = None
     if cfg_path and Path(cfg_path).exists():
-        with open(cfg_path, "r", encoding="utf-8") as f:
-            env_cfg = yaml.safe_load(f)
+        env_cfg = load_config(cfg_path)
+    else:
+        try:
+            env_cfg = load_env_config()
+        except Exception:
+            env_cfg = {"env": {}}
 
     if dataset_path and Path(dataset_path).exists():
         with open(dataset_path, "r", encoding="utf-8") as f:

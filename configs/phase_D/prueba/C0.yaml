@@ -1,0 +1,16 @@
+# ==============================================================================
+# CONFIGURACIÓN DEL AGENTE: Controlador Cinemático Jacobiano (C0) (Fase D)
+# ==============================================================================
+experiment:
+  description: Controlador cinemático diferencial con pseudoinversa amortiguada del Jacobiano (C0)
+  phase: phase_D
+
+# Referencia al entorno físico común
+env_config: configs/environment.yaml
+
+# Hiperparámetros del controlador cinemático C0
+controller:
+  name: C0
+  type: jacobian_damped
+  kp: 3.0
+  lambda_damping: 0.01
