@@ -63,13 +63,15 @@ def load_rl_agent(model_path: Path) -> Tuple[Any, Optional[Path]]:
 def run_evaluation(agent_type: str,
                    model_path: Optional[str] = None,
                    vec_norm_path: Optional[str] = None,
+                   label: Optional[str] = None,
                    kp: float = 50.0,
                    kd: float = 0.05,
                    lambda_damping: float = 0.01,
                    dataset_path: Optional[str] = None,
                    env_config_path: Optional[str] = None,
                    output_dir: str = "reports/data/evaluation",
-                   eval_mode: str = "deterministic") -> Tuple[pd.DataFrame, Dict[str, Any]]:
+                   eval_mode: str = "deterministic",
+                   generate_plots: bool = False) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """Ejecuta la evaluación agnóstica para un agente o controlador sobre el dataset de prueba."""
     env_cfg = load_env_config(env_config_path)
 
@@ -85,16 +87,22 @@ def run_evaluation(agent_type: str,
 
     # 2. Configurar agente a evaluar
     if agent_type.lower() == "c0":
-        agent_label = "C0"
+        agent_label = label or "C0"
         agent = JacobianDampedController(kp=kp, kd=kd, lambda_damping=lambda_damping, env_config=env_cfg)
         norm_file = None
     else:
         if not model_path:
             raise ValueError("Se requiere --model-path para evaluar modelos de RL.")
         m_path = Path(model_path)
-        agent_label = m_path.stem
+        if label:
+            agent_label = label
+        elif m_path.stem in ["best_model", "model"] and len(m_path.resolve().parents) >= 4:
+            agent_label = m_path.resolve().parents[3].name
+        else:
+            agent_label = m_path.stem
         agent, auto_norm = load_rl_agent(m_path)
         norm_file = Path(vec_norm_path) if vec_norm_path else auto_norm
+
 
     print(f"\n{'='*75}")
     print(f" EVALUACIÓN MECATRÓNICA: {agent_label} ({eval_mode.upper()})")
@@ -104,7 +112,7 @@ def run_evaluation(agent_type: str,
     print(f"{'='*75}\n")
 
     # 3. Ejecutar protocolo de evaluación
-    episodes_df, summary = evaluate_on_dataset(
+    eval_res = evaluate_on_dataset(
         agent=agent,
         dataset=dataset,
         dataset_name=ds_name,
@@ -112,16 +120,29 @@ def run_evaluation(agent_type: str,
         env_config=env_cfg,
         vec_normalize_path=str(norm_file) if norm_file else None
     )
+    if len(eval_res) == 3:
+        episodes_df, summary, trajectories_df = eval_res
+    else:
+        episodes_df, summary = eval_res
+        trajectories_df = None
 
-    # 4. Guardar resultados estructurados
+    # 4. Guardar resultados estructurados en carpeta exclusiva por modelo
     out_dir_path = REPO_ROOT / output_dir
-    out_dir_path.mkdir(parents=True, exist_ok=True)
+    model_data_dir = out_dir_path / agent_label
+    model_data_dir.mkdir(parents=True, exist_ok=True)
 
-    csv_path = out_dir_path / f"{agent_label}_episodes.csv"
-    json_path = out_dir_path / f"{agent_label}_summary.json"
+    csv_path = model_data_dir / "episodes.csv"
+    json_path = model_data_dir / "summary.json"
+    legacy_csv = out_dir_path / f"{agent_label}_episodes.csv"
+    legacy_json = out_dir_path / f"{agent_label}_summary.json"
 
     episodes_df.insert(0, "agent", agent_label)
     episodes_df.to_csv(csv_path, index=False)
+    episodes_df.to_csv(legacy_csv, index=False)
+
+    if trajectories_df is not None and not trajectories_df.empty:
+        trajectories_df.insert(0, "agent", agent_label)
+        trajectories_df.to_csv(model_data_dir / "sample_trajectories.csv", index=False)
 
     summary_out = {
         "agent": agent_label,
@@ -130,6 +151,8 @@ def run_evaluation(agent_type: str,
         "metrics": summary
     }
     with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(summary_out, f, indent=2)
+    with open(legacy_json, "w", encoding="utf-8") as f:
         json.dump(summary_out, f, indent=2)
 
     # 5. Salida por consola
@@ -140,10 +163,20 @@ def run_evaluation(agent_type: str,
     print(f"  • Tiempo Establecimiento t_s:  {summary.get('t_s_mean', 0.0):.3f} s")
     print(f"  • Esfuerzo de Control J_u:     {summary.get('j_u_mean', 0.0):.4f}")
     print(f"  • Costo LQR Canónico J_lqr:    {summary.get('j_lqr_mean', 0.0):.2f} (std: {summary.get('j_lqr_std', 0.0):.2f})")
-    print(f">>> Episodios detallados guardados en: {csv_path}")
-    print(f">>> Resumen agregado guardado en:      {json_path}\n")
+    print(f">>> Directorio de datos del modelo: {model_data_dir}")
+
+    # 6. Generación opcional de figuras
+    if generate_plots:
+        try:
+            from plot import generate_all_plots
+            fig_dir = REPO_ROOT / "reports/figures"
+            generate_all_plots(data_dir=out_dir_path, out_dir=fig_dir, specific_model=agent_label)
+            print(f">>> [PLOTS] Figuras actualizadas en: {fig_dir / agent_label}\n")
+        except Exception as e:
+            print(f">>> [AVISO] No fue posible generar automáticamente las figuras: {e}\n")
 
     return episodes_df, summary_out
+
 
 
 def main() -> None:
@@ -156,6 +189,8 @@ def main() -> None:
                         help="Tipo de agente: 'ppo', 'sac', 'c0' o ruta al modelo .zip.")
     parser.add_argument("--model-path", type=str, default=None,
                         help="Ruta directa al archivo de pesos model.zip.")
+    parser.add_argument("--label", type=str, default=None,
+                        help="Etiqueta identificatoria del modelo para reportes y gráficas (ej. PPO_2).")
     parser.add_argument("--c0", action="store_true", default=False,
                         help="Evaluar baseline analítico C0.")
     parser.add_argument("--kp", type=float, default=50.0,
@@ -175,6 +210,8 @@ def main() -> None:
     parser.add_argument("--mode", type=str, default="deterministic",
                         choices=["deterministic", "stochastic"],
                         help="Modo de ejecución de la política.")
+    parser.add_argument("--plot", action="store_true", default=False,
+                        help="Regenerar automáticamente las figuras comparativas en reports/figures/.")
     args = parser.parse_args()
 
     # Resolver tipo de agente
@@ -185,14 +222,17 @@ def main() -> None:
         agent_type=agent_type,
         model_path=model_path,
         vec_norm_path=args.vecnormalize,
+        label=args.label,
         kp=args.kp,
         kd=args.kd,
         lambda_damping=args.lambda_damping,
         dataset_path=args.dataset,
         env_config_path=args.env_config,
         output_dir=args.output_dir,
-        eval_mode=args.mode
+        eval_mode=args.mode,
+        generate_plots=args.plot
     )
+
 
 
 

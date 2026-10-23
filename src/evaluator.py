@@ -60,6 +60,10 @@ def evaluate_on_dataset(agent, dataset: list, dataset_name: str,
         norm_wrapper.norm_reward = False
 
     records = []
+    trajectory_records = []
+    dt_base = float(merged_cfg["env"].get("dt", 0.01))
+    frame_skip = int(merged_cfg["env"].get("frame_skip", 2))
+    dt = dt_base * frame_skip
 
     for ep_meta in dataset:
         ep_id = ep_meta["episode_id"]
@@ -106,16 +110,33 @@ def evaluate_on_dataset(agent, dataset: list, dataset_name: str,
             actions.append(np.copy(action))
             rewards.append(float(reward))
 
+            # Registrar trayectoria temporal para los primeros 5 episodios de muestra
+            if ep_id < 5:
+                trajectory_records.append({
+                    "episode_id": ep_id,
+                    "step": steps,
+                    "time": round(steps * dt, 4),
+                    "distance": float(info["distance"]),
+                    "theta1": float(info.get("theta1", 0.0)),
+                    "theta2": float(info.get("theta2", 0.0)),
+                    "dtheta1": float(info.get("dtheta1", 0.0)),
+                    "dtheta2": float(info.get("dtheta2", 0.0)),
+                    "action1": float(action[0]),
+                    "action2": float(action[1]),
+                    "tau1": float(action[0] * 0.05),
+                    "tau2": float(action[1] * 0.05),
+                    "ee_x": float(info.get("ee_x", 0.0)),
+                    "ee_y": float(info.get("ee_y", 0.0)),
+                    "target_x": float(tgt_x),
+                    "target_y": float(tgt_y),
+                })
+
             if prev_action is not None:
                 action_deltas.append(float(np.linalg.norm(action - prev_action)))
             prev_action = np.copy(action)
 
             if terminated or truncated:
                 break
-
-        dt_base = float(merged_cfg["env"].get("dt", 0.01))
-        frame_skip = int(merged_cfg["env"].get("frame_skip", 2))
-        dt = dt_base * frame_skip
 
         # 1. Métrica Principal — Estabilización régimen permanente
         stab = compute_stabilization_metrics(distances, joint_speeds, k=K_STAB)
@@ -132,6 +153,10 @@ def evaluate_on_dataset(agent, dataset: list, dataset_name: str,
         records.append({
             "eval_set": dataset_name,
             "episode_id": ep_id,
+            "target_x": float(tgt_x),
+            "target_y": float(tgt_y),
+            "theta1_init": float(th1_init),
+            "theta2_init": float(th2_init),
             "evaluation_mode": eval_mode,
             "success": bool(stab["is_success"]),
             "e_ss": float(stab["e_ss"]),
@@ -156,5 +181,6 @@ def evaluate_on_dataset(agent, dataset: list, dataset_name: str,
 
     env.close()
     episodes_df = pd.DataFrame(records)
+    trajectories_df = pd.DataFrame(trajectory_records)
     agg_metrics = compute_aggregate_metrics(episodes_df)
-    return episodes_df, agg_metrics
+    return episodes_df, agg_metrics, trajectories_df

@@ -305,7 +305,8 @@ def main():
                         help="Ruta al YAML del experimento (p. ej. configs/phase_D/prueba/PPO_1.yaml)")
     parser.add_argument("--env-config", type=str, default=None,
                         help="Ruta opcional al YAML del entorno común (sobreescribe la referencia en el agente)")
-    parser.add_argument("--seed", type=int, default=42, help="Semilla aleatoria")
+    parser.add_argument("--seed", type=str, default="42",
+                        help="Semilla aleatoria única o lista separada por comas (ej. 42 o '42, 100, 2026').")
     parser.add_argument("--device", type=str, default="auto",
                         help="Dispositivo de cómputo: auto, cpu, cuda, ...")
     parser.add_argument("--total_timesteps", type=int, default=None,
@@ -320,9 +321,27 @@ def main():
 
     cfg = load_config(config_path, env_config_path=args.env_config)
 
-    run_training(cfg, config_path, seed=args.seed, device=args.device,
-                 total_timesteps_override=args.total_timesteps,
-                 checkpoint_freq_override=args.checkpoint_freq)
+    # Parsear una o múltiples semillas
+    seed_str = str(args.seed).strip()
+    seeds = [int(s.strip()) for s in seed_str.split(",") if s.strip()]
+    if not seeds:
+        seeds = [42]
+
+    completed_dirs = []
+    for idx, s in enumerate(seeds, start=1):
+        print(f"\n{'='*75}")
+        print(f" SESIÓN DE ENTRENAMIENTO [{idx}/{len(seeds)}] — SEMILLA {s}")
+        print(f" Configuración: {config_path.name}")
+        print(f"{'='*75}\n")
+
+        exp_dir = run_training(cfg, config_path, seed=s, device=args.device,
+                               total_timesteps_override=args.total_timesteps,
+                               checkpoint_freq_override=args.checkpoint_freq)
+        completed_dirs.append(exp_dir)
+
+    print(f"\n>>> [MULTISEED OK] Finalizado entrenamiento de {len(seeds)} semillas: {seeds}")
+    for d in completed_dirs:
+        print(f"  • {d}")
 
 
 if __name__ == "__main__":
