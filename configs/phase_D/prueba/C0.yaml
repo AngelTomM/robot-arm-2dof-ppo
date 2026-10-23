@@ -8,9 +8,9 @@ experiment:
 # Referencia al entorno físico común
 env_config: configs/environment.yaml
 
-# Hiperparámetros del controlador analítico C0
+# Hiperparámetros del controlador analítico C0 (calibrados con MuJoCo Reacher-v5)
 controller:
   name: C0
   type: jacobian_transpose_pd
   kp: 50.0
-  kd: 1.5
+  kd: 0.05

@@ -24,8 +24,9 @@ class TestConfigDecoupling(unittest.TestCase):
         self.assertEqual(env["l2"], 0.11)
         self.assertAlmostEqual(env["joint1_limit_deg"], 171.887, places=2)
         self.assertEqual(env["target_radius"], 0.02)
-        self.assertEqual(env["max_steps"], 200)
+        self.assertEqual(env["max_steps"], 100)
         self.assertEqual(env["dt"], 0.01)
+
         self.assertEqual(env["frame_skip"], 2)
         self.assertEqual(env["torque_limit"], 1.0)
         self.assertEqual(env["gear"], 200.0)

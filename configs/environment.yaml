@@ -30,18 +30,19 @@ env:
 
   # Integración temporal y horizonte de control
   dt: 0.01                     # Paso de integración numérica nativo de MuJoCo (s)
-  frame_skip: 2                # Subpasos por ciclo de control (dt_efectivo = 0.02 s)
-  max_steps: 200               # Límite de pasos por episodio (horizonte T = 4.0 s)
-  target_radius: 0.02          # Radio cartesiano de tolerancia de estabilización (m)
+  frame_skip: 2                # Subpasos por ciclo de control (dt_efectivo = 0.02 s, 50 Hz)
+  max_steps: 100               # Límite de pasos por episodio (horizonte T = 2.0 s, transitorio + régimen permanente)
+  target_radius: 0.02          # Radio cartesiano de tolerancia de estabilización física (m)
 
   # Formulación MDP continuo
   success_mode: none           # MDP de horizonte fijo sin terminación anticipada
   reward_type: quadratic_lqr   # r_t = - (w_pos*||e_pos||^2 + w_ctrl*||a||^2 + w_vel*||qvel||^2)
 
-  # Ponderaciones de la función de recompensa cuadrática canónica
+  # Ponderaciones calibradas de la función de recompensa cuadrática canónica LQR
   reward_params:
     w_pos: 1.0                 # Penalización cuadrática de error cartesiano ||p_ee - p_tgt||^2
-    w_vel: 0.05                # Penalización por energía cinética / disipación ||qvel||^2
-    w_ctrl: 0.01               # Regularización de esfuerzo de torque ||a_t||^2
+    w_vel: 0.005               # Amortiguamiento cinético calibrado sobre ||qvel||^2 (evita estrangulamiento transitorio)
+    w_ctrl: 0.008              # Regularización de esfuerzo de torque ||a_t||^2 en punto Pareto óptimo
     w_v: 0.0                   # Penalización gaussiana de velocidad desactivada
     w_a: 0.0                   # Penalización por variación de acción desactivada
+

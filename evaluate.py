@@ -63,7 +63,8 @@ def load_rl_agent(model_path: Path) -> Tuple[Any, Optional[Path]]:
 def run_evaluation(agent_type: str,
                    model_path: Optional[str] = None,
                    vec_norm_path: Optional[str] = None,
-                   kp: float = 3.0,
+                   kp: float = 50.0,
+                   kd: float = 0.05,
                    lambda_damping: float = 0.01,
                    dataset_path: Optional[str] = None,
                    env_config_path: Optional[str] = None,
@@ -85,7 +86,7 @@ def run_evaluation(agent_type: str,
     # 2. Configurar agente a evaluar
     if agent_type.lower() == "c0":
         agent_label = "C0"
-        agent = JacobianDampedController(kp=kp, lambda_damping=lambda_damping, env_config=env_cfg)
+        agent = JacobianDampedController(kp=kp, kd=kd, lambda_damping=lambda_damping, env_config=env_cfg)
         norm_file = None
     else:
         if not model_path:
@@ -156,9 +157,11 @@ def main() -> None:
     parser.add_argument("--model-path", type=str, default=None,
                         help="Ruta directa al archivo de pesos model.zip.")
     parser.add_argument("--c0", action="store_true", default=False,
-                        help="Evaluar baseline cinemático analítico C0.")
-    parser.add_argument("--kp", type=float, default=3.0,
-                        help="Ganancia proporcional para C0 (por defecto: 3.0).")
+                        help="Evaluar baseline analítico C0.")
+    parser.add_argument("--kp", type=float, default=50.0,
+                        help="Ganancia proporcional para C0 (por defecto: 50.0).")
+    parser.add_argument("--kd", type=float, default=0.05,
+                        help="Ganancia derivativa de amortiguamiento para C0 (por defecto: 0.05).")
     parser.add_argument("--lambda-damping", type=float, default=0.01,
                         help="Amortiguamiento Levenberg-Marquardt para C0 (por defecto: 0.01).")
     parser.add_argument("--vecnormalize", type=str, default=None,
@@ -183,12 +186,14 @@ def main() -> None:
         model_path=model_path,
         vec_norm_path=args.vecnormalize,
         kp=args.kp,
+        kd=args.kd,
         lambda_damping=args.lambda_damping,
         dataset_path=args.dataset,
         env_config_path=args.env_config,
         output_dir=args.output_dir,
         eval_mode=args.mode
     )
+
 
 
 if __name__ == "__main__":
