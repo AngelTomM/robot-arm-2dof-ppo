@@ -37,8 +37,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from arm2d_env import Arm2DEnv  # noqa: E402
-from src.training.callbacks import LQRMetricsCallback, VecNormalizeSyncEvalCallback  # noqa: E402
-from src.training.phase_b_callbacks import PhaseBCheckpointCallback  # noqa: E402
+from src.training.callbacks import LQRMetricsCallback, VecNormalizeSyncEvalCallback, CoupledCheckpointCallback  # noqa: E402
 from src.utils.config import load_config  # noqa: E402
 
 
@@ -178,7 +177,7 @@ def run_training(cfg: dict, config_path: Path, seed: int, device: str,
     # 2. Callbacks
     train_cfg = cfg.get("training", {})
     ckpt_freq = int(checkpoint_freq_override or train_cfg.get("checkpoint_freq", 40960))
-    checkpoint_cb = PhaseBCheckpointCallback(save_freq=ckpt_freq,
+    checkpoint_cb = CoupledCheckpointCallback(save_freq=ckpt_freq,
                                              save_path=str(checkpoints_dir), verbose=1)
 
     callbacks = [LQRMetricsCallback(window_size=100)]

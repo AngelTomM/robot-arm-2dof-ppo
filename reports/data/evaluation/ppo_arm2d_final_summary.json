@@ -1,0 +1,26 @@
+{
+  "agent": "ppo_arm2d_final",
+  "eval_set": "validation_set_200",
+  "eval_mode": "deterministic",
+  "metrics": {
+    "total_episodes": 200,
+    "successful_episodes": 0,
+    "success_rate": 0.0,
+    "success_rate_ci": "0.0% [0.0%, 1.9%] (0/200)",
+    "ci_low": 0.0,
+    "ci_high": 0.018845251197524133,
+    "e_ss_mean": 1.6702903444878756,
+    "e_ss_median": 1.6938488841056825,
+    "e_ss_p90": 2.559200825691223,
+    "final_dist_mean": 1.6714566469937564,
+    "v_ss_mean": 0.020150298213857065,
+    "v_ss_median": 0.01981836968709729,
+    "t_s_mean": 10.0,
+    "t_s_median": 10.0,
+    "j_u_mean": 0.002167803227960569,
+    "j_lqr_mean": -654.1119839780351,
+    "j_lqr_median": -544.813714275258,
+    "j_lqr_std": 522.8821353545048,
+    "mean_action_delta": 5.3928612083991104e-06
+  }
+}

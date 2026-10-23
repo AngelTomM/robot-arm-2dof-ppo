@@ -13,6 +13,7 @@ from arm2d_env import Arm2DEnv
 from src.evaluation.metrics import (
     K_STAB, TARGET_RADIUS_EVAL, VEL_TOL_EVAL,
     compute_stabilization_metrics, compute_lqr_canonical_cost,
+    compute_settling_time, compute_control_effort,
     compute_aggregate_metrics
 )
 
@@ -112,11 +113,17 @@ def evaluate_on_dataset(agent, dataset: list, dataset_name: str,
             if terminated or truncated:
                 break
 
-        # 1. Métrica Principal — Opción 2 (Estabilización últimos k=20 pasos)
+        dt = float(merged_cfg["env"].get("dt", 0.05))
+
+        # 1. Métrica Principal — Estabilización régimen permanente
         stab = compute_stabilization_metrics(distances, joint_speeds, k=K_STAB)
 
-        # 2. Métrica Comparativa — Opción 3 (Costo Acumulado Canónico LQR)
+        # 2. Métrica Comparativa — Costo LQR Canónico
         lqr = compute_lqr_canonical_cost(distances, joint_speeds, actions)
+
+        # 3. Métricas Temporales y Energéticas (t_s, J_u)
+        t_s, k_settle, is_settled = compute_settling_time(distances, target_radius=TARGET_RADIUS_EVAL, dt=dt)
+        j_u = compute_control_effort(actions, dt=dt)
 
         mean_act_delta = float(np.mean(action_deltas)) if action_deltas else np.nan
 
@@ -125,6 +132,12 @@ def evaluate_on_dataset(agent, dataset: list, dataset_name: str,
             "episode_id": ep_id,
             "evaluation_mode": eval_mode,
             "success": bool(stab["is_success"]),
+            "e_ss": float(stab["e_ss"]),
+            "v_ss": float(stab["v_ss"]),
+            "t_s": float(t_s),
+            "j_u": float(j_u),
+            "is_settled": bool(is_settled),
+            "settling_steps": int(k_settle),
             "mean_dist_last_20": float(stab["mean_dist_last_k"]),
             "mean_vel_last_20": float(stab["mean_vel_last_k"]),
             "final_distance": float(distances[-1]),

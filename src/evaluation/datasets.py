@@ -8,22 +8,32 @@ import json
 import numpy as np
 import pandas as pd
 
-def generate_dataset(n_episodes: int, seed: int, l1: float = 1.0, l2: float = 1.0,
-                     r_min: float = 0.18, r_max: float = 1.90,
-                     joint2_limit_deg: float = 170.0) -> list:
+from src.utils.config import load_env_config
+
+
+def generate_dataset(n_episodes: int, seed: int, l1: float = None, l2: float = None,
+                     r_min: float = None, r_max: float = None,
+                     joint2_limit_deg: float = None) -> list:
     """
-    Genera un conjunto de episodios reproducibles con distribución documentada:
+    Genera un conjunto de episodios reproducibles con distribución cinemática:
     - theta1 ~ U(-pi, pi)
-    - theta2 ~ U(-joint2_max, joint2_max) con tope físico anti-colisión [-170°, 170°]
-    - target_r ~ U(r_min, r_max) (distribución uniforme en radio lineal alcanzable >= r_min_geom)
+    - theta2 ~ U(-joint2_max, joint2_max) con tope físico anti-colisión
+    - target_r ~ U(r_min_geom, r_max)
     - target_phi ~ U(-pi, pi)
     """
+    # Heredar de configs/environment.yaml (SSOT)
+    env_cfg = load_env_config().get("env", {})
+    l1 = float(l1 if l1 is not None else env_cfg.get("l1", 1.0))
+    l2 = float(l2 if l2 is not None else env_cfg.get("l2", 1.0))
+    joint2_limit_deg = float(joint2_limit_deg if joint2_limit_deg is not None else env_cfg.get("joint2_limit_deg", 170.0))
+
     rng = np.random.RandomState(seed)
     episodes = []
 
     th2_max = math.radians(joint2_limit_deg)
     r_min_geom = math.sqrt(l1**2 + l2**2 + 2 * l1 * l2 * math.cos(th2_max))
-    effective_r_min = max(r_min, r_min_geom)
+    effective_r_min = float(r_min if r_min is not None else r_min_geom)
+    effective_r_max = float(r_max if r_max is not None else (l1 + l2) * 0.95)
 
     for ep_id in range(n_episodes):
         th1 = float(rng.uniform(-math.pi, math.pi))

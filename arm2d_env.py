@@ -50,7 +50,7 @@ class Arm2DEnv(gym.Env):
         self.min_reach = float(env_cfg.get("min_reach", min_reach_geom))
 
         self.dt = float(env_cfg.get("dt", 0.05))
-        self.max_speed = float(env_cfg.get("max_speed", 2.0))
+        self.max_speed = float(env_cfg.get("max_speed", 1.5))
         self.target_radius = float(env_cfg.get("target_radius", 0.06))
         self.max_steps = int(env_cfg.get("max_steps", 200))
 
