@@ -1,5 +1,5 @@
 """
-Pruebas Unitarias de Normalización y Entorno Fase D (MDP LQR Continuo).
+Pruebas Unitarias de Normalización, Entorno y Métricas LQR (MuJoCo Reacher-v5).
 """
 import os
 import sys
@@ -26,17 +26,9 @@ from src import (
 
 class TestNormalization(unittest.TestCase):
     def test_monitor_inner_wrapper_raw_rewards(self):
-        """Verifica que Monitor registre la recompensa física sin normalizar en Fase D."""
-        cfg = {
-            "env": {
-                "success_mode": "none",
-                "reward_type": "distance_only",
-                "target_radius": 0.08
-            }
-        }
-
+        """Verifica que Monitor registre la recompensa física sin normalizar en el entorno MuJoCo."""
         def make_env():
-            return Monitor(Arm2DEnv(config=cfg))
+            return Monitor(Arm2DEnv())
 
         vec_env = DummyVecEnv([make_env])
         norm_env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, clip_obs=10.0)
@@ -54,7 +46,7 @@ class TestNormalization(unittest.TestCase):
         tmp_stats_path = str(REPO_ROOT / "tests" / "temp_vecnormalize_stats.pkl")
 
         def make_env():
-            return Monitor(Arm2DEnv(config={"env": {"success_mode": "none"}}))
+            return Monitor(Arm2DEnv())
 
         vec_env = DummyVecEnv([make_env])
         norm_env = VecNormalize(vec_env, norm_obs=True, norm_reward=False)
@@ -84,9 +76,9 @@ class TestNormalization(unittest.TestCase):
             os.remove(tmp_stats_path)
 
     def test_sync_envs_normalization(self):
-        """Verifica la sincronización de estadísticas entre entrenamiento y evaluación."""
+        """Verifica la sincronización de estadísticas entre entornos vectorizados."""
         def make_env():
-            return Monitor(Arm2DEnv(config={"env": {"success_mode": "none"}}))
+            return Monitor(Arm2DEnv())
 
         train_env = VecNormalize(DummyVecEnv([make_env]), norm_obs=True, norm_reward=False)
         eval_env = VecNormalize(DummyVecEnv([make_env]), norm_obs=True, norm_reward=False, training=False)
@@ -106,68 +98,26 @@ class TestNormalization(unittest.TestCase):
 
 
 class TestPhaseDEnv(unittest.TestCase):
-    def test_lyapunov_lqr_exact_calculation(self):
-        """Verifica el cálculo matemático exacto de lyapunov_lqr."""
-        env = Arm2DEnv(config={
-            "env": {
-                "reward_type": "lyapunov_lqr",
-                "success_mode": "none",
-                "w_pos": 1.0,
-                "w_vel": 0.05,
-                "w_ctrl": 0.01,
-            }
-        })
+    def test_quadratic_lqr_exact_calculation(self):
+        """Verifica el cálculo matemático exacto de la recompensa cuadrática continua."""
+        env = Arm2DEnv()
         env.reset(seed=123)
         action = np.array([0.5, -0.2], dtype=np.float32)
         _, reward, terminated, truncated, info = env.step(action)
 
-        dist = info["distance"]
-        speed = info["joint_speed"]
-        expected_dist = -1.0 * (dist ** 2)
-        expected_vel = -0.05 * (speed ** 2)
-        expected_ctrl = -0.01 * float(np.sum(np.square(action)))
-        expected_total = expected_dist + expected_vel + expected_ctrl
+        pos_err_sq = info["pos_error_sq"]
+        ctrl_eff_sq = info["ctrl_effort_sq"]
+        vel_sq = info["vel_sq"]
 
-        self.assertAlmostEqual(info["reward_dist"], expected_dist, places=9)
-        self.assertAlmostEqual(info["reward_vel"], expected_vel, places=9)
-        self.assertAlmostEqual(info["reward_action"], expected_ctrl, places=9)
-        self.assertAlmostEqual(reward, expected_total, places=9)
+        expected_reward = -(env.w_pos * pos_err_sq + env.w_ctrl * ctrl_eff_sq + env.w_vel * vel_sq)
+
+        self.assertAlmostEqual(reward, expected_reward, places=5)
         self.assertFalse(terminated)
         env.close()
 
-    def test_distance_only_exact_calculation(self):
-        """Verifica que distance_only sea exactamente -distance sin vel ni ctrl."""
-        env = Arm2DEnv(config={
-            "env": {
-                "reward_type": "distance_only",
-                "success_mode": "none",
-            }
-        })
-        env.reset(seed=123)
-        action = np.array([0.8, -0.4], dtype=np.float32)
-        _, reward, terminated, truncated, info = env.step(action)
-
-        self.assertAlmostEqual(reward, -info["distance"], places=9)
-        self.assertEqual(info["reward_vel"], 0.0)
-        self.assertEqual(info["reward_action"], 0.0)
-        self.assertFalse(terminated)
-        env.close()
-
-    def test_rejection_of_obsolete_modes_and_rewards(self):
-        """Verifica que success_mode != 'none' y reward_types obsoletos lancen ValueError."""
-        with self.assertRaises(ValueError):
-            Arm2DEnv(config={"env": {"success_mode": "hold"}})
-
-        with self.assertRaises(ValueError):
-            Arm2DEnv(config={"env": {"success_mode": "touch"}})
-
-        for obsolete_rew in ["smooth_precision", "historical", "x5_near", "x5_vel", "x6_smooth", "energy_efficient"]:
-            with self.assertRaises(ValueError):
-                Arm2DEnv(config={"env": {"reward_type": obsolete_rew, "success_mode": "none"}})
-
-    def test_terminated_always_false_and_truncates_at_max_steps(self):
-        """Verifica que terminated siempre sea False y solo corte por truncamiento en max_steps=200."""
-        env = Arm2DEnv(config={"env": {"max_steps": 200, "success_mode": "none"}})
+    def test_horizon_truncation_at_max_steps(self):
+        """Verifica que el entorno corte exactamente en max_steps (horizonte fijo sin terminación prematura)."""
+        env = Arm2DEnv(config={"env": {"max_steps": 200}})
         env.reset(seed=42)
 
         for s in range(1, 201):
@@ -175,7 +125,7 @@ class TestPhaseDEnv(unittest.TestCase):
             _, _, terminated, truncated, _ = env.step(action)
             self.assertFalse(terminated, f"terminated no debe ser True en paso {s}")
             if s < 200:
-                self.assertFalse(truncated, f"truncated no debe ser True antes de max_steps (paso {s})")
+                self.assertFalse(truncated, f"truncated no debe ser True antes del paso 200 (paso {s})")
             else:
                 self.assertTrue(truncated, "truncated debe ser True exactamente en paso 200")
 
@@ -183,44 +133,45 @@ class TestPhaseDEnv(unittest.TestCase):
 
 
 class TestPhaseDEvaluationMetrics(unittest.TestCase):
-    def test_option_2_stabilization(self):
-        """Verifica el cálculo de la Opción 2 en los últimos k=20 pasos."""
-        # Caso de éxito: distancias <= 0.06m y velocidades <= 0.10rad/s
-        distances_ok = [0.2] * 180 + [0.04] * 20
-        speeds_ok = [0.5] * 180 + [0.08] * 20
+    def test_stabilization_metrics(self):
+        """Verifica el cálculo de estabilización en los últimos k=20 pasos bajo radio de tolerancia 0.02 m."""
+        # Caso de éxito: distancias <= 0.02m y velocidades <= 0.10rad/s
+        distances_ok = [0.1] * 180 + [0.015] * 20
+        speeds_ok = [0.5] * 180 + [0.05] * 20
         stab_ok = compute_stabilization_metrics(distances_ok, speeds_ok, k=20)
         self.assertTrue(stab_ok["is_success"])
-        self.assertAlmostEqual(stab_ok["mean_dist_last_k"], 0.04)
-        self.assertAlmostEqual(stab_ok["mean_vel_last_k"], 0.08)
+        self.assertAlmostEqual(stab_ok["mean_dist_last_k"], 0.015)
+        self.assertAlmostEqual(stab_ok["mean_vel_last_k"], 0.05)
 
-        # Caso de fallo por velocidad alta (llegada rápida sin frenado)
-        distances_fast = [0.2] * 180 + [0.03] * 20
+        # Caso de fallo por velocidad residual elevada
+        distances_fast = [0.1] * 180 + [0.01] * 20
         speeds_fast = [0.5] * 180 + [0.25] * 20
         stab_fast = compute_stabilization_metrics(distances_fast, speeds_fast, k=20)
         self.assertFalse(stab_fast["is_success"])
 
-        # Caso de fallo por distancia
-        distances_far = [0.2] * 180 + [0.08] * 20
+        # Caso de fallo por distancia residual
+        distances_far = [0.1] * 180 + [0.05] * 20
         speeds_far = [0.5] * 180 + [0.02] * 20
         stab_far = compute_stabilization_metrics(distances_far, speeds_far, k=20)
         self.assertFalse(stab_far["is_success"])
 
-    def test_option_3_canonical_lqr_cost(self):
-        """Verifica el cálculo canónico de J_LQR (Opción 3) con pesos fijos."""
-        distances = [0.1, 0.05]
-        speeds = [0.2, 0.1]
+    def test_canonical_lqr_cost(self):
+        """Verifica el cálculo canónico de J_LQR con pesos normalizados."""
+        distances = [0.05, 0.02]
+        speeds = [0.1, 0.05]
         actions = [np.array([0.5, 0.5]), np.array([0.2, 0.1])]
 
-        # t=1: 1.0*(0.1^2) + 0.05*(0.2^2) + 0.01*(0.25+0.25) = 0.01 + 0.002 + 0.005 = 0.017
-        # t=2: 1.0*(0.05^2) + 0.05*(0.1^2) + 0.01*(0.04+0.01) = 0.0025 + 0.0005 + 0.0005 = 0.0035
-        # Total cost: -(0.017 + 0.0035) = -0.0205
         lqr = compute_lqr_canonical_cost(distances, speeds, actions)
-        self.assertAlmostEqual(lqr["j_lqr"], -0.0205, places=6)
-        self.assertAlmostEqual(lqr["j_pos"], 0.0125, places=6)
-        self.assertAlmostEqual(lqr["j_vel"], 0.0025, places=6)
-        self.assertAlmostEqual(lqr["j_ctrl"], 0.0055, places=6)
+        j_pos = 1.0 * (0.05**2 + 0.02**2)
+        j_vel = 0.05 * (0.1**2 + 0.05**2)
+        j_ctrl = 0.01 * (0.25 + 0.25 + 0.04 + 0.01)
+        expected_total = -(j_pos + j_vel + j_ctrl)
+
+        self.assertAlmostEqual(lqr["j_lqr"], expected_total, places=6)
+        self.assertAlmostEqual(lqr["j_pos"], j_pos, places=6)
+        self.assertAlmostEqual(lqr["j_vel"], j_vel, places=6)
+        self.assertAlmostEqual(lqr["j_ctrl"], j_ctrl, places=6)
 
 
 if __name__ == "__main__":
     unittest.main()
-

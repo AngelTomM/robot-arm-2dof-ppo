@@ -1,29 +1,47 @@
 # ==============================================================================
-# CONFIGURACIÓN UNIFICADA DEL ENTORNO FÍSICO Y MDP (FASE D)
+# CONFIGURACIÓN UNIFICADA DEL ENTORNO FÍSICO Y MDP (MUJOCO REACHER-V5)
 # ==============================================================================
-# Parámetros físicos, cinemáticos y de recompensa invariantes durante la evaluación
-# comparativa de agentes de RL (PPO, SAC) y controladores analíticos (Jacobiano C0).
+# Fuente Única de Verdad (SSOT) para la planta física dinámica Reacher-v5 de Gymnasium,
+# actuadores por torque, restricciones articulares y formulación continua de recompensa.
 
 env:
-  # Parámetros cinemáticos y geométricos de los eslabones
-  l1: 1.0
-  l2: 1.0
+  # Identificador de planta física
+  engine: mujoco
+  env_id: Reacher-v5
 
-  # Restricciones mecánicas y dinámicas
-  joint2_limit_deg: 170.0  # Límite angular en articulación 2 (|theta2| <= 170.0 deg)
-  max_speed: 1.5           # Velocidad angular máxima permitida (|dtheta| <= 1.5 rad/s)
-  target_radius: 0.06      # Radio de la zona objetivo (m)
-  max_steps: 200           # Límite de pasos temporales por episodio
-  dt: 0.05                 # Período de muestreo / integración de Euler (s)
+  # Parámetros cinemáticos y geométricos de los eslabones (m)
+  l1: 0.1
+  l2: 0.11
+
+  # Parámetros inerciales y de masa (kg)
+  mass_link0: 0.035605
+  mass_link1: 0.035605
+  mass_fingertip: 0.004189
+
+  # Restricciones mecánicas articulares
+  joint0_limit_deg: null       # Articulación base continua / ilimitada (-inf, inf)
+  joint1_limit_deg: 171.887    # Articulación distal (|theta2| <= 3.0 rad)
+
+  # Espacio de acción y actuadores (N·m)
+  action_space: continuous
+  action_dim: 2
+  torque_limit: 1.0            # Acción normalizada en [-1.0, 1.0]
+  gear: 200.0                  # Relación de transmisión de MuJoCo
+
+  # Integración temporal y horizonte de control
+  dt: 0.01                     # Paso de integración numérica nativo de MuJoCo (s)
+  frame_skip: 2                # Subpasos por ciclo de control (dt_efectivo = 0.02 s)
+  max_steps: 200               # Límite de pasos por episodio (horizonte T = 4.0 s)
+  target_radius: 0.02          # Radio cartesiano de tolerancia de estabilización (m)
 
   # Formulación MDP continuo
-  success_mode: none       # MDP puro de horizonte fijo sin terminación anticipada
-  reward_type: lyapunov_lqr
+  success_mode: none           # MDP de horizonte fijo sin terminación anticipada
+  reward_type: quadratic_lqr   # r_t = - (w_pos*||e_pos||^2 + w_ctrl*||a||^2 + w_vel*||qvel||^2)
 
-  # Ponderaciones de la función de recompensa continua (Lyapunov / LQR)
+  # Ponderaciones de la función de recompensa cuadrática canónica
   reward_params:
-    w_pos: 1.0             # Ponderación del error cartesiano ||p_target - p_ee||^2
-    w_vel: 0.05            # Ponderación de disipación de energía cinética ||q_dot||^2
-    w_ctrl: 0.01           # Ponderación de esfuerzo de control ||u||^2
-    w_v: 0.0               # Penalización gaussiana de velocidad desactivada
-    w_a: 0.0               # Penalización por cambio de acción desactivada
+    w_pos: 1.0                 # Penalización cuadrática de error cartesiano ||p_ee - p_tgt||^2
+    w_vel: 0.05                # Penalización por energía cinética / disipación ||qvel||^2
+    w_ctrl: 0.01               # Regularización de esfuerzo de torque ||a_t||^2
+    w_v: 0.0                   # Penalización gaussiana de velocidad desactivada
+    w_a: 0.0                   # Penalización por variación de acción desactivada

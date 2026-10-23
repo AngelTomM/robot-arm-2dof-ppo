@@ -3,7 +3,7 @@ Paquete principal para el control y aprendizaje por refuerzo de manipulador rob�
 Exporta directamente las clases, controladores, métricas y utilidades del pipeline canónico.
 """
 from .arm2d_env import Arm2DEnv
-from .jacobian_controller import JacobianDampedController
+from .jacobian_controller import JacobianDampedController, JacobianTransposePDController
 from .callbacks import (
     LQRMetricsCallback,
     VecNormalizeSyncEvalCallback,
@@ -30,6 +30,7 @@ from .datasets import generate_dataset, save_and_get_datasets
 __all__ = [
     "Arm2DEnv",
     "JacobianDampedController",
+    "JacobianTransposePDController",
     "LQRMetricsCallback",
     "VecNormalizeSyncEvalCallback",
     "CoupledCheckpointCallback",

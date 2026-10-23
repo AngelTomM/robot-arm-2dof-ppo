@@ -87,15 +87,15 @@ def evaluate_on_dataset(agent, dataset: list, dataset_name: str,
             else:
                 policy_obs = obs
 
-            # Obtener acción del agente
+            # Obtener acción del agente (SB3 o C0)
             if hasattr(agent, "predict"):
-                if hasattr(agent, "policy"):  # Modelo SB3 (PPO / SAC)
-                    det = (eval_mode == "deterministic")
-                    action, _ = agent.predict(policy_obs, deterministic=det)
-                else:  # Controlador analítico C0
-                    action = agent.predict(env)
+                det = (eval_mode == "deterministic")
+                pred_out = agent.predict(policy_obs, deterministic=det)
+                action = pred_out[0] if isinstance(pred_out, tuple) else pred_out
+            elif hasattr(agent, "get_action"):
+                action = agent.get_action(policy_obs)
             else:
-                raise ValueError("El agente debe tener método predict()")
+                raise ValueError("El agente debe tener método predict() o get_action()")
 
             next_obs, reward, terminated, truncated, info = env.step(action)
             obs = next_obs
@@ -113,7 +113,9 @@ def evaluate_on_dataset(agent, dataset: list, dataset_name: str,
             if terminated or truncated:
                 break
 
-        dt = float(merged_cfg["env"].get("dt", 0.05))
+        dt_base = float(merged_cfg["env"].get("dt", 0.01))
+        frame_skip = int(merged_cfg["env"].get("frame_skip", 2))
+        dt = dt_base * frame_skip
 
         # 1. Métrica Principal — Estabilización régimen permanente
         stab = compute_stabilization_metrics(distances, joint_speeds, k=K_STAB)

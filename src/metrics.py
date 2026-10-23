@@ -15,9 +15,9 @@ import math
 import numpy as np
 import pandas as pd
 
-# Tolerancias Canónicas del Sistema Mecatrónico
+# Tolerancias Canónicas del Sistema Mecatrónico (MuJoCo Reacher-v5)
 K_STAB: int = 20                   # Ventana de evaluación estacionaria final (pasos)
-TARGET_RADIUS_EVAL: float = 0.06     # Radio de tolerancia cartesiana (m)
+TARGET_RADIUS_EVAL: float = 0.02     # Radio de tolerancia cartesiana (m)
 VEL_TOL_EVAL: float = 0.10           # Tolerancia de velocidad articular residual (rad/s)
 
 # Coeficientes Canónicos del Funcional LQR
@@ -51,7 +51,7 @@ def format_ci(successes: int, total: int) -> str:
 
 
 def compute_settling_time(distances: List[float], target_radius: float = TARGET_RADIUS_EVAL,
-                          dt: float = 0.05) -> Tuple[float, int, bool]:
+                          dt: float = 0.02) -> Tuple[float, int, bool]:
     """
     Calcula el tiempo de establecimiento t_s según la definición formal de control:
     Instante t_s a partir del cual el sistema ingresa a la banda |e| <= target_radius
@@ -83,7 +83,7 @@ def compute_settling_time(distances: List[float], target_radius: float = TARGET_
         return t_s, k_settle, True
 
 
-def compute_control_effort(actions: List[np.ndarray], dt: float = 0.05) -> float:
+def compute_control_effort(actions: List[np.ndarray], dt: float = 0.02) -> float:
     """
     Calcula el esfuerzo de control acumulado en el episodio:
       J_u = sum(||u_t||^2 * dt)

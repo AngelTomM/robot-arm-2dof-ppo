@@ -1,15 +1,16 @@
-# Entorno de Aprendizaje por Refuerzo para Brazo Robótico 2D
-# Probado con el venv del directorio superior (Python 3.11): ..\.venv\Scripts\Activate.ps1
-gymnasium==1.4.0
-stable-baselines3==2.9.0
-torch==2.14.1
-pygame==2.6.1
+# Entorno de Aprendizaje por Refuerzo para Brazo Robótico 2D (MuJoCo Reacher-v5)
+gymnasium[mujoco]>=1.0.0
+mujoco>=2.3.3
+imageio>=2.14.1
+stable-baselines3>=2.0.0
+torch>=2.0.0
 numpy>=1.26.0,<2.0.0
-matplotlib==3.11.2
-tensorboard==2.21.0
-rich==15.0.0
-tqdm==4.70.1
-pyyaml==6.0.3
-pandas==3.0.6
-tabulate==0.10.0
-pytest==9.1.1
+matplotlib>=3.8.0
+tensorboard>=2.15.0
+rich>=13.0.0
+tqdm>=4.66.0
+pyyaml>=6.0.0
+pandas>=2.1.0
+tabulate>=0.9.0
+pytest>=8.0.0
+pygame>=2.5.0

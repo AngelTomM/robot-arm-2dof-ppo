@@ -26,23 +26,23 @@ def generate_dataset(n_episodes: int, seed: int, l1: float = None, l2: float = N
     """
     # Heredar de configs/environment.yaml (SSOT)
     env_cfg = load_env_config().get("env", {})
-    l1 = float(l1 if l1 is not None else env_cfg.get("l1", 1.0))
-    l2 = float(l2 if l2 is not None else env_cfg.get("l2", 1.0))
-    joint2_limit_deg = float(joint2_limit_deg if joint2_limit_deg is not None else env_cfg.get("joint2_limit_deg", 170.0))
+    l1 = float(l1 if l1 is not None else env_cfg.get("l1", 0.10))
+    l2 = float(l2 if l2 is not None else env_cfg.get("l2", 0.11))
+    joint2_limit_deg = float(joint2_limit_deg if joint2_limit_deg is not None else env_cfg.get("joint2_limit_deg", 171.887))
 
     rng = np.random.RandomState(seed)
     episodes = []
 
     th2_max = math.radians(joint2_limit_deg)
     r_min_geom = math.sqrt(l1**2 + l2**2 + 2 * l1 * l2 * math.cos(th2_max))
-    effective_r_min = float(r_min if r_min is not None else r_min_geom)
+    effective_r_min = float(r_min if r_min is not None else max(0.04, r_min_geom))
     effective_r_max = float(r_max if r_max is not None else (l1 + l2) * 0.95)
 
     for ep_id in range(n_episodes):
         th1 = float(rng.uniform(-math.pi, math.pi))
         th2 = float(rng.uniform(-th2_max, th2_max))
 
-        r = float(rng.uniform(effective_r_min, r_max))
+        r = float(rng.uniform(effective_r_min, effective_r_max))
         phi = float(rng.uniform(-math.pi, math.pi))
         tgt_x = float(r * math.cos(phi))
         tgt_y = float(r * math.sin(phi))

@@ -1,352 +1,279 @@
 """
-Entorno de Simulación 2D para Brazo Robótico de 2 Grados de Libertad (2 DOF).
-Fase D: Proceso de Decisión de Markov (MDP) Continuo con Regulación Lyapunov / LQR.
-Compatible con Gymnasium y Stable-Baselines3.
+Entorno de Simulación Dinámica MuJoCo para Manipulador Planar 2-DOF (Fase D).
+Basado en Gymnasium 'Reacher-v5' bajo formulación MDP continua con recompensa cuadrática LQR.
 
-Cinemática Directa:
-  Base en (0, 0)
-  Codo (x1, y1) = (L1 * cos(theta1), L1 * sin(theta1))
-  Efector (x, y) = (x1 + L2 * cos(theta1 + theta2), y1 + L2 * sin(theta1 + theta2))
+Cinemática y Dinámica:
+  Base fija en (0, 0, 0.01)
+  Eslabón 1: longitud L1 = 0.10 m
+  Eslabón 2 + Fingertip: longitud L2 = 0.11 m
+  Acción: Torque articular normalizado en [-1.0, 1.0] (N·m)
 """
 import math
 from typing import Optional, Dict, Any, Tuple
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
-import pygame
+import mujoco
+
+from .config import load_env_config
 
 
 class Arm2DEnv(gym.Env):
     """
-    Entorno Gymnasium para un brazo planar 2 DOF bajo formulación MDP continua.
-    Recompensa principal: lyapunov_lqr (función cuadrática continua sin horizonte discontinuo).
-    Recompensa secundaria: distance_only (-distance).
+    Adaptador canónico del entorno MuJoCo Reacher-v5 de Gymnasium.
+    Implementa un Proceso de Decisión de Markov (MDP) continuo de horizonte fijo
+    con función de costo/recompensa cuadrática canónica (Lyapunov / LQR):
+        r_t = - (w_pos * ||p_ee - p_tgt||^2 + w_ctrl * ||a_t||^2 + w_vel * ||qvel||^2)
     """
     metadata = {
-        "render_modes": ["human", "rgb_array"],
-        "render_fps": 60
+        "render_modes": ["human", "rgb_array", "depth_array"],
+        "render_fps": 50,
     }
 
     def __init__(self, render_mode: Optional[str] = None, config: Optional[Dict[str, Any]] = None):
         super().__init__()
 
-        # --- 1. Cargar configuración o usar valores por defecto ---
-        cfg = config or {}
+        # 1. Cargar configuración unificada (SSOT)
+        if config is not None:
+            cfg = config
+        else:
+            try:
+                cfg = load_env_config()
+            except Exception:
+                cfg = {}
+
         env_cfg = cfg.get("env", {})
         reward_params = env_cfg.get("reward_params", {})
 
-        # Parámetros Físicos y Geométricos
-        self.l1 = float(env_cfg.get("l1", 1.0))
-        self.l2 = float(env_cfg.get("l2", 1.0))
-        self.max_reach = self.l1 + self.l2
-
-        # Límites físicos estrictos en articulación 2 (prevención de auto-colisión con la base)
-        self.joint2_limit_deg = float(env_cfg.get("joint2_limit_deg", 170.0))
-        self.joint2_max = math.radians(self.joint2_limit_deg)
-        self.joint2_min = -self.joint2_max
-
-        # Radio mínimo alcanzable según cinemática física: r_min = sqrt(l1^2 + l2^2 + 2*l1*l2*cos(joint2_max))
-        min_reach_geom = math.sqrt(self.l1**2 + self.l2**2 + 2 * self.l1 * self.l2 * math.cos(self.joint2_max))
-        self.min_reach = float(env_cfg.get("min_reach", min_reach_geom))
-
-        self.dt = float(env_cfg.get("dt", 0.05))
-        self.max_speed = float(env_cfg.get("max_speed", 1.5))
-        self.target_radius = float(env_cfg.get("target_radius", 0.06))
+        # Parámetros geométricos y dinámicos
+        self.l1 = float(env_cfg.get("l1", 0.10))
+        self.l2 = float(env_cfg.get("l2", 0.11))
+        self.target_radius = float(env_cfg.get("target_radius", 0.02))
         self.max_steps = int(env_cfg.get("max_steps", 200))
+        self.dt = float(env_cfg.get("dt", 0.01))
+        self.frame_skip = int(env_cfg.get("frame_skip", 2))
+        self.vel_tol = 0.10  # rad/s
 
-        # Validación estricta de Modo de Éxito (solo 'none' en Fase D)
-        raw_success_mode = env_cfg.get("success_mode", "none")
-        if raw_success_mode is None or str(raw_success_mode).strip().lower() == "none":
-            self.success_mode = "none"
-        else:
-            raise ValueError(
-                f"success_mode='{raw_success_mode}' no es válido en Fase D. "
-                "Solo se admite 'none' (MDP puro sin horizonte discontinuo por hold/touch)."
-            )
+        # Ponderaciones del funcional de costo/recompensa
+        self.w_pos = float(reward_params.get("w_pos", 1.0))
+        self.w_ctrl = float(reward_params.get("w_ctrl", 0.01))
+        self.w_vel = float(reward_params.get("w_vel", 0.05))
 
-        # Validación estricta de Tipo de Recompensa
-        self.reward_type = str(env_cfg.get("reward_type", "lyapunov_lqr")).strip().lower()
-        if self.reward_type not in ["lyapunov_lqr", "distance_only"]:
-            raise ValueError(
-                f"reward_type='{self.reward_type}' no está soportado en Fase D. "
-                "Solo se admiten 'lyapunov_lqr' (principal) y 'distance_only' (secundaria)."
-            )
-
-        # Parámetros de Recompensa Lyapunov / LQR
-        self.w_pos = float(reward_params.get("w_pos", env_cfg.get("w_pos", 1.0)))
-        self.w_vel = float(reward_params.get("w_vel", env_cfg.get("w_vel", 0.05)))
-        self.w_ctrl = float(reward_params.get("w_ctrl", env_cfg.get("w_ctrl", 0.01)))
-
-        # --- 2. Espacio de Acciones [-1.0, 1.0] ---
-        self.action_space = spaces.Box(
-            low=-1.0,
-            high=1.0,
-            shape=(2,),
-            dtype=np.float32
-        )
-
-        # --- 3. Espacio de Observaciones (10 dimensiones cinemáticas puras) ---
-        obs_high = np.array([
-            1.0, 1.0, 1.0, 1.0,                     # cos1, sin1, cos2, sin2
-            self.max_speed, self.max_speed,         # velocidades dtheta1, dtheta2
-            self.max_reach, self.max_reach,         # target_x, target_y
-            2 * self.max_reach, 2 * self.max_reach  # dist_x, dist_y
-        ], dtype=np.float32)
-
-        self.observation_space = spaces.Box(
-            low=-obs_high,
-            high=obs_high,
-            dtype=np.float32
-        )
-
-        # --- 4. Variables de Estado Interno ---
-        self.theta1 = 0.0
-        self.theta2 = 0.0
-        self.dtheta1 = 0.0
-        self.dtheta2 = 0.0
-        self.target = np.zeros(2, dtype=np.float32)
-        self.step_count = 0
-
-        # --- 5. Renderizado (Pygame) ---
         self.render_mode = render_mode
-        self.screen_dim = 600
-        self.screen = None
-        self.clock = None
-        self.scale = (self.screen_dim / 2) / (self.max_reach * 1.15)
-        self.origin = np.array([self.screen_dim // 2, self.screen_dim // 2])
 
-    def _forward_kinematics(self, th1: float, th2: float) -> Tuple[np.ndarray, np.ndarray]:
-        """Calcula cinemática directa: posición de codo y efector final."""
-        x1 = self.l1 * math.cos(th1)
-        y1 = self.l1 * math.sin(th1)
-        x2 = x1 + self.l2 * math.cos(th1 + th2)
-        y2 = y1 + self.l2 * math.sin(th1 + th2)
-        return np.array([x1, y1], dtype=np.float32), np.array([x2, y2], dtype=np.float32)
+        # 2. Instanciación del entorno Reacher-v5 de Gymnasium
+        self.reacher_env = gym.make(
+            "Reacher-v5",
+            max_episode_steps=self.max_steps,
+            render_mode=render_mode,
+        )
 
-    def get_jacobian(self, th1: float, th2: float) -> np.ndarray:
-        """Calcula la matriz Jacobiana analítica del efector final."""
-        j11 = -self.l1 * math.sin(th1) - self.l2 * math.sin(th1 + th2)
-        j12 = -self.l2 * math.sin(th1 + th2)
-        j21 = self.l1 * math.cos(th1) + self.l2 * math.cos(th1 + th2)
-        j22 = self.l2 * math.cos(th1 + th2)
-        return np.array([[j11, j12], [j21, j22]], dtype=np.float32)
+        self.action_space = self.reacher_env.action_space
+        self.observation_space = self.reacher_env.observation_space
+
+        self.current_step = 0
+        self._last_action = np.zeros(2, dtype=np.float32)
+
+    @property
+    def model(self):
+        """Acceso al modelo cinemático/dinámico nativo de MuJoCo."""
+        return self.reacher_env.unwrapped.model
+
+    @property
+    def data(self):
+        """Acceso al estado de simulación (qpos, qvel, geom_xpos) de MuJoCo."""
+        return self.reacher_env.unwrapped.data
+
+    @property
+    def unwrapped(self):
+        """Acceso al entorno base sin wrappers."""
+        return self.reacher_env.unwrapped
 
     def _get_obs(self) -> np.ndarray:
-        """Construye el vector de observación actual (10 dimensiones cinemáticas puras)."""
-        x_ee = self.l1 * math.cos(self.theta1) + self.l2 * math.cos(self.theta1 + self.theta2)
-        y_ee = self.l1 * math.sin(self.theta1) + self.l2 * math.sin(self.theta1 + self.theta2)
-        dist_vec = self.target - np.array([x_ee, y_ee], dtype=np.float32)
+        """Extrae el vector de observación canónico de 10 dimensiones de Reacher-v5."""
+        return self.reacher_env.unwrapped._get_obs()
 
-        return np.array([
-            math.cos(self.theta1),
-            math.sin(self.theta1),
-            math.cos(self.theta2),
-            math.sin(self.theta2),
-            self.dtheta1,
-            self.dtheta2,
-            self.target[0],
-            self.target[1],
-            dist_vec[0],
-            dist_vec[1]
-        ], dtype=np.float32)
+    def _forward_kinematics(self, theta1: float, theta2: float) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Calcula la cinemática directa planar:
+            p_elbow = [l1 * cos(th1), l1 * sin(th1)]
+            p_ee = [p_elbow_x + l2 * cos(th1 + th2), p_elbow_y + l2 * sin(th1 + th2)]
+        """
+        th1 = float(theta1)
+        th2 = float(theta2)
+        elbow_x = self.l1 * math.cos(th1)
+        elbow_y = self.l1 * math.sin(th1)
+        ee_x = elbow_x + self.l2 * math.cos(th1 + th2)
+        ee_y = elbow_y + self.l2 * math.sin(th1 + th2)
+        return np.array([elbow_x, elbow_y], dtype=np.float64), np.array([ee_x, ee_y], dtype=np.float64)
 
-    def reset(self, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
-        """Reinicia el estado del entorno de forma determinista o aleatoria."""
-        super().reset(seed=seed)
+    def _compute_jacobian(self, theta1: float, theta2: float) -> np.ndarray:
+        """Calcula analíticamente la matriz Jacobiana cinemática 2x2 para el efector final."""
+        th1 = float(theta1)
+        th2 = float(theta2)
+        s1 = math.sin(th1)
+        c1 = math.cos(th1)
+        s12 = math.sin(th1 + th2)
+        c12 = math.cos(th1 + th2)
 
-        self.theta1 = float(self.np_random.uniform(-math.pi, math.pi))
-        self.theta2 = float(self.np_random.uniform(self.joint2_min, self.joint2_max))
-        self.dtheta1 = 0.0
-        self.dtheta2 = 0.0
-        self.step_count = 0
+        j11 = -self.l1 * s1 - self.l2 * s12
+        j12 = -self.l2 * s12
+        j21 = self.l1 * c1 + self.l2 * c12
+        j22 = self.l2 * c12
+        return np.array([[j11, j12], [j21, j22]], dtype=np.float64)
 
-        target_r = float(self.np_random.uniform(self.min_reach, self.max_reach * 0.95))
-        target_angle = float(self.np_random.uniform(-math.pi, math.pi))
-        self.target = np.array([
-            target_r * math.cos(target_angle),
-            target_r * math.sin(target_angle)
-        ], dtype=np.float32)
+    def set_target(self, target_x: float, target_y: float) -> None:
+        """Actualiza las coordenadas de la esfera objetivo en la simulación MuJoCo."""
+        d = self.reacher_env.unwrapped.data
+        m = self.reacher_env.unwrapped.model
+        d.qpos[2] = float(target_x)
+        d.qpos[3] = float(target_y)
+        d.qvel[2] = 0.0
+        d.qvel[3] = 0.0
+        mujoco.mj_forward(m, d)
 
-        _, end_effector = self._forward_kinematics(self.theta1, self.theta2)
-        distance = float(np.linalg.norm(self.target - end_effector))
-
-        obs = self._get_obs()
-        info = {
-            "distance": distance,
-            "joint_speed": 0.0,
-            "step_count": 0,
-        }
-
-        if self.render_mode == "human":
-            self.render()
-
-        return obs, info
+    def set_state(self, qpos: np.ndarray, qvel: np.ndarray) -> None:
+        """Establece directamente el vector articular y de velocidad en el motor de física."""
+        self.reacher_env.unwrapped.set_state(np.asarray(qpos, dtype=np.float64), np.asarray(qvel, dtype=np.float64))
 
     def set_state_and_target(self, theta1: float, theta2: float, target_x: float, target_y: float) -> np.ndarray:
-        """Permite fijar estados y objetivos específicos (para tests y datasets reproducibles)."""
-        self.theta1 = float((theta1 + math.pi) % (2 * math.pi) - math.pi)
-        if theta2 >= self.joint2_max:
-            self.theta2 = float(self.joint2_max)
-        elif theta2 <= self.joint2_min:
-            self.theta2 = float(self.joint2_min)
-        else:
-            self.theta2 = float(theta2)
-        self.dtheta1 = 0.0
-        self.dtheta2 = 0.0
-        self.target = np.array([target_x, target_y], dtype=np.float32)
-        self.step_count = 0
-        return self._get_obs()
+        """Reinicia el entorno fijando la postura articular y la posición cartesiana del objetivo."""
+        obs, _ = self.reset(options={
+            "theta1": theta1,
+            "theta2": theta2,
+            "target_x": target_x,
+            "target_y": target_y,
+        })
+        return obs
+
+    @property
+    def theta1(self) -> float:
+        """Ángulo actual de la primera articulación (rad)."""
+        return float(self.data.qpos[0])
+
+    @property
+    def theta2(self) -> float:
+        """Ángulo actual de la segunda articulación (rad)."""
+        return float(self.data.qpos[1])
+
+    @property
+    def target(self) -> np.ndarray:
+        """Posición cartesiana (x, y) del objetivo."""
+        return self.data.qpos[2:4].copy()
+
+    def reset(self, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
+        """
+        Reinicia el entorno y opcionalmente impone estados iniciales deterministas:
+        options = {'theta1': float, 'theta2': float, 'target_x': float, 'target_y': float}
+        """
+        super().reset(seed=seed)
+        self.current_step = 0
+        self._last_action = np.zeros(2, dtype=np.float32)
+
+        obs, info = self.reacher_env.reset(seed=seed)
+
+        if options is not None:
+            qpos = self.data.qpos.copy()
+            qvel = np.zeros(4, dtype=np.float64)
+
+            if "theta1" in options:
+                qpos[0] = float(options["theta1"])
+            if "theta2" in options:
+                qpos[1] = float(options["theta2"])
+            if "target_x" in options:
+                qpos[2] = float(options["target_x"])
+            if "target_y" in options:
+                qpos[3] = float(options["target_y"])
+
+            if "qpos" in options:
+                qpos = np.asarray(options["qpos"], dtype=np.float64)
+            if "qvel" in options:
+                qvel = np.asarray(options["qvel"], dtype=np.float64)
+
+            self.set_state(qpos, qvel)
+            obs = self._get_obs()
+
+        # Telemetría inicial
+        p_ee = self.reacher_env.unwrapped.get_body_com("fingertip")[:2]
+        p_tgt = self.reacher_env.unwrapped.get_body_com("target")[:2]
+        dist = float(np.linalg.norm(p_ee - p_tgt))
+
+        info.update({
+            "distance": dist,
+            "joint_speed": float(np.linalg.norm(self.data.qvel[:2])),
+            "target_x": float(p_tgt[0]),
+            "target_y": float(p_tgt[1]),
+            "ee_x": float(p_ee[0]),
+            "ee_y": float(p_ee[1]),
+            "theta1": float(self.data.qpos[0]),
+            "theta2": float(self.data.qpos[1]),
+            "dtheta1": float(self.data.qvel[0]),
+            "dtheta2": float(self.data.qvel[1]),
+            "step_count": 0,
+        })
+        return obs, info
 
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
-        """Aplica acción, calcula dinámica continua y evalúa recompensa MDP."""
-        self.step_count += 1
+        """
+        Ejecuta un paso de simulación dinámica aplicando torque en las articulaciones.
+        Calcula la recompensa cuadrática canónica LQR parametrizada desde environment.yaml.
+        """
+        act = np.clip(np.asarray(action, dtype=np.float32), -1.0, 1.0)
+        self.current_step += 1
 
-        action = np.clip(action, -1.0, 1.0)
-        self.dtheta1 = float(action[0] * self.max_speed)
-        self.dtheta2 = float(action[1] * self.max_speed)
+        # Avance dinámico en MuJoCo
+        obs, _, _, _, _ = self.reacher_env.step(act)
 
-        # 1. Integración Euler y dinámica de topes mecánicos duros (Hard Stops)
-        self.theta1 = float((self.theta1 + self.dtheta1 * self.dt + math.pi) % (2 * math.pi) - math.pi)
+        # Extracción cartesiana y articular desde datos de simulación
+        p_ee = self.reacher_env.unwrapped.get_body_com("fingertip")[:2]
+        p_tgt = self.reacher_env.unwrapped.get_body_com("target")[:2]
+        dist_vec = p_ee - p_tgt
+        dist = float(np.linalg.norm(dist_vec))
+        pos_error_sq = float(np.dot(dist_vec, dist_vec))
 
-        new_theta2 = self.theta2 + self.dtheta2 * self.dt
-        if new_theta2 > self.joint2_max:
-            self.theta2 = self.joint2_max
-            self.dtheta2 = 0.0
-        elif new_theta2 < self.joint2_min:
-            self.theta2 = self.joint2_min
-            self.dtheta2 = 0.0
-        else:
-            self.theta2 = float(new_theta2)
+        arm_qvel = self.data.qvel[:2]
+        vel_sq = float(np.dot(arm_qvel, arm_qvel))
+        joint_speed = float(np.linalg.norm(arm_qvel))
 
-        # 2. Cinemática Directa y Distancia
-        _, end_effector = self._forward_kinematics(self.theta1, self.theta2)
-        error_vec = self.target - end_effector
-        distance = float(np.linalg.norm(error_vec))
+        ctrl_effort_sq = float(np.dot(act, act))
+        act_delta = act - self._last_action
+        act_delta_sq = float(np.dot(act_delta, act_delta))
+        self._last_action = act.copy()
 
-        # 3. Velocidad Articular (norma euclidiana)
-        joint_speed = float(np.linalg.norm([self.dtheta1, self.dtheta2]))
+        # Recompensa continua cuadrática (Lyapunov / LQR)
+        reward = -(self.w_pos * pos_error_sq + self.w_ctrl * ctrl_effort_sq + self.w_vel * vel_sq)
 
-        # 4. Cálculo Descompuesto de Recompensa (solo 2 opciones permitidas)
-        if self.reward_type == "lyapunov_lqr":
-            reward_dist = -self.w_pos * (distance ** 2)
-            reward_vel = -self.w_vel * (joint_speed ** 2)
-            reward_action = -self.w_ctrl * float(np.sum(np.square(action)))
-        elif self.reward_type == "distance_only":
-            reward_dist = -distance
-            reward_vel = 0.0
-            reward_action = 0.0
-        else:
-            raise ValueError(f"reward_type='{self.reward_type}' no soportado.")
-
-        total_reward = float(reward_dist + reward_vel + reward_action)
-
-        # 5. Horizonte fijo: terminated siempre False en Fase D (corta por horizonte)
         terminated = False
-        truncated = bool(self.step_count >= self.max_steps)
+        truncated = self.current_step >= self.max_steps
 
-        obs = self._get_obs()
+        is_success = (dist <= self.target_radius) and (joint_speed <= self.vel_tol)
+
         info = {
-            "distance": distance,
+            "distance": dist,
+            "pos_error_sq": pos_error_sq,
+            "ctrl_effort_sq": ctrl_effort_sq,
+            "vel_sq": vel_sq,
+            "act_delta_sq": act_delta_sq,
             "joint_speed": joint_speed,
-            "action_norm_sq": float(np.sum(np.square(action))),
-            "reward_dist": float(reward_dist),
-            "reward_vel": float(reward_vel),
-            "reward_action": float(reward_action),
-            "step_count": self.step_count,
+            "target_x": float(p_tgt[0]),
+            "target_y": float(p_tgt[1]),
+            "ee_x": float(p_ee[0]),
+            "ee_y": float(p_ee[1]),
+            "theta1": float(self.data.qpos[0]),
+            "theta2": float(self.data.qpos[1]),
+            "dtheta1": float(arm_qvel[0]),
+            "dtheta2": float(arm_qvel[1]),
+            "is_success": is_success,
+            "step_count": self.current_step,
         }
 
-        if self.render_mode == "human":
-            self.render()
-
-        return obs, total_reward, terminated, truncated, info
+        return obs, float(reward), terminated, truncated, info
 
     def render(self):
-        """Renderizado en tiempo real con Pygame."""
-        if self.render_mode is None:
-            return
+        """Renderizado nativo de MuJoCo (OpenGL interactivo o buffer RGB)."""
+        return self.reacher_env.render()
 
-        if self.screen is None:
-            pygame.init()
-            if self.render_mode == "human":
-                pygame.display.init()
-                self.screen = pygame.display.set_mode((self.screen_dim, self.screen_dim))
-                pygame.display.set_caption(f"2 DOF Robot Arm - Mode: {self.reward_type} ({self.success_mode})")
-            else:
-                self.screen = pygame.Surface((self.screen_dim, self.screen_dim))
-            self.clock = pygame.time.Clock()
-
-        self.screen.fill((20, 24, 34))
-
-        # Dibujar área de alcance máximo y zona de auto-colisión (radio mínimo)
-        pygame.draw.circle(
-            self.screen,
-            (35, 42, 58),
-            self.origin,
-            int(self.max_reach * self.scale),
-            1
-        )
-        pygame.draw.circle(
-            self.screen,
-            (55, 30, 35),
-            self.origin,
-            int(self.min_reach * self.scale),
-            1
-        )
-
-        def to_screen(pt):
-            return (
-                int(self.origin[0] + pt[0] * self.scale),
-                int(self.origin[1] - pt[1] * self.scale)
-            )
-
-        p_base = self.origin
-        elbow, end_effector = self._forward_kinematics(self.theta1, self.theta2)
-        p_elbow = to_screen(elbow)
-        p_ee = to_screen(end_effector)
-        p_target = to_screen(self.target)
-
-        # 1. Target
-        pygame.draw.circle(self.screen, (46, 204, 113, 50), p_target, int(self.target_radius * self.scale), 1)
-        pygame.draw.circle(self.screen, (46, 204, 113), p_target, 8)
-
-        # 2. Eslabones
-        pygame.draw.line(self.screen, (52, 152, 219), p_base, p_elbow, 8)
-        pygame.draw.line(self.screen, (241, 196, 15), p_elbow, p_ee, 6)
-
-        # 3. Articulaciones
-        pygame.draw.circle(self.screen, (236, 240, 241), p_base, 10)
-        pygame.draw.circle(self.screen, (236, 240, 241), p_elbow, 7)
-        pygame.draw.circle(self.screen, (231, 76, 60), p_ee, 6)
-
-        if self.render_mode == "human":
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.close()
-            pygame.display.flip()
-            self.clock.tick(self.metadata["render_fps"])
-        elif self.render_mode == "rgb_array":
-            return np.transpose(np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2))
-
-    def set_target(self, x: float, y: float) -> None:
-        """Ajusta la posición del objetivo cartesiano respetando los límites físicos del espacio de trabajo."""
-        dist = math.sqrt(x**2 + y**2)
-        if dist > self.max_reach:
-            scale = (self.max_reach * 0.95) / dist
-            x *= scale
-            y *= scale
-        elif dist < self.min_reach:
-            if dist > 1e-6:
-                scale = self.min_reach / dist
-                x *= scale
-                y *= scale
-            else:
-                x = self.min_reach
-                y = 0.0
-        self.target = np.array([x, y], dtype=np.float32)
-
-    def close(self) -> None:
-        """Cierra la ventana gráfica de Pygame y libera recursos de renderizado."""
-        if self.screen is not None:
-            pygame.display.quit()
-            pygame.quit()
-            self.screen = None
+    def close(self):
+        """Libera los recursos del visualizador y motor físico."""
+        if hasattr(self, "reacher_env") and self.reacher_env is not None:
+            self.reacher_env.close()
