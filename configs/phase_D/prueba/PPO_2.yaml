@@ -37,4 +37,3 @@ training:
   checkpoint_freq: 50000
   eval_freq: 5000
   n_eval_episodes: 15
-
