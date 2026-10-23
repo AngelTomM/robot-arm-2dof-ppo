@@ -36,9 +36,13 @@ REPO_ROOT = Path(__file__).resolve().parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from arm2d_env import Arm2DEnv  # noqa: E402
-from src.training.callbacks import LQRMetricsCallback, VecNormalizeSyncEvalCallback, CoupledCheckpointCallback  # noqa: E402
-from src.utils.config import load_config  # noqa: E402
+from src import (  # noqa: E402
+    Arm2DEnv,
+    LQRMetricsCallback,
+    VecNormalizeSyncEvalCallback,
+    CoupledCheckpointCallback,
+    load_config,
+)
 
 
 # ----------------------------------------------------------------------------

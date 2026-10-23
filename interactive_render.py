@@ -14,7 +14,7 @@ import numpy as np
 import pygame
 import yaml
 from stable_baselines3 import PPO, SAC
-from arm2d_env import Arm2DEnv
+from src import Arm2DEnv
 
 
 def load_trained_model(model_path):

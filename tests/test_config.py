@@ -9,9 +9,7 @@ import numpy as np
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.utils.config import load_config, load_env_config
-from src.controllers.jacobian_controller import JacobianDampedController
-from arm2d_env import Arm2DEnv
+from src import load_config, load_env_config, JacobianDampedController, Arm2DEnv
 
 
 class TestConfigDecoupling(unittest.TestCase):

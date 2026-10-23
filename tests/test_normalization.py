@@ -12,8 +12,8 @@ import unittest
 import numpy as np
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, sync_envs_normalization
-from arm2d_env import Arm2DEnv
-from src.evaluation.metrics import (
+from src import (
+    Arm2DEnv,
     compute_stabilization_metrics,
     compute_lqr_canonical_cost,
     TARGET_RADIUS_EVAL,

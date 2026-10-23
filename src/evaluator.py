@@ -9,8 +9,8 @@ import os
 import sys
 import numpy as np
 import pandas as pd
-from arm2d_env import Arm2DEnv
-from src.evaluation.metrics import (
+from .arm2d_env import Arm2DEnv
+from .metrics import (
     K_STAB, TARGET_RADIUS_EVAL, VEL_TOL_EVAL,
     compute_stabilization_metrics, compute_lqr_canonical_cost,
     compute_settling_time, compute_control_effort,
@@ -31,7 +31,7 @@ def evaluate_on_dataset(agent, dataset: list, dataset_name: str,
     """
     if env_config is None:
         try:
-            from src.utils.config import load_env_config
+            from .config import load_env_config
             merged_cfg = load_env_config()
         except Exception:
             merged_cfg = {"env": {}}

@@ -1,5 +1,5 @@
 """
-Entorno de Simulación 2D para Brazo Robótico de 2 Grados de Libertad (2 DOF)
+Entorno de Simulación 2D para Brazo Robótico de 2 Grados de Libertad (2 DOF).
 Fase D: Proceso de Decisión de Markov (MDP) Continuo con Regulación Lyapunov / LQR.
 Compatible con Gymnasium y Stable-Baselines3.
 
@@ -8,8 +8,8 @@ Cinemática Directa:
   Codo (x1, y1) = (L1 * cos(theta1), L1 * sin(theta1))
   Efector (x, y) = (x1 + L2 * cos(theta1 + theta2), y1 + L2 * sin(theta1 + theta2))
 """
-
 import math
+from typing import Optional, Dict, Any, Tuple
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
@@ -20,14 +20,14 @@ class Arm2DEnv(gym.Env):
     """
     Entorno Gymnasium para un brazo planar 2 DOF bajo formulación MDP continua.
     Recompensa principal: lyapunov_lqr (función cuadrática continua sin horizonte discontinuo).
-    Recompensa secundaria aislada: distance_only (-distance).
+    Recompensa secundaria: distance_only (-distance).
     """
     metadata = {
         "render_modes": ["human", "rgb_array"],
         "render_fps": 60
     }
 
-    def __init__(self, render_mode=None, config=None):
+    def __init__(self, render_mode: Optional[str] = None, config: Optional[Dict[str, Any]] = None):
         super().__init__()
 
         # --- 1. Cargar configuración o usar valores por defecto ---
@@ -85,7 +85,7 @@ class Arm2DEnv(gym.Env):
             dtype=np.float32
         )
 
-        # --- 3. Espacio de Observaciones (10 dimensiones cinemáticas intactas) ---
+        # --- 3. Espacio de Observaciones (10 dimensiones cinemáticas puras) ---
         obs_high = np.array([
             1.0, 1.0, 1.0, 1.0,                     # cos1, sin1, cos2, sin2
             self.max_speed, self.max_speed,         # velocidades dtheta1, dtheta2
@@ -115,7 +115,7 @@ class Arm2DEnv(gym.Env):
         self.scale = (self.screen_dim / 2) / (self.max_reach * 1.15)
         self.origin = np.array([self.screen_dim // 2, self.screen_dim // 2])
 
-    def _forward_kinematics(self, th1, th2):
+    def _forward_kinematics(self, th1: float, th2: float) -> Tuple[np.ndarray, np.ndarray]:
         """Calcula cinemática directa: posición de codo y efector final."""
         x1 = self.l1 * math.cos(th1)
         y1 = self.l1 * math.sin(th1)
@@ -123,7 +123,7 @@ class Arm2DEnv(gym.Env):
         y2 = y1 + self.l2 * math.sin(th1 + th2)
         return np.array([x1, y1], dtype=np.float32), np.array([x2, y2], dtype=np.float32)
 
-    def get_jacobian(self, th1, th2):
+    def get_jacobian(self, th1: float, th2: float) -> np.ndarray:
         """Calcula la matriz Jacobiana analítica del efector final."""
         j11 = -self.l1 * math.sin(th1) - self.l2 * math.sin(th1 + th2)
         j12 = -self.l2 * math.sin(th1 + th2)
@@ -131,7 +131,7 @@ class Arm2DEnv(gym.Env):
         j22 = self.l2 * math.cos(th1 + th2)
         return np.array([[j11, j12], [j21, j22]], dtype=np.float32)
 
-    def _get_obs(self):
+    def _get_obs(self) -> np.ndarray:
         """Construye el vector de observación actual (10 dimensiones cinemáticas puras)."""
         x_ee = self.l1 * math.cos(self.theta1) + self.l2 * math.cos(self.theta1 + self.theta2)
         y_ee = self.l1 * math.sin(self.theta1) + self.l2 * math.sin(self.theta1 + self.theta2)
@@ -150,7 +150,7 @@ class Arm2DEnv(gym.Env):
             dist_vec[1]
         ], dtype=np.float32)
 
-    def reset(self, seed=None, options=None):
+    def reset(self, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
         """Reinicia el estado del entorno de forma determinista o aleatoria."""
         super().reset(seed=seed)
 
@@ -182,7 +182,7 @@ class Arm2DEnv(gym.Env):
 
         return obs, info
 
-    def set_state_and_target(self, theta1, theta2, target_x, target_y):
+    def set_state_and_target(self, theta1: float, theta2: float, target_x: float, target_y: float) -> np.ndarray:
         """Permite fijar estados y objetivos específicos (para tests y datasets reproducibles)."""
         self.theta1 = float((theta1 + math.pi) % (2 * math.pi) - math.pi)
         if theta2 >= self.joint2_max:
@@ -197,7 +197,7 @@ class Arm2DEnv(gym.Env):
         self.step_count = 0
         return self._get_obs()
 
-    def step(self, action):
+    def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
         """Aplica acción, calcula dinámica continua y evalúa recompensa MDP."""
         self.step_count += 1
 
@@ -327,7 +327,8 @@ class Arm2DEnv(gym.Env):
         elif self.render_mode == "rgb_array":
             return np.transpose(np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2))
 
-    def set_target(self, x, y):
+    def set_target(self, x: float, y: float) -> None:
+        """Ajusta la posición del objetivo cartesiano respetando los límites físicos del espacio de trabajo."""
         dist = math.sqrt(x**2 + y**2)
         if dist > self.max_reach:
             scale = (self.max_reach * 0.95) / dist
@@ -343,7 +344,8 @@ class Arm2DEnv(gym.Env):
                 y = 0.0
         self.target = np.array([x, y], dtype=np.float32)
 
-    def close(self):
+    def close(self) -> None:
+        """Cierra la ventana gráfica de Pygame y libera recursos de renderizado."""
         if self.screen is not None:
             pygame.display.quit()
             pygame.quit()

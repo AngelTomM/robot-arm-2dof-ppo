@@ -23,10 +23,12 @@ REPO_ROOT = Path(__file__).resolve().parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.controllers.jacobian_controller import JacobianDampedController
-from src.evaluation.evaluator import evaluate_on_dataset
-from src.evaluation.datasets import save_and_get_datasets
-from src.utils.config import load_env_config
+from src import (
+    JacobianDampedController,
+    evaluate_on_dataset,
+    save_and_get_datasets,
+    load_env_config,
+)
 
 
 def load_rl_agent(model_path: Path) -> Tuple[Any, Optional[Path]]:

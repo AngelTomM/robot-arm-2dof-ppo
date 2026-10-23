@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import math
 import unittest
 import numpy as np
-from arm2d_env import Arm2DEnv
+from src import Arm2DEnv
 
 
 class TestKinematics(unittest.TestCase):

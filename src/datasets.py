@@ -8,7 +8,10 @@ import json
 import numpy as np
 import pandas as pd
 
-from src.utils.config import load_env_config
+from pathlib import Path
+from .config import load_env_config
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def generate_dataset(n_episodes: int, seed: int, l1: float = None, l2: float = None,
@@ -68,12 +71,14 @@ def generate_dataset(n_episodes: int, seed: int, l1: float = None, l2: float = N
     return episodes
 
 def save_and_get_datasets(data_dir: str = "data/datasets", force_regenerate: bool = False):
-    os.makedirs(data_dir, exist_ok=True)
+    p = Path(data_dir)
+    resolved_dir = p if p.is_absolute() else (REPO_ROOT / p)
+    resolved_dir.mkdir(parents=True, exist_ok=True)
 
-    val_json_path = os.path.join(data_dir, "validation_set_200.json")
-    val_csv_path = os.path.join(data_dir, "validation_set_200.csv")
-    final_json_path = os.path.join(data_dir, "final_eval_set_300.json")
-    final_csv_path = os.path.join(data_dir, "final_eval_set_300.csv")
+    val_json_path = str(resolved_dir / "validation_set_200.json")
+    val_csv_path = str(resolved_dir / "validation_set_200.csv")
+    final_json_path = str(resolved_dir / "final_eval_set_300.json")
+    final_csv_path = str(resolved_dir / "final_eval_set_300.csv")
 
     # 1. Validation Set (200 episodios, seed=202601)
     if force_regenerate or not os.path.exists(val_json_path):

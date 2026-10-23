@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Union
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ENV_CONFIG = REPO_ROOT / "configs" / "environment.yaml"
 
 
