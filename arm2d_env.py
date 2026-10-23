@@ -39,7 +39,15 @@ class Arm2DEnv(gym.Env):
         self.l1 = float(env_cfg.get("l1", 1.0))
         self.l2 = float(env_cfg.get("l2", 1.0))
         self.max_reach = self.l1 + self.l2
-        self.min_reach = abs(self.l1 - self.l2) + 0.1
+
+        # Límites físicos estrictos en articulación 2 (prevención de auto-colisión con la base)
+        self.joint2_limit_deg = float(env_cfg.get("joint2_limit_deg", 170.0))
+        self.joint2_max = math.radians(self.joint2_limit_deg)
+        self.joint2_min = -self.joint2_max
+
+        # Radio mínimo alcanzable según cinemática física: r_min = sqrt(l1^2 + l2^2 + 2*l1*l2*cos(joint2_max))
+        min_reach_geom = math.sqrt(self.l1**2 + self.l2**2 + 2 * self.l1 * self.l2 * math.cos(self.joint2_max))
+        self.min_reach = float(env_cfg.get("min_reach", min_reach_geom))
 
         self.dt = float(env_cfg.get("dt", 0.05))
         self.max_speed = float(env_cfg.get("max_speed", 2.0))
@@ -147,7 +155,7 @@ class Arm2DEnv(gym.Env):
         super().reset(seed=seed)
 
         self.theta1 = float(self.np_random.uniform(-math.pi, math.pi))
-        self.theta2 = float(self.np_random.uniform(-math.pi, math.pi))
+        self.theta2 = float(self.np_random.uniform(self.joint2_min, self.joint2_max))
         self.dtheta1 = 0.0
         self.dtheta2 = 0.0
         self.step_count = 0
@@ -177,7 +185,12 @@ class Arm2DEnv(gym.Env):
     def set_state_and_target(self, theta1, theta2, target_x, target_y):
         """Permite fijar estados y objetivos específicos (para tests y datasets reproducibles)."""
         self.theta1 = float((theta1 + math.pi) % (2 * math.pi) - math.pi)
-        self.theta2 = float((theta2 + math.pi) % (2 * math.pi) - math.pi)
+        if theta2 >= self.joint2_max:
+            self.theta2 = float(self.joint2_max)
+        elif theta2 <= self.joint2_min:
+            self.theta2 = float(self.joint2_min)
+        else:
+            self.theta2 = float(theta2)
         self.dtheta1 = 0.0
         self.dtheta2 = 0.0
         self.target = np.array([target_x, target_y], dtype=np.float32)
@@ -192,11 +205,18 @@ class Arm2DEnv(gym.Env):
         self.dtheta1 = float(action[0] * self.max_speed)
         self.dtheta2 = float(action[1] * self.max_speed)
 
-        # 1. Integración Euler (orden numérico determinista idéntico)
-        self.theta1 += self.dtheta1 * self.dt
-        self.theta2 += self.dtheta2 * self.dt
-        self.theta1 = (self.theta1 + math.pi) % (2 * math.pi) - math.pi
-        self.theta2 = (self.theta2 + math.pi) % (2 * math.pi) - math.pi
+        # 1. Integración Euler y dinámica de topes mecánicos duros (Hard Stops)
+        self.theta1 = float((self.theta1 + self.dtheta1 * self.dt + math.pi) % (2 * math.pi) - math.pi)
+
+        new_theta2 = self.theta2 + self.dtheta2 * self.dt
+        if new_theta2 > self.joint2_max:
+            self.theta2 = self.joint2_max
+            self.dtheta2 = 0.0
+        elif new_theta2 < self.joint2_min:
+            self.theta2 = self.joint2_min
+            self.dtheta2 = 0.0
+        else:
+            self.theta2 = float(new_theta2)
 
         # 2. Cinemática Directa y Distancia
         _, end_effector = self._forward_kinematics(self.theta1, self.theta2)
@@ -257,12 +277,19 @@ class Arm2DEnv(gym.Env):
 
         self.screen.fill((20, 24, 34))
 
-        # Dibujar área de alcance
+        # Dibujar área de alcance máximo y zona de auto-colisión (radio mínimo)
         pygame.draw.circle(
             self.screen,
             (35, 42, 58),
             self.origin,
             int(self.max_reach * self.scale),
+            1
+        )
+        pygame.draw.circle(
+            self.screen,
+            (55, 30, 35),
+            self.origin,
+            int(self.min_reach * self.scale),
             1
         )
 
@@ -306,6 +333,14 @@ class Arm2DEnv(gym.Env):
             scale = (self.max_reach * 0.95) / dist
             x *= scale
             y *= scale
+        elif dist < self.min_reach:
+            if dist > 1e-6:
+                scale = self.min_reach / dist
+                x *= scale
+                y *= scale
+            else:
+                x = self.min_reach
+                y = 0.0
         self.target = np.array([x, y], dtype=np.float32)
 
     def close(self):

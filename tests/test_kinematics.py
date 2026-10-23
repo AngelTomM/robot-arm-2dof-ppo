@@ -84,5 +84,74 @@ class TestKinematics(unittest.TestCase):
         np.testing.assert_allclose(obs[8:10], dist_vec, atol=1e-6)
 
 
+class TestJointLimits(unittest.TestCase):
+    def test_joint2_reset_within_limits(self):
+        """Verifica que en 500 llamadas a reset(), theta2 respete estrictamente [-170°, 170°]."""
+        env = Arm2DEnv()
+        limit_rad = math.radians(170)
+        for seed in range(500):
+            env.reset(seed=seed)
+            self.assertGreaterEqual(env.theta2, -limit_rad - 1e-6)
+            self.assertLessEqual(env.theta2, limit_rad + 1e-6)
+            target_dist = np.linalg.norm(env.target)
+            self.assertGreaterEqual(target_dist, env.min_reach - 1e-6)
+
+    def test_joint2_hard_stops_and_velocity_halt(self):
+        """Verifica que acciones hacia el tope detengan theta2 y anulen dtheta2, y que la acción contraria despegue."""
+        env = Arm2DEnv()
+        limit_rad = math.radians(170)
+        env.reset(seed=42)
+
+        # Colocar el brazo muy cerca del tope positivo (+169°)
+        near_limit = math.radians(169)
+        env.set_state_and_target(0.0, near_limit, 1.0, 1.0)
+
+        # Ordenar velocidad positiva máxima hacia el tope (action[1] = 1.0)
+        action_forward = np.array([0.0, 1.0], dtype=np.float32)
+        env.step(action_forward)
+
+        # Debe chocar contra el límite exacto y anular su velocidad articular efectiva
+        self.assertAlmostEqual(env.theta2, limit_rad, places=5)
+        self.assertEqual(env.dtheta2, 0.0)
+
+        # Intentar seguir empujando hacia adelante: debe permanecer en el tope
+        env.step(action_forward)
+        self.assertAlmostEqual(env.theta2, limit_rad, places=5)
+        self.assertEqual(env.dtheta2, 0.0)
+
+        # Ordenar acción en reversa (action[1] = -1.0): debe despegar de inmediato
+        action_reverse = np.array([0.0, -1.0], dtype=np.float32)
+        env.step(action_reverse)
+        self.assertLess(env.theta2, limit_rad)
+        self.assertLess(env.dtheta2, 0.0)
+
+    def test_set_state_clips_joint2(self):
+        """Verifica que set_state_and_target recorte theta2 fuera de rango al límite físico."""
+        env = Arm2DEnv()
+        limit_rad = math.radians(170)
+
+        # Intentar fijar theta2 = pi (doblado completo en colisión)
+        env.set_state_and_target(0.0, math.pi, 1.0, 1.0)
+        self.assertAlmostEqual(env.theta2, limit_rad, places=5)
+
+        # Intentar fijar theta2 = -pi
+        env.set_state_and_target(0.0, -math.pi, 1.0, 1.0)
+        self.assertAlmostEqual(env.theta2, -limit_rad, places=5)
+
+    def test_minimum_reach_geometry(self):
+        """Verifica que la distancia del efector a la base en cualquier estado admisible sea >= r_min."""
+        env = Arm2DEnv()
+        expected_min_r = 2.0 * math.sin(math.radians(5))
+        self.assertAlmostEqual(env.min_reach, expected_min_r, places=5)
+
+        for th2_deg in range(-170, 171, 10):
+            th2 = math.radians(th2_deg)
+            for th1_deg in range(-180, 180, 45):
+                th1 = math.radians(th1_deg)
+                _, ee = env._forward_kinematics(th1, th2)
+                dist_base = float(np.linalg.norm(ee))
+                self.assertGreaterEqual(dist_base, expected_min_r - 1e-5)
+
+
 if __name__ == "__main__":
     unittest.main()
