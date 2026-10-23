@@ -1,174 +1,129 @@
-# 📘 Manual de Uso — Brazo Robótico 2 DOF (Fase D: MDP Continuo con Regulación LQR)
+# Manual de Operación y Uso — Manipulador Planar 2-DOF (Fase D: MuJoCo Reacher-v5)
 
-Manual operativo del proyecto: instalación, entrenamiento continuo, simulación interactiva, evaluación dual desacoplada y ejecución de la suite de validación.
-Para el fundamento técnico (cinemática, MDP, regulación LQR y formulación matemática), consulte [`docs/metodologia.md`](metodologia.md).
+Guía operativa para la instalación, entrenamiento, evaluación mecatrónica, simulación interactiva 3D y ejecución de pruebas unitarias sobre el manipulador planar 2-DOF accionado por torque. Para el fundamento teórico y la formulación matemática, consulte [docs/metodologia.md](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/docs/metodologia.md).
 
 ---
 
-## 1. Instalación y Configuración
+## 1. Configuración del Entorno de Ejecución
 
-### 1.1 Clonar el repositorio
-```bash
-git clone https://github.com/AngelTomM/robot-arm-2dof-ppo.git
-cd robot-arm-2dof-ppo
-```
+### 1.1 Requisitos del Sistema
+* Python 3.11 (o superior compatible con MuJoCo).
+* Entorno virtual activo con acceso a librerías gráficas de OpenGL.
 
-### 1.2 Entorno virtual (Python 3.11)
-- **Windows (PowerShell):**
-  ```powershell
-  py -3.11 -m venv .venv
-  .\.venv\Scripts\Activate.ps1
-  ```
-- **Linux / macOS:**
-  ```bash
-  python3.11 -m venv .venv
-  source .venv/bin/activate
-  ```
+### 1.2 Activación del Entorno Virtual e Instalación de Dependencias
+```powershell
+# 1. Activación del entorno virtual (Windows PowerShell)
+..\.venv\Scripts\Activate.ps1
 
-### 1.3 Dependencias
-```bash
+# 2. Instalación de paquetes requeridos
 pip install -r requirements.txt
 ```
+
+Las dependencias principales contemplan `gymnasium[mujoco]>=1.0.0`, `mujoco>=2.3.3`, `imageio>=2.14.1`, `stable-baselines3>=2.0.0`, `torch>=2.0.0`, `matplotlib>=3.8.0`, `pandas>=2.1.0` y `pytest>=8.0.0`.
 
 ---
 
 ## 2. Entrenamiento de Agentes (`train.py`)
 
-Todo el entrenamiento se ejecuta desde el punto de entrada unificado en la raíz.
-Principios de diseño:
-1. **Configuración como fuente de verdad (SSOT):** La fase y el identificador del experimento se derivan de la ruta del archivo YAML bajo `configs/`.
-2. **Soporte de algoritmos:** Si el YAML contiene `ppo:`, se instancia PPO; si contiene `sac:`, se instancia SAC.
-3. **Formulación MDP pura:** Entrenado con `reward_type: lyapunov_lqr` y `success_mode: none`.
+El script en la raíz [train.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/train.py) centraliza la inicialización, vectorización y entrenamiento de los agentes bajo el paradigma MDP continuo:
+* **Resolución de Hiperparámetros (SSOT):** Fusiona automáticamente los parámetros físicos invariantes de [configs/environment.yaml](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/configs/environment.yaml) con la configuración específica del algoritmo.
+* **Selección de Algoritmo:** Detecta si la configuración define hiperparámetros para PPO (`ppo:`) o SAC (`sac:`).
+* **Normalización Acoplada:** Utiliza `VecNormalize` sobre observaciones físicas crudas preservando las escalas originales de recompensa (`norm_reward: false`).
 
-### 2.1 Sintaxis general
+### 2.1 Sintaxis del Comando
 ```powershell
-python train.py --config <ruta_del_yaml> [--seed <n>] [--device <s>] [--total_timesteps <n>] [--checkpoint_freq <n>]
+python train.py --config <ruta_yaml> [--seed <int>] [--device <str>] [--total_timesteps <int>] [--checkpoint_freq <int>]
 ```
 
-### 2.2 Configuraciones vigentes de Fase D
+### 2.2 Comandos de Ejecución Estándar
 ```powershell
-# Entrenamiento PPO_1 (PPO continuo con ventaja GAE)
-python train.py --config configs/phase_X/prueba/PPO_1.yaml --seed 42
+# Entrenamiento completo de PPO_1 (300.000 timesteps, seed 42)
+python train.py --config configs/phase_D/prueba/PPO_1.yaml --seed 42
 
-# Entrenamiento SAC_1 (Soft Actor-Critic continuo)
-python train.py --config configs/phase_X/prueba/SAC_1.yaml --seed 42
+# Entrenamiento completo de SAC_1 (300.000 timesteps, seed 42)
+python train.py --config configs/phase_D/prueba/SAC_1.yaml --seed 42
 
-# Pruebas de humo rápidas (1.000 timesteps):
-python train.py --config configs/phase_X/smoke/x3_smoke.yaml --total_timesteps 1000
-python train.py --config configs/phase_X/smoke/s1_smoke.yaml --total_timesteps 1000
+# Pruebas de integración rápida (Smoke tests, 256 timesteps)
+python train.py --config configs/phase_D/smoke/PPO_smoke.yaml --total_timesteps 256
+python train.py --config configs/phase_D/smoke/SAC_smoke.yaml --total_timesteps 256
 ```
 
-### 2.3 Artefactos generados
-Cada ejecución genera en `experiments/<fase>/<exp_id>/seed_<seed>/`:
-- `models/<algoritmo>_arm2d_final.zip`: Pesos del modelo final.
-- `models/best_model/`: Mejor checkpoint (`best_model.zip` + `vecnormalize_stats.pkl`).
-- `checkpoints/ckpt_<paso>/`: Guardado periódico acoplado (`model.zip` y `vecnormalize_stats.pkl`).
-- `logs/`: Telemetría continua de TensorBoard (`tensorboard --logdir experiments/`).
+### 2.3 Estructura de Artefactos de Salida
+Cada sesión de entrenamiento genera un directorio estructurado en `experiments/<fase>/<experimento>/seed_<semilla>/`:
+* `models/<algoritmo>_arm2d_final.zip`: Red neuronal con los pesos finales entrenados.
+* `models/best_model/`: Checkpoint con el mayor retorno obtenido en validación periódica (`best_model.zip` junto a `vecnormalize_stats.pkl`).
+* `checkpoints/ckpt_<paso>/`: Puntos de control intermedios acoplados para análisis de convergencia.
+* `logs/`: Registros de telemetría continuos para TensorBoard (`tensorboard --logdir experiments/`).
 
 ---
 
-## 3. Simulación Interactiva en Tiempo Real (`interactive_render.py`)
+## 3. Evaluación Mecatrónica y Benchmarking (`evaluate.py`)
 
-Simulador visual a 60 FPS con Pygame. Detecta automáticamente algoritmos PPO y SAC y carga de forma acoplada las estadísticas de normalización `vecnormalize_stats.pkl`:
+El script [evaluate.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/evaluate.py) ejecuta la evaluación determinista de políticas entrenadas o del controlador clásico sobre conjuntos congelados de datos, cuantificando la estabilización terminal y el costo LQR sobre coordenadas físicas crudas.
 
+### 3.1 Sintaxis del Comando
 ```powershell
-# Visualizar agente PPO_1
-python interactive_render.py experiments/phase_X/prueba/PPO_1/seed_42/models/best_model/best_model.zip --config configs/phase_X/prueba/PPO_1.yaml
-
-# Visualizar agente SAC_1
-python interactive_render.py experiments/phase_X/prueba/SAC_1/seed_42/models/best_model/best_model.zip --config configs/phase_X/prueba/SAC_1.yaml
+python evaluate.py [--agent <ppo|sac|c0>] [--model-path <ruta_modelo.zip>] [--c0] [--dataset <ruta_dataset.json>] [--output-dir <directorio_salida>]
 ```
 
-| Control | Acción |
-| :--- | :--- |
-| 🖱️ Clic izquierdo y arrastrar | Mueve interactivamente el objetivo cartesiano. |
-| ⌨️ Barra espaciadora | Genera un objetivo aleatorio en el espacio de trabajo. |
-| ⌨️ Tecla `R` | Reinicia la postura articular inicial. |
-| ⌨️ Tecla `ESC` | Cierra el simulador. |
+### 3.2 Ejemplos de Evaluación
+```powershell
+# 1. Evaluación del baseline analítico C0 sobre el dataset de validación (200 episodios)
+python evaluate.py --c0 --dataset data/datasets/validation_set_200.json
 
-El HUD en pantalla muestra en tiempo real: distancia al objetivo, velocidad articular instantánea ($\|\dot{\boldsymbol{\theta}}\|_2$), recompensa instantánea y desglose por componentes.
+# 2. Evaluación de un modelo PPO sobre el conjunto de evaluación final (300 episodios)
+python evaluate.py --agent ppo --model-path experiments/phase_D_prueba/PPO_1/seed_42/models/ppo_arm2d_final.zip --dataset data/datasets/final_eval_set_300.json
+
+# 3. Evaluación de un modelo SAC con estadísticas explícitas de normalización
+python evaluate.py --agent sac --model-path experiments/phase_D_prueba/SAC_1/seed_42/models/best_model/best_model.zip --vecnormalize experiments/phase_D_prueba/SAC_1/seed_42/models/best_model/vecnormalize_stats.pkl --dataset data/datasets/final_eval_set_300.json
+```
+
+Los resultados se almacenan en `reports/data/evaluation/`:
+* `<agente>_episodes.csv`: Telemetría paso a paso por episodio ($e_{\text{ss}}, v_{\text{ss}}, t_s, J_u, J_{\text{lqr}}$).
+* `<agente>_summary.json`: Métricas estadísticas agregadas e intervalos de confianza de Wilson.
 
 ---
 
-## 4. Evaluación y Benchmarking Formal
+## 4. Generación de Gráficas Comparativas (`plot.py`)
 
-La evaluación en Fase D desacopla la métrica de éxito de la función de recompensa del agente, evaluando sobre la cinemática cruda:
-- **Opción 2 (Métrica Principal):** Estabilización en los últimos $k=20$ pasos ($\bar{d}_{20} \le 0.06\text{ m}$, $\bar{v}_{20} \le 0.10\text{ rad/s}$).
-- **Opción 3 (Métrica Canónica):** Costo integral continuo LQR ($J_{\text{LQR}} = -\sum [1.0\cdot d_t^2 + 0.05\cdot v_t^2 + 0.01\cdot \|a_t\|^2]$).
+El script [plot.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/plot.py) procesa de forma desacoplada los archivos CSV generados por `evaluate.py` para construir las figuras de análisis mecatrónico sin requerir dependencias del simulador físico:
 
-### 4.1 Evaluación de Checkpoints
 ```powershell
-# Evaluar una corrida individual
-python scripts/evaluate_checkpoints.py --exp_dir experiments/phase_X/prueba/PPO_1/seed_42 --config configs/phase_X/prueba/PPO_1.yaml
-
-# Evaluar suite completa Fase D (PPO_1, SAC_1, C0) sobre validation_set_200:
-python scripts/evaluate_checkpoints.py --phase d
+python plot.py --data-dir reports/data/evaluation --out-dir reports/figures
 ```
 
-### 4.2 Ajuste y Evaluación del Controlador Cinemático Clásico (`C0`)
-```powershell
-python scripts/tune_and_eval_controller.py
-```
-Ajusta la ganancia $K_p$ y el amortiguamiento Levenberg-Marquardt $\lambda$ sobre el conjunto de validación ($n=200$) y evalúa el controlador congelado sobre el conjunto final ($n=300$) reportando Opción 2 y Opción 3.
+Figuras generadas en `reports/figures/`:
+* `fig1_success_rate_comparison.png`: Comparativa de tasa de estabilización con barras de error binomial (Wilson al 95%).
+* `fig2_steady_state_precision.png`: Diagramas de caja y distribuciones de error estacionario ($e_{\text{ss}}$) y velocidad angular residual ($v_{\text{ss}}$).
+* `fig3_settling_time_and_effort.png`: Dispersión y correlación entre tiempo de establecimiento ($t_s$) y esfuerzo acumulado de torque ($J_u$).
 
 ---
 
-## 5. Generación de Figuras
+## 5. Simulación Visual en Tiempo Real (`interactive_render.py`)
+
+El visualizador [interactive_render.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/interactive_render.py) interactúa directamente con la ventana nativa OpenGL de MuJoCo en 3D:
 
 ```powershell
-# Comparativa libre entre agentes (PPO_1 vs SAC_1):
-python scripts/generate_figures.py --phase custom --configs configs/phase_X/prueba/PPO_1.yaml,configs/phase_X/prueba/SAC_1.yaml
+# Visualización de un modelo entrenado de RL
+python interactive_render.py experiments/phase_D_prueba/PPO_1/seed_42/models/best_model/best_model.zip
 
-# Visualización de trayectorias con ventana de estabilización destacada:
-python scripts/generate_figures.py --phase trajectories
+# Visualización del controlador cartesiano analítico C0
+python interactive_render.py --c0 --episodes 5
 ```
+
+En la ventana de MuJoCo es posible manipular la cámara orbital mediante el ratón (rotación con clic izquierdo, traslación con clic derecho y zoom con la rueda). La consola imprime periódicamente la telemetría del efector final, torques aplicados y recompensas instantáneas.
 
 ---
 
-## 6. Suite de Pruebas Unitarias
+## 6. Ejecución de la Suite de Pruebas Unitarias
 
-Ejecuta la suite completa de pruebas unitarias que verifica cinemática directa, Jacobiano analítico, cálculo exacto de recompensas `lyapunov_lqr` y `distance_only`, rechazo de modos obsoletos, truncamiento estricto a 200 pasos y normalización:
+La suite de validación asegura la coherencia dimensional, cinemática y algorítmica del proyecto:
 
 ```powershell
-python -m unittest discover tests
+python -m pytest tests/
 ```
 
----
-
-## 7. Estructura del Repositorio (Fase D)
-
-```text
-robot-arm-2dof-ppo/
-├── arm2d_env.py                             # Entorno Gymnasium (MDP puro, lyapunov_lqr, 10D cinemático)
-├── train.py                                 # Pipeline de entrenamiento PPO y SAC
-├── interactive_render.py                    # Visualizador interactivo Pygame con telemetría LQR
-├── configs/
-│   └── phase_X/
-│       ├── prueba/                          # PPO_1.yaml y SAC_1.yaml (agentes vigentes)
-│       └── smoke/                           # s1_smoke.yaml y x3_smoke.yaml (fixtures de humo)
-├── data/
-│   └── datasets/                            # Conjuntos congelados de validación (200) y final (300)
-├── src/
-│   ├── controllers/
-│   │   └── jacobian_controller.py           # Controlador cinemático C0 (Jacobiano amortiguado)
-│   ├── evaluation/
-│   │   ├── checkpoints.py                   # Runner de evaluación de checkpoints
-│   │   ├── datasets.py                      # Carga y hashes de datasets congelados
-│   │   ├── evaluator.py                     # Evaluador dual desacoplado (Opción 2 y Opción 3)
-│   │   └── metrics.py                       # Constantes canónicas y funciones de métricas LQR
-│   ├── training/
-│   │   ├── callbacks.py                     # Callbacks de telemetría y sincronización
-│   │   └── phase_b_callbacks.py             # Checkpointing periódico acoplado
-│   └── visualization/
-│       ├── common.py                        # Estilo y trazabilidad JSON
-│       ├── phase_custom.py                  # Curvas de entrenamiento y comparativa entre agentes
-│       └── trajectories.py                  # Trayectorias cartesianas y ventana de estabilización
-├── scripts/
-│   ├── evaluate_checkpoints.py              # CLI para evaluación de modelos
-│   ├── generate_figures.py                  # CLI para figuras de reporte
-│   └── tune_and_eval_controller.py          # Ajuste y benchmarking de C0
-├── reports/                                 # Datos y figuras generadas
-├── docs/                                    # Manual de uso y metodología
-├── tests/                                   # Pruebas unitarias (test_kinematics, test_normalization)
-└── requirements.txt                         # Dependencias fijadas
-```
+Módulos de prueba verificados:
+* [tests/test_config.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_config.py): Carga desacoplada de configuraciones y verificación de parámetros SSOT de MuJoCo Reacher-v5.
+* [tests/test_kinematics.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_kinematics.py): Validación de cinemática directa y matriz Jacobiana contrastada contra las funciones internas de MuJoCo.
+* [tests/test_normalization.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_normalization.py): Normalización vectorial `VecNormalize`, cálculo de recompensa cuadrática continua LQR y truncamiento de horizonte.
