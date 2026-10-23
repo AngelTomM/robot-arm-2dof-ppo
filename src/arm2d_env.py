@@ -73,6 +73,8 @@ class Arm2DEnv(gym.Env):
 
         self.current_step = 0
         self._last_action = np.zeros(2, dtype=np.float32)
+        self._dist_history = []
+        self._speed_history = []
 
     @property
     def model(self):
@@ -169,8 +171,11 @@ class Arm2DEnv(gym.Env):
         super().reset(seed=seed)
         self.current_step = 0
         self._last_action = np.zeros(2, dtype=np.float32)
+        self._dist_history.clear()
+        self._speed_history.clear()
 
         obs, info = self.reacher_env.reset(seed=seed)
+
 
         if options is not None:
             qpos = self.data.qpos.copy()
@@ -246,7 +251,22 @@ class Arm2DEnv(gym.Env):
         terminated = False
         truncated = self.current_step >= self.max_steps
 
-        is_success = (dist <= self.target_radius) and (joint_speed <= self.vel_tol)
+        # Rastrear historial de telemetría del episodio
+        self._dist_history.append(dist)
+        self._speed_history.append(joint_speed)
+
+        # Métrica de éxito: al finalizar el episodio evalúa estabilización sostenida (k=20);
+        # en pasos intermedios evalúa contacto y reposo instantáneo
+        k_stab = min(len(self._dist_history), 20)
+        mean_dist_k = float(np.mean(self._dist_history[-k_stab:]))
+        mean_speed_k = float(np.mean(self._speed_history[-k_stab:]))
+        is_stabilized = bool(mean_dist_k <= self.target_radius and mean_speed_k <= self.vel_tol)
+
+        if terminated or truncated:
+            is_success = is_stabilized
+        else:
+            is_success = bool(dist <= self.target_radius and joint_speed <= self.vel_tol)
+
 
         info = {
             "distance": dist,

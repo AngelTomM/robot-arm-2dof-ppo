@@ -62,8 +62,18 @@ class VecNormalizeSyncEvalCallback(EvalCallback):
                 self.eval_env.training = False
                 self.eval_env.norm_reward = False
 
-            return super()._on_step()
+            prev_best = self.best_mean_reward
+            continue_training = super()._on_step()
+
+            # Guardar estadísticas acopladas si se generó un nuevo mejor modelo
+            if self.best_model_save_path is not None and self.best_mean_reward > prev_best:
+                if isinstance(self.training_env, VecNormalize):
+                    best_stats_path = Path(self.best_model_save_path) / "vecnormalize_stats.pkl"
+                    self.training_env.save(str(best_stats_path))
+
+            return continue_training
         return True
+
 
 
 class CoupledCheckpointCallback(BaseCallback):
