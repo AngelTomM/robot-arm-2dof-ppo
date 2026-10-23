@@ -1,0 +1,39 @@
+# ==============================================================================
+# CONFIGURACIÓN DEL AGENTE: PPO_3 (Fase D)
+# ==============================================================================
+experiment:
+  description: PPO optimizado para alcanzar el target sin congelamiento ni oscilaciones (Tanh, GAE, gamma=0.99, ent_coef>0)
+  phase: phase_D
+
+# Referencia al entorno físico común
+env_config: configs/environment.yaml
+
+# Preprocesamiento y normalización
+normalization:
+  norm_obs: true
+  norm_reward: false
+  clip_obs: 10.0
+
+# Hiperparámetros del algoritmo PPO (optimizados para precisión y alcance del target)
+ppo:
+  learning_rate: 0.00025        # Tasa de aprendizaje equilibrada para evitar oscilaciones bang-bang
+  n_steps: 2048                # Mayor horizonte de muestreo por entorno (8192 pasos totales con 4 envs)
+  batch_size: 128              # Tamaño de minilote para actualizaciones de gradiente estables (64 minilotes/época)
+  n_epochs: 10                 # Épocas de optimización por rollout
+  gamma: 0.99                  # Factor de descuento elevado para incentivar el valor acumulado en el target
+  gae_lambda: 0.95             # Factor GAE para trade-off sesgo/varianza
+  clip_range: 0.2              # Rango de recorte PPO estándar
+  ent_coef: 0.001              # Entropía no nula para evitar el colapso prematuro de la varianza gaussiana
+  max_grad_norm: 0.5           # Recorte de norma de gradiente para evitar desestabilización
+  num_envs: 4                  # 4 entornos concurrentes
+
+  net_arch:
+    layers: [256, 256]
+    hidden_activation: tanh    # Activación suave (Tanh) para eliminar castañeo y discontinuidades de torque
+
+# Parámetros del proceso de entrenamiento
+training:
+  total_timesteps: 500000      # Presupuesto para aprendizaje de aproximación y frenado fino en el target
+  checkpoint_freq: 50000
+  eval_freq: 5000
+  n_eval_episodes: 15

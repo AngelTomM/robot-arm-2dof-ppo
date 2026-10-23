@@ -1,0 +1,39 @@
+# ==============================================================================
+# CONFIGURACIÓN DEL AGENTE: PPO_4 (Fase D)
+# ==============================================================================
+experiment:
+  description: PPO optimizado para alcance de targets interiores y aproximacion fina (ent_coef=0.01, norm_reward=true, Tanh)
+  phase: phase_D
+
+# Referencia al entorno físico común
+env_config: configs/environment.yaml
+
+# Preprocesamiento y normalización
+normalization:
+  norm_obs: true
+  norm_reward: true            # Normalización dinámica de retornos para amplificar gradientes finos cerca del target
+  clip_obs: 10.0
+
+# Hiperparámetros del algoritmo PPO (optimizados para articulación distal y aproximación fina)
+ppo:
+  learning_rate: 0.0003        # Tasa estándar para control continuo con entropía activa
+  n_steps: 2048                # Horizonte de muestreo amplio (8192 pasos acumulados con 4 envs)
+  batch_size: 128              # 64 minilotes por época para convergencia suave y estable
+  n_epochs: 10                 # Épocas de optimización por rollout
+  gamma: 0.99                  # Horizonte temporal efectivo de 100 pasos para recompensar permanencia en target
+  gae_lambda: 0.95             # Factor GAE estándar para reducción de varianza
+  clip_range: 0.2              # Recorte PPO canónico
+  ent_coef: 0.01               # Entropía aumentada para evitar el colapso de varianza y forzar flexión de la junta 2
+  max_grad_norm: 0.5           # Control de norma de gradiente
+  num_envs: 4                  # 4 entornos concurrentes
+
+  net_arch:
+    layers: [256, 256]
+    hidden_activation: tanh    # Activación suave (Tanh) para control continuo de torque sin castañeo
+
+# Parámetros del proceso de entrenamiento
+training:
+  total_timesteps: 500000      # Presupuesto para exploración completa de cinemática y asentamiento fino
+  checkpoint_freq: 50000
+  eval_freq: 5000
+  n_eval_episodes: 15
