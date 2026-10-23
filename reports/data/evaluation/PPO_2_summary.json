@@ -1,5 +1,5 @@
 {
-  "agent": "best_model",
+  "agent": "PPO_2",
   "eval_set": "validation_set_200",
   "eval_mode": "deterministic",
   "metrics": {

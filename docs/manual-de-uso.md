@@ -7,10 +7,12 @@ Guía operativa para la instalación, entrenamiento, evaluación mecatrónica, s
 ## 1. Configuración del Entorno de Ejecución
 
 ### 1.1 Requisitos del Sistema
+
 * Python 3.11 (o superior compatible con MuJoCo).
 * Entorno virtual activo con acceso a librerías gráficas de OpenGL.
 
 ### 1.2 Activación del Entorno Virtual e Instalación de Dependencias
+
 ```powershell
 # 1. Activación del entorno virtual (Windows PowerShell)
 ..\.venv\Scripts\Activate.ps1
@@ -26,19 +28,25 @@ Las dependencias principales contemplan `gymnasium[mujoco]>=1.0.0`, `mujoco>=2.3
 ## 2. Entrenamiento de Agentes (`train.py`)
 
 El script en la raíz [train.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/train.py) centraliza la inicialización, vectorización y entrenamiento de los agentes bajo el paradigma MDP continuo:
+
 * **Resolución de Hiperparámetros (SSOT):** Fusiona automáticamente los parámetros físicos invariantes de [configs/environment.yaml](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/configs/environment.yaml) con la configuración específica del algoritmo.
 * **Selección de Algoritmo:** Detecta si la configuración define hiperparámetros para PPO (`ppo:`) o SAC (`sac:`).
 * **Normalización Acoplada:** Utiliza `VecNormalize` sobre observaciones físicas crudas preservando las escalas originales de recompensa (`norm_reward: false`).
 
 ### 2.1 Sintaxis del Comando
+
 ```powershell
-python train.py --config <ruta_yaml> [--seed <int>] [--device <str>] [--total_timesteps <int>] [--checkpoint_freq <int>]
+python train.py --config <ruta_yaml> [--seed <int|lista>] [--device <str>] [--total_timesteps <int>] [--checkpoint_freq <int>]
 ```
 
 ### 2.2 Comandos de Ejecución Estándar
+
 ```powershell
-# Entrenamiento completo de PPO_1 (300.000 timesteps, seed 42)
+# Entrenamiento con una única semilla (300.000 timesteps, seed 42)
 python train.py --config configs/phase_D/prueba/PPO_1.yaml --seed 42
+
+# Entrenamiento multisemilla secuencial en una sola instrucción (semillas 42, 100 y 2026)
+python train.py --config configs/phase_D/prueba/PPO_1.yaml --seed "42, 100, 2026"
 
 # Entrenamiento completo de SAC_1 (300.000 timesteps, seed 42)
 python train.py --config configs/phase_D/prueba/SAC_1.yaml --seed 42
@@ -49,53 +57,115 @@ python train.py --config configs/phase_D/smoke/SAC_smoke.yaml --total_timesteps 
 ```
 
 ### 2.3 Estructura de Artefactos de Salida
+
 Cada sesión de entrenamiento genera un directorio estructurado en `experiments/<fase>/<experimento>/seed_<semilla>/`:
+
 * `models/<algoritmo>_arm2d_final.zip`: Red neuronal con los pesos finales entrenados.
 * `models/best_model/`: Checkpoint con el mayor retorno obtenido en validación periódica (`best_model.zip` junto a `vecnormalize_stats.pkl`).
 * `checkpoints/ckpt_<paso>/`: Puntos de control intermedios acoplados para análisis de convergencia.
-* `logs/`: Registros de telemetría continuos para TensorBoard (`tensorboard --logdir experiments/`).
+* `logs/`: Registros de telemetría continuos para TensorBoard (`tensorboard --logdir experiments/`) y archivo de validación periódica `evaluations.npz`.
 
 ---
 
 ## 3. Evaluación Mecatrónica y Benchmarking (`evaluate.py`)
 
-El script [evaluate.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/evaluate.py) ejecuta la evaluación determinista de políticas entrenadas o del controlador clásico sobre conjuntos congelados de datos, cuantificando la estabilización terminal y el costo LQR sobre coordenadas físicas crudas.
+El script [evaluate.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/evaluate.py) ejecuta la evaluación determinista de políticas de aprendizaje por refuerzo o del controlador cinemático C0 sobre conjuntos congelados de datos. Los resultados cuantitativos se organizan en subcarpetas exclusivas dentro de `reports/data/evaluation/<label>/`.
+
+El parámetro `--label` define el identificador asignado al modelo o controlador para denominar su directorio de datos (`reports/data/evaluation/<label>/`) y su directorio de figuras (`reports/figures/<label>/`). En caso de omitirse, el script infiere automáticamente dicho nombre a partir de la ruta del modelo especificada.
 
 ### 3.1 Sintaxis del Comando
+
 ```powershell
-python evaluate.py [--agent <ppo|sac|c0>] [--model-path <ruta_modelo.zip>] [--c0] [--dataset <ruta_dataset.json>] [--output-dir <directorio_salida>]
+python evaluate.py [--model-path <ruta_modelo.zip>] [--label <identificador>] [--c0] [--vecnormalize <ruta_stats.pkl>] [--dataset <ruta_dataset.json>] [--output-dir <directorio_salida>] [--plot]
 ```
 
 ### 3.2 Ejemplos de Evaluación
+
 ```powershell
-# 1. Evaluación del baseline analítico C0 sobre el dataset de validación (200 episodios)
-python evaluate.py --c0 --dataset data/datasets/validation_set_200.json
+# 1. Evaluación de modelo PPO indicando etiqueta de identificación
+python evaluate.py --model-path experiments/phase_D_prueba/PPO_2/seed_42/models/best_model/best_model.zip --label PPO_2
 
-# 2. Evaluación de un modelo PPO sobre el conjunto de evaluación final (300 episodios)
-python evaluate.py --agent ppo --model-path experiments/phase_D_prueba/PPO_1/seed_42/models/ppo_arm2d_final.zip --dataset data/datasets/final_eval_set_300.json
+# 2. Evaluación de modelo SAC con estadísticas explícitas de normalización y generación inmediata de figuras
+python evaluate.py --model-path experiments/phase_D_prueba/SAC_1/seed_42/models/best_model/best_model.zip --label SAC_1 --vecnormalize experiments/phase_D_prueba/SAC_1/seed_42/models/best_model/vecnormalize_stats.pkl --plot
 
-# 3. Evaluación de un modelo SAC con estadísticas explícitas de normalización
-python evaluate.py --agent sac --model-path experiments/phase_D_prueba/SAC_1/seed_42/models/best_model/best_model.zip --vecnormalize experiments/phase_D_prueba/SAC_1/seed_42/models/best_model/vecnormalize_stats.pkl --dataset data/datasets/final_eval_set_300.json
+# 3. Evaluación del baseline analítico C0 sobre el dataset de validación
+python evaluate.py --c0 --label C0 --dataset data/datasets/validation_set_200.json
 ```
 
-Los resultados se almacenan en `reports/data/evaluation/`:
-* `<agente>_episodes.csv`: Telemetría paso a paso por episodio ($e_{\text{ss}}, v_{\text{ss}}, t_s, J_u, J_{\text{lqr}}$).
-* `<agente>_summary.json`: Métricas estadísticas agregadas e intervalos de confianza de Wilson.
+### 3.3 Estructura de Datos de Salida
+
+Cada evaluación almacena los registros tabulares en `reports/data/evaluation/<label>/`:
+
+* `episodes.csv`: Telemetría por episodio con las métricas de estabilización (error cartesiano terminal e_ss, velocidad residual v_ss, tiempo de establecimiento t_s, esfuerzo de torque J_u), coordenadas de meta (target_x, target_y) y el desglose de costos cuadráticos (j_pos, j_vel, j_ctrl, j_lqr).
+* `summary.json`: Métricas estadísticas agregadas (media, desviación estándar, percentiles 50 y 90) e intervalo de confianza binomial de Wilson al 95%.
+* `sample_trajectories.csv`: Registro paso a paso de las trayectorias temporales (posiciones articulares, velocidades, errores cartesianos y torques aplicados) en episodios de muestra.
 
 ---
 
-## 4. Generación de Gráficas Comparativas (`plot.py`)
+## 4. Generación Modular de Gráficas (`plot.py`)
 
-El script [plot.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/plot.py) procesa de forma desacoplada los archivos CSV generados por `evaluate.py` para construir las figuras de análisis mecatrónico sin requerir dependencias del simulador físico:
+El script [plot.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/plot.py) procesa de forma desacoplada los archivos tabulares generados en `reports/data/evaluation/` y los registros de eventos de TensorBoard. Las gráficas se generan de manera independiente en imágenes individuales y se clasifican en subdirectorios dedicados por modelo, además de directorios para combinaciones comparativas específicas.
+
+### 4.1 Sintaxis del Comando
 
 ```powershell
-python plot.py --data-dir reports/data/evaluation --out-dir reports/figures
+python plot.py [--model <nombre_modelo>] [--compare <modelo1,modelo2,...>] [--eval-log <ruta_evaluations.npz>] [--data-dir <directorio_datos>] [--out-dir <directorio_salida>]
 ```
 
-Figuras generadas en `reports/figures/`:
-* `fig1_success_rate_comparison.png`: Comparativa de tasa de estabilización con barras de error binomial (Wilson al 95%).
-* `fig2_steady_state_precision.png`: Diagramas de caja y distribuciones de error estacionario ($e_{\text{ss}}$) y velocidad angular residual ($v_{\text{ss}}$).
-* `fig3_settling_time_and_effort.png`: Dispersión y correlación entre tiempo de establecimiento ($t_s$) y esfuerzo acumulado de torque ($J_u$).
+### 4.2 Ejemplos de Ejecución
+
+```powershell
+# 1. Generación completa de figuras individuales y comparativas globales para todos los modelos evaluados
+python plot.py
+
+# 2. Generación exclusiva para un modelo específico (ej. PPO_2)
+python plot.py --model PPO_2
+
+# 3. Comparativa combinada exclusiva entre modelos específicos (ej. C0 y PPO_2 o PPO_1, PPO_2 y SAC_1)
+python plot.py --compare C0,PPO_2
+python plot.py --compare PPO_1,PPO_2,SAC_1
+```
+
+La opción `--compare` crea automáticamente una carpeta nombrada con la combinación de los modelos procesados (por ejemplo, `reports/figures/C0_PPO_2/` o `reports/figures/PPO_1_PPO_2_SAC_1/`).
+
+### 4.3 Organización de las Figuras Generadas
+
+#### Subcarpeta por Modelo (`reports/figures/<modelo>/`)
+
+* **Métricas Mecatrónicas de Estabilización y Control:**
+  * `success_rate.png`: Tasa de estabilización terminal con intervalo de confianza de Wilson al 95%.
+  * `steady_state_error.png`: Distribución del error cartesiano terminal e_ss con tolerancia r_target = 20 mm.
+  * `residual_velocity.png`: Distribución de la velocidad angular residual v_ss con cota v_tol = 0.10 rad/s.
+  * `settling_time.png`: Distribución del tiempo de establecimiento transitorio t_s.
+  * `control_effort.png`: Gasto energético acumulado por esfuerzo de torque J_u.
+  * `reward_components.png`: Evolución de las tres curvas de costo cuadrático LQR (posición J_pos, velocidad J_vel y control J_ctrl).
+  * `temporal_trajectory_episode.png`: Respuesta temporal de 3 paneles (error cartesiano ||e(t)||, variables articulares q(t) y torques de control tau(t) frente a límites de saturación +-0.05 N*m).
+  * `pareto_tradeoff.png`: Diagrama de dispersión bi-objetivo (e_ss vs J_u) con la frontera empírica de Pareto.
+  * `workspace_spatial_error.png`: Distribución espacial del error cartesiano en el plano de trabajo (x, y) con límites cinemáticos del manipulador.
+
+* **Curvas de Aprendizaje y Optimización:**
+  * `learning_curve_return.png`: Retorno episódico medio a lo largo del entrenamiento (con media y banda de dispersión si existen varias semillas).
+  * `learning_curve_success_rate.png`: Tasa de éxito durante el entrenamiento.
+  * `multiseed_learning_curves.png`: Panel comparativo multisemilla con bandas de desviación estadística.
+  * `optimizer_total_loss.png`: Curva estática de la pérdida total del optimizador.
+  * `optimizer_policy_loss.png`: Pérdida del gradiente de la política (clipped loss).
+  * `optimizer_value_loss.png`: Pérdida cuadrática de la función de valor (crítico).
+  * `optimizer_entropy.png`: Evolución temporal de la entropía de la política.
+  * `optimizer_approx_kl.png`: Divergencia de Kullback-Leibler aproximada.
+  * `optimizer_explained_variance.png`: Varianza explicada de la función de valor.
+  * `optimizer_convergence_summary.png`: Panel resumen 2x3 con todas las curvas de pérdida del optimizador.
+
+#### Subcarpetas Comparativas (`reports/figures/comparative/` o combinaciones con `--compare`)
+
+* `comparative_success_rate.png`: Comparación de la tasa de éxito entre los modelos contrastados.
+* `comparative_steady_state_error.png`: Comparativa de precisión cartesiana terminal e_ss.
+* `comparative_residual_velocity.png`: Comparativa de disipación de velocidad angular residual v_ss.
+* `comparative_settling_time.png`: Comparativa de rapidez de respuesta temporal t_s.
+* `comparative_control_effort.png`: Comparativa del gasto de control acumulado J_u.
+* `comparative_reward_components.png`: Comparativa del desglose de costos cuadráticos en barras agrupadas.
+* `comparative_pareto_tradeoff.png`: Dispersión de episodios y centroides en el espacio bi-objetivo e_ss vs J_u.
+* `comparative_spatial_error.png`: Subplots espaciales comparativos del error en el espacio de trabajo.
+* `comparative_temporal_trajectories.png`: Superposición de respuestas temporales de los modelos sobre un mismo episodio.
 
 ---
 
@@ -124,6 +194,7 @@ python -m pytest tests/
 ```
 
 Módulos de prueba verificados:
+
 * [tests/test_config.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_config.py): Carga desacoplada de configuraciones y verificación de parámetros SSOT de MuJoCo Reacher-v5.
 * [tests/test_kinematics.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_kinematics.py): Validación de cinemática directa y matriz Jacobiana contrastada contra las funciones internas de MuJoCo.
 * [tests/test_normalization.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_normalization.py): Normalización vectorial `VecNormalize`, cálculo de recompensa cuadrática continua LQR y truncamiento de horizonte.
