@@ -1,0 +1,40 @@
+# ==============================================================================
+# CONFIGURACIÓN DEL AGENTE: SAC_2 (Fase D)
+# ==============================================================================
+experiment:
+  description: SAC con recompensa continua cuadratica (Lyapunov/LQR) y horizonte fijo sin hold (MDP)
+  phase: phase_D
+
+# Referencia al entorno físico común
+env_config: configs/environment.yaml
+
+# Preprocesamiento y normalización
+normalization:
+  norm_obs: true
+  norm_reward: false
+  clip_obs: 10.0
+
+# Hiperparámetros del algoritmo SAC
+sac:
+  learning_rate: 0.0002
+  buffer_size: 300000
+  learning_starts: 5000
+  batch_size: 256
+  tau: 0.005
+  gamma: 0.99
+  train_freq: 4
+  gradient_steps: 1
+  ent_coef: auto
+  target_entropy: -1.0
+  num_envs: 1
+
+  net_arch:
+    layers: [512, 512]
+    hidden_activation: leaky_relu
+
+# Parámetros del proceso de entrenamiento
+training:
+  total_timesteps: 300000
+  checkpoint_freq: 50000
+  eval_freq: 5000
+  n_eval_episodes: 15

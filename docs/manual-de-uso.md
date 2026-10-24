@@ -115,7 +115,7 @@ python plot.py [--model <nombre_modelo>] [--compare <modelo1,modelo2,...>] [--ev
 ### 4.2 Ejemplos de Ejecución
 
 ```powershell
-# 1. Generación completa de figuras individuales y comparativas globales para todos los modelos evaluados
+# 1. Generación completa para todos los modelos evaluados (la comparativa se guarda en reports/figures/C0_PPO_2/ si existen C0 y PPO_2)
 python plot.py
 
 # 2. Generación exclusiva para un modelo específico (ej. PPO_2)
@@ -124,9 +124,11 @@ python plot.py --model PPO_2
 # 3. Comparativa combinada exclusiva entre modelos específicos (ej. C0 y PPO_2 o PPO_1, PPO_2 y SAC_1)
 python plot.py --compare C0,PPO_2
 python plot.py --compare PPO_1,PPO_2,SAC_1
+
+python plot.py --files reports/data/evaluation/PPO_2_episodes.csv,reports/data/evaluation/C0_episodes.csv
 ```
 
-La opción `--compare` crea automáticamente una carpeta nombrada con la combinación de los modelos procesados (por ejemplo, `reports/figures/C0_PPO_2/` o `reports/figures/PPO_1_PPO_2_SAC_1/`).
+Tanto la ejecución por defecto como el uso explícito de `--compare` nombran el directorio comparativo a partir de la combinación de los modelos contrastados (por ejemplo, `reports/figures/C0_PPO_2/` o `reports/figures/PPO_1_PPO_2_SAC_1/`), suprimiendo carpetas genéricas redundantes.
 
 ### 4.3 Organización de las Figuras Generadas
 
@@ -155,7 +157,7 @@ La opción `--compare` crea automáticamente una carpeta nombrada con la combina
   * `optimizer_explained_variance.png`: Varianza explicada de la función de valor.
   * `optimizer_convergence_summary.png`: Panel resumen 2x3 con todas las curvas de pérdida del optimizador.
 
-#### Subcarpetas Comparativas (`reports/figures/comparative/` o combinaciones con `--compare`)
+#### Subcarpeta Comparativa (`reports/figures/<modelo1>_<modelo2>_.../`)
 
 * `comparative_success_rate.png`: Comparación de la tasa de éxito entre los modelos contrastados.
 * `comparative_steady_state_error.png`: Comparativa de precisión cartesiana terminal e_ss.
