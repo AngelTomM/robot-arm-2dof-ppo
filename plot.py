@@ -23,8 +23,7 @@ Organiza los entregables gráficos de forma desacoplada, estructurada e independ
      - optimizer_explained_variance.png: Varianza explicada de la función de valor.
      - optimizer_convergence_summary.png: Panel resumen 2x3 con todas las pérdidas del optimizador.
   2. Gráficas comparativas consolidadas en:
-     - reports/figures/comparative/ (por defecto para todos los modelos)
-     - reports/figures/<M1>_<M2>_.../ (para combinaciones específicas con --compare M1,M2,...)
+     - reports/figures/<M1>_<M2>_.../ (carpeta con el nombre combinado de los modelos comparados)
      - comparative_success_rate.png
      - comparative_steady_state_error.png
      - comparative_residual_velocity.png
@@ -76,9 +75,11 @@ def load_evaluation_data(data_dir: Path, files: Optional[List[str]] = None) -> T
     if files:
         csv_paths = [Path(f) for f in files]
     else:
-        subfolder_csvs = list(data_dir.glob("*/episodes.csv"))
-        flat_csvs = list(data_dir.glob("*_episodes.csv"))
-        csv_paths = sorted(list(set(subfolder_csvs + flat_csvs)))
+        subfolder_csvs = sorted(list(data_dir.glob("*/episodes.csv")))
+        if subfolder_csvs:
+            csv_paths = subfolder_csvs
+        else:
+            csv_paths = sorted(list(data_dir.glob("*_episodes.csv")))
 
     if not csv_paths:
         raise FileNotFoundError(f"No se encontraron archivos de evaluación en {data_dir}")
@@ -345,19 +346,23 @@ def plot_model_reward_components(df: pd.DataFrame, model_name: str, out_path: Pa
     j_vel = df["j_vel"].values if "j_vel" in df else np.zeros(len(df))
     j_ctrl = df["j_ctrl"].values if "j_ctrl" in df else np.zeros(len(df))
 
+    # Trazar curvas con suavizado de media móvil y dispersión sutil
     window = min(15, max(3, len(df) // 10))
     pos_smooth = pd.Series(j_pos).rolling(window=window, min_periods=1).mean().values
     vel_smooth = pd.Series(j_vel).rolling(window=window, min_periods=1).mean().values
     ctrl_smooth = pd.Series(j_ctrl).rolling(window=window, min_periods=1).mean().values
 
+    # Curva 1: Posición
     ax.plot(episodes, pos_smooth, color="#2980b9", linewidth=2.0,
             label=f"Posición $J_{{pos}}$ (Media: {np.mean(j_pos):.2f})")
     ax.fill_between(episodes, pos_smooth, color="#2980b9", alpha=0.15)
 
+    # Curva 2: Velocidad
     ax.plot(episodes, vel_smooth, color="#27ae60", linewidth=2.0,
             label=f"Velocidad $J_{{vel}}$ (Media: {np.mean(j_vel):.2f})")
     ax.fill_between(episodes, vel_smooth, color="#27ae60", alpha=0.15)
 
+    # Curva 3: Control
     ax.plot(episodes, ctrl_smooth, color="#e67e22", linewidth=2.0,
             label=f"Control $J_{{ctrl}}$ (Media: {np.mean(j_ctrl):.4f})")
     ax.fill_between(episodes, ctrl_smooth, color="#e67e22", alpha=0.15)
@@ -1003,7 +1008,7 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
         target_comparative_dir = None
     else:
         models_to_process = list(dfs_by_model.keys())
-        target_comparative_dir = out_dir / "comparative"
+        target_comparative_dir = (out_dir / "_".join(models_to_process)) if len(models_to_process) > 1 else None
 
     print(f"\n{'='*75}")
     print(f" GENERADOR GRÁFICO MODULAR (FASE D)")
