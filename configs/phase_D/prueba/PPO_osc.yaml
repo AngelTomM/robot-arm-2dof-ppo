@@ -1,0 +1,47 @@
+# ==============================================================================
+# CONFIGURACIÓN DEL AGENTE: PPO_osc (Fase D)
+# ==============================================================================
+# Fenómeno 4: Inducción de oscilaciones rápidas e inestabilidad (chatter / temblor violento).
+# Objetivo: Demostrar cómo una ganancia excesiva y falta de amortiguación de gradiente
+#           provocan sobreimpulsos continuos y ciclos límite sobre el blanco.
+# Modificaciones respecto a PPO_1:
+#   - ppo.learning_rate: 0.001              (tasa agresiva 7x que induce sobrepasos bruscos)
+#   - ppo.net_arch.hidden_activation: relu  (esquinas duras sin suavizado alrededor del origen)
+#   - ppo.max_grad_norm: 5.0                (eliminación del recorte restrictivo de gradiente)
+# ==============================================================================
+experiment:
+  description: PPO_osc - Aislado para inducir inestabilidad oscilatoria y chatter (lr=0.001, max_grad_norm=5.0, ReLU)
+  phase: phase_D
+
+# Referencia al entorno físico común
+env_config: configs/environment.yaml
+
+# Preprocesamiento y normalización
+normalization:
+  norm_obs: true
+  norm_reward: false           # Igual a PPO_1
+  clip_obs: 10.0
+
+# Hiperparámetros del algoritmo PPO (base PPO_1)
+ppo:
+  learning_rate: 0.001         # Modificado: tasa muy alta para inducir sobrepasos violentos y oscilación
+  n_steps: 2048                # Igual a PPO_1
+  batch_size: 64               # Igual a PPO_1
+  n_epochs: 10                 # Igual a PPO_1
+  gamma: 0.99                  # Igual a PPO_1
+  gae_lambda: 0.95             # Igual a PPO_1
+  clip_range: 0.2              # Igual a PPO_1
+  ent_coef: 0.002              # Igual a PPO_1
+  max_grad_norm: 5.0           # Modificado: límite de norma de gradiente 10x más permisivo (provoca saltos bruscos)
+  num_envs: 4                  # Igual a PPO_1
+
+  net_arch:
+    layers: [256, 256, 128]    # Igual a PPO_1
+    hidden_activation: relu    # Igual a PPO_1 (sin amortiguación de curvatura suave en cero)
+
+# Parámetros del proceso de entrenamiento
+training:
+  total_timesteps: 300000      # Igual a PPO_1
+  checkpoint_freq: 50000
+  eval_freq: 5000
+  n_eval_episodes: 15

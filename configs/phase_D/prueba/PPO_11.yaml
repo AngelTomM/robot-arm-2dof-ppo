@@ -1,0 +1,39 @@
+# ==============================================================================
+# CONFIGURACIÓN DEL AGENTE: PPO_11 (Fase D)
+# ==============================================================================
+experiment:
+  description: PPO optimizado para cobertura global (flexion profunda interior con ent_coef=0.008, no saturacion ReLU y norm_reward=true)
+  phase: phase_D
+
+# Referencia al entorno físico común
+env_config: configs/environment.yaml
+
+# Preprocesamiento y normalización
+normalization:
+  norm_obs: true
+  norm_reward: true            # Normalización dinámica de retornos para amplificar gradientes finos cerca del target
+  clip_obs: 10.0
+
+# Hiperparámetros del algoritmo PPO (calibrados para cobertura de puntos interiores y cuadrantes opuestos)
+ppo:
+  learning_rate: 0.0002        # Velocidad de aprendizaje balanceada sin sobreimpulsos
+  n_steps: 1024                # Tamaño de rollout por entorno (4096 pasos totales con 4 envs)
+  batch_size: 128              # Tamaño de minilote equilibrado (32 minilotes por época)
+  n_epochs: 10                 # Épocas de optimización por rollout
+  gamma: 0.99                  # Factor de descuento elevado para priorizar viajes a cuadrantes opuestos
+  gae_lambda: 0.95             # Factor GAE de reducción de varianza
+  clip_range: 0.2              # Rango de recorte PPO
+  ent_coef: 0.008              # Entropía aumentada para forzar exploración de flexión profunda en junta 2 (base/codo)
+  max_grad_norm: 0.5           # Recorte de norma de gradiente
+  num_envs: 4                  # Entornos concurrentes
+
+  net_arch:
+    layers: [256, 256, 128]    # Arquitectura profunda de alta capacidad expresiva para cinemática multi-cuadrante
+    hidden_activation: relu    # No saturante ante errores grandes (evita desvanecimiento en cuadrante opuesto)
+
+# Parámetros del proceso de entrenamiento
+training:
+  total_timesteps: 450000      # Presupuesto para asimilar exploración articular profunda y estabilización fina
+  checkpoint_freq: 50000
+  eval_freq: 5000
+  n_eval_episodes: 15
