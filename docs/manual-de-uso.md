@@ -43,17 +43,17 @@ python train.py --config <ruta_yaml> [--seed <int|lista>] [--device <str>] [--to
 
 ```powershell
 # Entrenamiento con una única semilla (300.000 timesteps, seed 42)
-python train.py --config configs/phase_D/prueba/PPO_1.yaml --seed 42
+python train.py --config configs/entorno/PPO_1.yaml --seed 42
 
 # Entrenamiento multisemilla secuencial en una sola instrucción (semillas 42, 100 y 2026)
-python train.py --config configs/phase_D/prueba/PPO_1.yaml --seed "42, 100, 2026"
+python train.py --config configs/entorno/PPO_1.yaml --seed "42, 100, 2026"
 
 # Entrenamiento completo de SAC_1 (300.000 timesteps, seed 42)
-python train.py --config configs/phase_D/prueba/SAC_1.yaml --seed 42
+python train.py --config configs/entorno/SAC_1.yaml --seed 42
 
 # Pruebas de integración rápida (Smoke tests, 256 timesteps)
-python train.py --config configs/phase_D/smoke/PPO_smoke.yaml --total_timesteps 256
-python train.py --config configs/phase_D/smoke/SAC_smoke.yaml --total_timesteps 256
+python train.py --config configs/smoke/PPO_smoke.yaml --total_timesteps 256
+python train.py --config configs/smoke/SAC_smoke.yaml --total_timesteps 256
 ```
 
 ### 2.3 Estructura de Artefactos de Salida

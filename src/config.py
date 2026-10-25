@@ -52,7 +52,7 @@ def load_config(config_path: Union[str, Path],
     con la configuración específica del agente.
 
     Parámetros:
-      config_path: Ruta al archivo YAML del agente (ej. configs/phase_D/prueba/PPO_1.yaml).
+      config_path: Ruta al archivo YAML del agente (ej. configs/entorno/PPO_1.yaml).
       env_config_path: Ruta opcional para forzar un archivo de entorno distinto.
     """
     cfg_file = resolve_path(config_path, REPO_ROOT)

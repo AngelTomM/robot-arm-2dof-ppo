@@ -64,9 +64,11 @@ La organización del proyecto respeta estrictamente el principio de Fuente Únic
 Fase_D_V3/
 ├── configs/
 │   ├── environment.yaml                     # SSOT física, cinemática y función base MDP
-│   └── phase_D/
-│       ├── prueba/                          # Configuraciones de agentes (PPO_1, SAC_1, C0)
-│       └── smoke/                           # Configuraciones de pruebas rápidas
+│   ├── entorno/                             # Baseline y modelos de entorno (C0, PPO_1 a PPO_7, SAC_1, SAC_2)
+│   ├── PPO_eval/                            # Modelos y ablaciones PPO (PPO_10 a PPO_17)
+│   ├── SAC_eval/                            # Modelos de evaluación SAC
+│   ├── NN/                                  # Variaciones de arquitectura de red (PPO_2.1, PPO_2.2)
+│   └── smoke/                               # Configuraciones de pruebas rápidas (PPO_smoke, SAC_smoke)
 ├── data/
 │   └── datasets/                            # Conjuntos congelados de validación (200 ep) y final (300 ep)
 ├── docs/                                    # Manual de uso, metodología y auditoría
@@ -87,6 +89,7 @@ Fase_D_V3/
 │   ├── test_kinematics.py                   # Validación analítica contrastada con MuJoCo
 │   └── test_normalization.py                # Wrapper VecNormalize y cálculo de recompensas
 ├── evaluate.py                              # Punto de entrada para evaluación de políticas y baseline
+├── generate_benchmark_matrix.py             # Generador de la matriz consolidada de hiperparámetros y métricas
 ├── interactive_render.py                    # Visualizador interactivo 3D OpenGL en MuJoCo
 ├── plot.py                                  # Generación desacoplada de figuras mecatrónicas
 ├── train.py                                 # Punto de entrada unificado para entrenamiento PPO/SAC
@@ -103,7 +106,7 @@ Fase_D_V3/
 ..\.venv\Scripts\Activate.ps1
 
 # 2. Ejecutar entrenamiento continuo
-python train.py --config configs/phase_D/prueba/PPO_1.yaml --seed 42
+python train.py --config configs/entorno/PPO_1.yaml --seed 42
 
 # 3. Evaluar el baseline analítico C0 sobre el dataset de validación
 python evaluate.py --c0 --dataset data/datasets/validation_set_200.json
