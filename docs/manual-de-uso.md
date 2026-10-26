@@ -43,17 +43,17 @@ python train.py --config <ruta_yaml> [--seed <int|lista>] [--device <str>] [--to
 
 ```powershell
 # Entrenamiento con una única semilla (300.000 timesteps, seed 42)
-python train.py --config configs/phase_D/prueba/PPO_1.yaml --seed 42
+python train.py --config configs/entorno/PPO_1.yaml --seed 42
 
 # Entrenamiento multisemilla secuencial en una sola instrucción (semillas 42, 100 y 2026)
-python train.py --config configs/phase_D/prueba/PPO_1.yaml --seed "42, 100, 2026"
+python train.py --config configs/entorno/PPO_1.yaml --seed "42, 100, 2026"
 
 # Entrenamiento completo de SAC_1 (300.000 timesteps, seed 42)
-python train.py --config configs/phase_D/prueba/SAC_1.yaml --seed 42
+python train.py --config configs/entorno/SAC_1.yaml --seed 42
 
 # Pruebas de integración rápida (Smoke tests, 256 timesteps)
-python train.py --config configs/phase_D/smoke/PPO_smoke.yaml --total_timesteps 256
-python train.py --config configs/phase_D/smoke/SAC_smoke.yaml --total_timesteps 256
+python train.py --config configs/smoke/PPO_smoke.yaml --total_timesteps 256
+python train.py --config configs/smoke/SAC_smoke.yaml --total_timesteps 256
 ```
 
 ### 2.3 Estructura de Artefactos de Salida
@@ -200,3 +200,16 @@ Módulos de prueba verificados:
 * [tests/test_config.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_config.py): Carga desacoplada de configuraciones y verificación de parámetros SSOT de MuJoCo Reacher-v5.
 * [tests/test_kinematics.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_kinematics.py): Validación de cinemática directa y matriz Jacobiana contrastada contra las funciones internas de MuJoCo.
 * [tests/test_normalization.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_normalization.py): Normalización vectorial `VecNormalize`, cálculo de recompensa cuadrática continua LQR y truncamiento de horizonte.
+
+---
+
+## 7. Generación de la Matriz de Benchmarking (`generate_benchmark_matrix.py`)
+
+Para consolidar en una única tabla todos los hiperparámetros del entorno físico, algoritmos de control y las métricas cinemáticas y dinámicas calculadas durante las evaluaciones, se provee el script [generate_benchmark_matrix.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/generate_benchmark_matrix.py):
+
+```powershell
+python generate_benchmark_matrix.py
+```
+
+El script explora recursivamente todos los archivos `.yaml` en `configs/`, extrae los parámetros de preprocesamiento, redes y optimización, y vincula automáticamente las métricas de `reports/data/evaluation/<modelo>/summary.json`. La matriz resultante se exporta como archivo delimitado por comas en [reports/data/benchmark_matrix.csv](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/reports/data/benchmark_matrix.csv).
+

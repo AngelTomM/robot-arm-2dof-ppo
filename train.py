@@ -302,7 +302,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Entrenamiento unificado PPO/SAC (Brazo Robótico 2 DOF)")
     parser.add_argument("--config", type=str, required=True,
-                        help="Ruta al YAML del experimento (p. ej. configs/phase_D/prueba/PPO_1.yaml)")
+                        help="Ruta al YAML del experimento (p. ej. configs/entorno/PPO_1.yaml)")
     parser.add_argument("--env-config", type=str, default=None,
                         help="Ruta opcional al YAML del entorno común (sobreescribe la referencia en el agente)")
     parser.add_argument("--seed", type=str, default="42",

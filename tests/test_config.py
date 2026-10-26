@@ -37,11 +37,11 @@ class TestConfigDecoupling(unittest.TestCase):
     def test_load_agent_configs_fusion(self):
         """Verifica que los YAML de los agentes fusionen automáticamente el entorno común MuJoCo."""
         agent_configs = [
-            "configs/phase_D/prueba/PPO_1.yaml",
-            "configs/phase_D/prueba/SAC_1.yaml",
-            "configs/phase_D/smoke/PPO_smoke.yaml",
-            "configs/phase_D/smoke/SAC_smoke.yaml",
-            "configs/phase_D/prueba/C0.yaml"
+            "configs/entorno/PPO_1.yaml",
+            "configs/entorno/SAC_1.yaml",
+            "configs/smoke/PPO_smoke.yaml",
+            "configs/smoke/SAC_smoke.yaml",
+            "configs/entorno/C0.yaml"
         ]
 
         for rel_path in agent_configs:
