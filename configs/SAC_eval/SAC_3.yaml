@@ -1,0 +1,48 @@
+# ==============================================================================
+# CONFIGURACIÓN DEL AGENTE: SAC_3 (SAC_eval)
+# ==============================================================================
+# Optimización específica enfocada en mitigar:
+#   - Fenómeno 3 (Principal): Precisión de posicionamiento fino sobre el target y
+#     superación de la zona muerta/mínimo local (batch_size=128, learning_starts=10000,
+#     net_arch=[256, 256]).
+#   - Fenómeno 2 (Secundario): Sobreimpulso inercial y amortiguamiento anticipado
+#     (train_freq=1 con UTD=1.0, gamma=0.995).
+# ==============================================================================
+experiment:
+  name: SAC_3
+  description: SAC_3 optimizado para precision fina sobre el target (Fenomeno 3) y amortiguamiento inercial anticipado (Fenomeno 2)
+  phase: SAC_eval
+
+# Referencia al entorno físico común (SSOT)
+env_config: configs/environment.yaml
+
+# Preprocesamiento y normalización (idéntico a SAC_2)
+normalization:
+  norm_obs: true
+  norm_reward: false
+  clip_obs: 10.0
+
+# Hiperparámetros del algoritmo SAC
+sac:
+  learning_rate: 0.0002        # Preservado de SAC_2
+  buffer_size: 300000          # Preservado de SAC_2
+  learning_starts: 10000       # Fenómeno 3: Duplica la exploración inicial en el espacio de trabajo antes de optimizar
+  batch_size: 128              # Fenómeno 3: Minilote más focalizado para mayor sensibilidad a gradientes de error fino
+  tau: 0.005                   # Preservado de SAC_2 (actualización suave estable)
+  gamma: 0.995                 # Fenómeno 2: Horizonte temporal ampliado para anticipar el contra-torque de frenado
+  train_freq: 1                # Fenómeno 2: 1 actualización por paso de entorno (UTD = 1.0 frente a 0.25 en SAC_2)
+  gradient_steps: 1            # Fenómeno 2: Sincronizado con train_freq para propagación continua de Bellman
+  ent_coef: auto               # Preservado de SAC_2
+  target_entropy: -1.0         # Preservado de SAC_2
+  num_envs: 1                  # Preservado de SAC_2
+
+  net_arch:
+    layers: [256, 256]         # Fenómeno 3: Capacidad representativa ágil para 2-DOF sin inercia de sobreparametrización
+    hidden_activation: leaky_relu # Preservado de SAC_2
+
+# Parámetros del proceso de entrenamiento (preservados de SAC_2)
+training:
+  total_timesteps: 300000
+  checkpoint_freq: 50000
+  eval_freq: 5000
+  n_eval_episodes: 15
