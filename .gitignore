@@ -60,12 +60,12 @@ experiments/
 *.mov
 *.webm
 
-# Gráficos e imágenes (se preservan explícitamente las figuras de reports/)
+# Gráficos e imágenes (artefactos derivados generados por plot.py)
 *.png
-!reports/figures/*.png
-!reports/figures/*.jpg
-!reports/figures/*.svg
-!reports/figures_*/**
+*.jpg
+*.jpeg
+*.svg
+reports/figures*/
 
 # Entornos y configuración de IDEs
 .vscode/
