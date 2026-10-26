@@ -4,7 +4,7 @@
 
 # ==============================================================================
 experiment:
-  description: PPO nominal para seccion 2.3
+  description: PPO nominal 500mil pasos para seccion 2.3
   phase: phase_D
 
 # Referencia al entorno físico común
