@@ -1,0 +1,26 @@
+{
+  "agent": "PPO_M_TANH",
+  "eval_set": "validation_set_200",
+  "eval_mode": "deterministic",
+  "metrics": {
+    "total_episodes": 200,
+    "successful_episodes": 8,
+    "success_rate": 0.04,
+    "success_rate_ci": "4.0% [2.0%, 7.7%] (8/200)",
+    "ci_low": 0.020405659162379342,
+    "ci_high": 0.07693197193934288,
+    "e_ss_mean": 0.08631166283646305,
+    "e_ss_median": 0.07547855791587255,
+    "e_ss_p90": 0.1798068589617745,
+    "final_dist_mean": 0.08473149309797227,
+    "v_ss_mean": 1.174871033725261,
+    "v_ss_median": 0.47028794120479434,
+    "t_s_mean": 1.8806,
+    "t_s_median": 2.0,
+    "j_u_mean": 0.2498901378652688,
+    "j_lqr_mean": -30.41059104680463,
+    "j_lqr_median": -18.31496201835713,
+    "j_lqr_std": 34.76731182950002,
+    "mean_action_delta": 0.11574395555102467
+  }
+}

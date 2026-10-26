@@ -67,7 +67,7 @@ Fase_D_V3/
 │   ├── entorno/                             # Baseline y modelos de entorno (C0, PPO_1 a PPO_7, SAC_1, SAC_2)
 │   ├── PPO_eval/                            # Modelos y ablaciones PPO (PPO_10 a PPO_17)
 │   ├── SAC_eval/                            # Modelos de evaluación SAC
-│   ├── NN/                                  # Variaciones de arquitectura de red (PPO_2.1, PPO_2.2)
+│   ├── NN/                                  # Variaciones de arquitectura de red (PPO_S, PPO_L)
 │   └── smoke/                               # Configuraciones de pruebas rápidas (PPO_smoke, SAC_smoke)
 ├── data/
 │   └── datasets/                            # Conjuntos congelados de validación (200 ep) y final (300 ep)

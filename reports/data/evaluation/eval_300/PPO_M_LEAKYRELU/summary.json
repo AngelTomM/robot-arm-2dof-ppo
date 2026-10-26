@@ -1,0 +1,26 @@
+{
+  "agent": "PPO_M_LEAKYRELU",
+  "eval_set": "final_eval_set_300",
+  "eval_mode": "deterministic",
+  "metrics": {
+    "total_episodes": 300,
+    "successful_episodes": 20,
+    "success_rate": 0.06666666666666667,
+    "success_rate_ci": "6.7% [4.4%, 10.1%] (20/300)",
+    "ci_low": 0.04356755302245018,
+    "ci_high": 0.10072297805072877,
+    "e_ss_mean": 0.08388213274175362,
+    "e_ss_median": 0.06379879351973572,
+    "e_ss_p90": 0.18189973275564902,
+    "final_dist_mean": 0.08226612299649955,
+    "v_ss_mean": 0.41322319551583925,
+    "v_ss_median": 0.24001934141407258,
+    "t_s_mean": 1.8295333333333335,
+    "t_s_median": 2.0,
+    "j_u_mean": 0.19705231082288135,
+    "j_lqr_mean": -10.119295453737408,
+    "j_lqr_median": -8.646781754448426,
+    "j_lqr_std": 8.275567604189632,
+    "mean_action_delta": 0.018384461873506477
+  }
+}

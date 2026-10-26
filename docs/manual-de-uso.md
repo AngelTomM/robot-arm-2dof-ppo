@@ -167,8 +167,8 @@ python evaluate.py --c0 --label C0 --dataset 300
 python evaluate.py --model-path experiments/entorno/PPO_2/seed_42/models/best_model/best_model.zip --label PPO_2
 
 # 2. Evaluación explícita indicando --dataset 200
-python evaluate.py --model-path experiments/NN/PPO_2.1/seed_42/models/best_model/best_model.zip --label PPO_2.1 --dataset 200
-python evaluate.py --model-path experiments/NN/PPO_2.2/seed_42/models/best_model/best_model.zip --label PPO_2.2 --dataset 200
+python evaluate.py --model-path experiments/NN/PPO_S/seed_42/models/best_model/best_model.zip --label PPO_S --dataset 200
+python evaluate.py --model-path experiments/NN/PPO_L/seed_42/models/best_model/best_model.zip --label PPO_L --dataset 200
 ```
 
 ### 3.4 Estructura y Segregación de Datos de Salida
@@ -207,7 +207,7 @@ Comportamiento de los argumentos y valores por defecto:
   * **Métricas de Benchmark (Evaluación):** `success_rate`, `steady_state_error` (alias: `e_ss`), `residual_velocity` (alias: `v_ss`), `settling_time` (alias: `t_s`), `control_effort` (alias: `j_u`), `reward_components`, `pareto_tradeoff`, `spatial_error`, `temporal_trajectories`.
   * **Macros consolidadas:** `optimizer` (todas las del optimizador), `eval` (las 9 de benchmark), `all` (suite íntegra de evaluación y optimización).
 * `--model` (por defecto: `None`): Genera las figuras individuales para el modelo indicado (por ejemplo, `--model PPO_7`). Si se combina con `--metric`, genera únicamente las métricas solicitadas para ese modelo.
-* `--compare` (por defecto: `None`): Lista de modelos separados por comas (sin espacios) para generar un panel gráfico comparativo consolidado (por ejemplo, `--compare PPO_7,PPO_2.1,PPO_2.2`).
+* `--compare` (por defecto: `None`): Lista de modelos separados por comas (sin espacios) para generar un panel gráfico comparativo consolidado (por ejemplo, `--compare PPO_7,PPO_S,PPO_L`).
 * `--eval-log` (por defecto: `None`): Ruta opcional a un archivo `evaluations.npz` registrado durante el entrenamiento para graficar curvas de convergencia de optimización.
 * `--strict` (por defecto: `False`): Exige consistencia homogénea estricta en el tamaño muestral al comparar modelos. Si se activa y los modelos provienen de particiones distintas (200 vs 300), interrumpe la ejecución con una excepción. Si se omite (`False`), emite una advertencia metodológica en consola, anota el tamaño muestral (N) en cada gráfica y deposita la salida en `reports/figures_mixed/`.
 
@@ -216,23 +216,23 @@ Comportamiento de los argumentos y valores por defecto:
 #### Comparativas Personalizadas y Paramétricas por Métrica (--metric)
 
 ```powershell
-# 1. Comparar varianza explicada (explained_variance) entre PPO_7, PPO_2.1 y PPO_2.2 en dataset 300
-python plot.py --dataset 300 --compare PPO_7,PPO_2.1,PPO_2.2 --metric explained_variance
+# 1. Comparar varianza explicada (explained_variance) entre PPO_7, PPO_S y PPO_L en dataset 300
+python plot.py --dataset 300 --compare PPO_7,PPO_S,PPO_L --metric explained_variance
 
 # 2. Comparar divergencia KL aproximada (approx_kl) entre modelos en dataset 300
-python plot.py --dataset 300 --compare PPO_7,PPO_2.1,PPO_2.2 --metric approx_kl
+python plot.py --dataset 300 --compare PPO_7,PPO_S,PPO_L --metric approx_kl
 
 # 3. Comparativa combinada de múltiples métricas de optimización
-python plot.py --dataset 300 --compare PPO_7,PPO_2.1,PPO_2.2 --metric value_loss,policy_loss
+python plot.py --dataset 300 --compare PPO_7,PPO_S,PPO_L --metric value_loss,policy_loss
 
 # 4. Panel consolidado 2x3 con todas las pérdidas del optimizador comparadas
-python plot.py --dataset 300 --compare PPO_7,PPO_2.1,PPO_2.2 --metric optimizer_summary
+python plot.py --dataset 300 --compare PPO_7,PPO_S,PPO_L --metric optimizer_summary
 
 # 5. Comparativa de curvas de aprendizaje durante entrenamiento (retorno y tasa de estabilización)
-python plot.py --dataset 300 --compare PPO_7,PPO_2.1,PPO_2.2 --metric learning_curves
+python plot.py --dataset 300 --compare PPO_7,PPO_S,PPO_L --metric learning_curves
 
 # 6. Comparativa paramétrica de precisión y esfuerzo de control (e_ss y J_u)
-python plot.py --dataset 300 --compare PPO_7,PPO_2.1,PPO_2.2 --metric steady_state_error,control_effort
+python plot.py --dataset 300 --compare PPO_7,PPO_S,PPO_L --metric steady_state_error,control_effort
 
 # 7. Generación de una única métrica para un modelo individual (renderizado instantáneo)
 python plot.py --dataset 300 --model PPO_7 --metric explained_variance
@@ -244,8 +244,8 @@ python plot.py --dataset 300 --model PPO_7 --metric explained_variance
 # 1. Comparativa de modelos definitivos (Benchmark C0 vs PPO_7 vs SAC_2 en reports/figures_final_300/C0_PPO_7_SAC_2/)
 python plot.py --dataset 300 --compare C0,PPO_7,SAC_2
 
-# 2. Comparativa de impacto de capacidad de red neuronal sobre 300 episodios (salida en reports/figures_final_300/PPO_7_PPO_2.1_PPO_2.2/)
-python plot.py --dataset 300 --compare PPO_7,PPO_2.1,PPO_2.2
+# 2. Comparativa de impacto de capacidad de red neuronal sobre 300 episodios (salida en reports/figures_final_300/PPO_7_PPO_S_PPO_L/)
+python plot.py --dataset 300 --compare PPO_7,PPO_S,PPO_L
 
 # 3. Generación de figuras individuales para todos los modelos evaluados en 300 episodios
 python plot.py --dataset 300
@@ -254,8 +254,8 @@ python plot.py --dataset 300
 #### Comparativas sobre el Conjunto de Validación de 200 Episodios
 
 ```powershell
-# 1. Comparativa de funciones de activación sobre 200 episodios (salida en reports/figures_valid_200/PPO_2.1_PPO_2.3_PPO_2.4/)
-python plot.py --dataset 200 --compare PPO_2.1,PPO_2.3,PPO_2.4
+# 1. Comparativa de funciones de activación sobre 200 episodios (salida en reports/figures_valid_200/PPO_S_PPO_M_TANH_PPO_M_LEAKYRELU/)
+python plot.py --dataset 200 --compare PPO_S,PPO_M_TANH,PPO_M_LEAKYRELU
 
 # 2. Generación exclusiva para un único modelo evaluado en 200 episodios
 python plot.py --dataset 200 --model PPO_2
@@ -264,11 +264,11 @@ python plot.py --dataset 200 --model PPO_2
 #### Comparativas Exploratorias Mixtas y Validación Estricta
 
 ```powershell
-# 1. Comparativa exploratoria con advertencia metodológica no bloqueante (salida en reports/figures_mixed/PPO_7_PPO_2.3_PPO_2.4/)
-python plot.py --compare PPO_7,PPO_2.3,PPO_2.4
+# 1. Comparativa exploratoria con advertencia metodológica no bloqueante (salida en reports/figures_mixed/PPO_7_PPO_M_TANH_PPO_M_LEAKYRELU/)
+python plot.py --compare PPO_7,PPO_M_TANH,PPO_M_LEAKYRELU
 
 # 2. Forzar consistencia metodológica estricta para el informe final (arroja excepción si los tamaños de muestra difieren)
-python plot.py --compare PPO_7,PPO_2.3,PPO_2.4 --strict
+python plot.py --compare PPO_7,PPO_M_TANH,PPO_M_LEAKYRELU --strict
 ```
 
 ### 4.3 Organización de las Figuras Generadas
