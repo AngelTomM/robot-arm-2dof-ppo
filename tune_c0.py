@@ -2,7 +2,7 @@
 Script de Calibración Paramétrica del Baseline Analítico C0 y Entorno Físico (Fase D).
 
 Ejecuta un barrido paramétrico sobre el conjunto de validación canónico
-(data/datasets/validation_set_200.json) para:
+(datasets/validation_set_200.json) para:
   1. Caracterizar el desempeño dinámico del manipulador planar 2-DOF (MuJoCo Reacher-v5).
   2. Determinar el frente de Pareto entre error estacionario (e_ss) y esfuerzo de control (J_u).
   3. Calibrar las ponderaciones del funcional de costo continuo LQR (w_pos, w_ctrl, w_vel).
@@ -218,7 +218,7 @@ def find_pareto_front(points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def run_tuning(
-    dataset_path: str = "data/datasets/validation_set_200.json",
+    dataset_path: str = "datasets/validation_set_200.json",
     output_path: str = "reports/data/evaluation/tuning_c0.json",
     num_episodes: int = 200,
     max_steps: int = 100,
@@ -408,7 +408,7 @@ def run_tuning(
 
 def main():
     parser = argparse.ArgumentParser(description="Barrido paramétrico de sintonización C0 y Reacher-v5.")
-    parser.add_argument("--dataset", type=str, default="data/datasets/validation_set_200.json",
+    parser.add_argument("--dataset", type=str, default="datasets/validation_set_200.json",
                         help="Ruta al dataset de validación.")
     parser.add_argument("--output", type=str, default="reports/data/evaluation/tuning_c0.json",
                         help="Ruta de guardado para tuning_c0.json.")

@@ -23,16 +23,25 @@ Organiza los entregables gráficos de forma desacoplada, estructurada e independ
      - optimizer_explained_variance.png: Varianza explicada de la función de valor.
      - optimizer_convergence_summary.png: Panel resumen 2x3 con todas las pérdidas del optimizador.
   2. Gráficas comparativas consolidadas en:
-     - reports/figures/<M1>_<M2>_.../ (carpeta con el nombre combinado de los modelos comparados)
-     - comparative_success_rate.png
-     - comparative_steady_state_error.png
-     - comparative_residual_velocity.png
-     - comparative_settling_time.png
-     - comparative_control_effort.png
-     - comparative_reward_components.png
-     - comparative_pareto_tradeoff.png
-     - comparative_spatial_error.png
-     - comparative_temporal_trajectories.png
+     - reports/figures_<dataset>/<M1>_<M2>_.../ (carpeta combinada bajo la partición correspondiente)
+     - comparative_success_rate.png: Comparativa de tasa de estabilización terminal (IC Wilson 95%).
+     - comparative_steady_state_error.png: Comparativa de distribución de error permanente (e_ss).
+     - comparative_residual_velocity.png: Comparativa de velocidad residual terminal (v_ss).
+     - comparative_settling_time.png: Comparativa de tiempo de establecimiento (t_s).
+     - comparative_control_effort.png: Comparativa de esfuerzo energético de torque acumulado (J_u).
+     - comparative_reward_components.png: Desglose comparativo de costos LQR (J_pos, J_vel, J_ctrl).
+     - comparative_pareto_tradeoff.png: Frontera y dispersión bi-objetivo (e_ss vs J_u).
+     - comparative_spatial_error.png: Mapeo espacial comparativo del error cartesiano.
+     - comparative_temporal_trajectories.png: Superposición de trayectorias temporales (episodio crítico).
+     - comparative_explained_variance.png: Varianza explicada de la función de valor (TensorBoard).
+     - comparative_approx_kl.png: Divergencia KL aproximada entre políticas consecutivas (TensorBoard).
+     - comparative_value_loss.png: Pérdida cuadrática del crítico (TensorBoard).
+     - comparative_policy_loss.png: Pérdida del gradiente de la política (TensorBoard).
+     - comparative_entropy.png: Evolución de entropía de la política (TensorBoard).
+     - comparative_loss.png: Pérdida escalar total del optimizador (TensorBoard).
+     - comparative_optimizer_summary.png: Panel consolidado 2x3 de telemetría de optimización.
+     - comparative_learning_return.png: Retorno episódico acumulado durante entrenamiento.
+     - comparative_learning_success_rate.png: Tasa de estabilización durante entrenamiento.
 """
 
 import argparse
@@ -71,7 +80,9 @@ def discover_evaluation_datasets(data_dir: Path, files: Optional[List[str]] = No
     """
     ref_coords = {}
     for ds_name in ["final_eval_set_300.json", "validation_set_200.json"]:
-        p_ds = REPO_ROOT / "data/datasets" / ds_name
+        p_ds = REPO_ROOT / "datasets" / ds_name
+        if not p_ds.exists():
+            p_ds = REPO_ROOT / "data/datasets" / ds_name
         if p_ds.exists():
             try:
                 with open(p_ds, "r", encoding="utf-8") as f:
@@ -231,6 +242,339 @@ def extract_tensorboard_scalars(log_dirs: List[Path], tags: List[str]) -> Dict[s
                 continue
 
     return {k: v for k, v in results.items() if len(v) > 0}
+
+
+# ==============================================================================
+# REGISTRO MODULAR Y PARAMÉTRICO DE MÉTRICAS (EVALUACIÓN Y ENTRENAMIENTO)
+# ==============================================================================
+
+CANONICAL_METRICS: Dict[str, Dict[str, Any]] = {
+    # 1. Escalares del Optimizador (TensorBoard)
+    "explained_variance": {
+        "category": "optimizer",
+        "tag": "train/explained_variance",
+        "filename": "comparative_explained_variance.png",
+        "model_filename": "optimizer_explained_variance.png",
+        "title": "Comparativa: Varianza Explicada de la Función de Valor",
+        "ylabel": "Varianza Explicada ($1 - \\mathrm{Var}(y-V)/\\mathrm{Var}(y)$)",
+        "ref_line": 1.0,
+        "ref_label": "Óptimo ($1.0$)",
+        "zero_line": True,
+        "y_limits": (-0.1, 1.05),
+    },
+    "approx_kl": {
+        "category": "optimizer",
+        "tag": "train/approx_kl",
+        "filename": "comparative_approx_kl.png",
+        "model_filename": "optimizer_approx_kl.png",
+        "title": "Comparativa: Divergencia KL Aproximada",
+        "ylabel": "Divergencia KL ($D_{KL}$)",
+        "ref_line": 0.015,
+        "ref_label": "Guía $D_{KL} = 0.015$",
+        "zero_line": True,
+        "y_limits": None,
+    },
+    "value_loss": {
+        "category": "optimizer",
+        "tag": "train/value_loss",
+        "filename": "comparative_value_loss.png",
+        "model_filename": "optimizer_value_loss.png",
+        "title": "Comparativa: Pérdida Cuadrática de la Función de Valor (Crítico)",
+        "ylabel": "Pérdida de Valor ($L_V$)",
+        "ref_line": None,
+        "ref_label": None,
+        "zero_line": False,
+        "y_limits": None,
+    },
+    "policy_loss": {
+        "category": "optimizer",
+        "tag": "train/policy_gradient_loss",
+        "filename": "comparative_policy_loss.png",
+        "model_filename": "optimizer_policy_loss.png",
+        "title": "Comparativa: Pérdida del Gradiente de la Política",
+        "ylabel": "Pérdida de Política ($L_{clip}$)",
+        "ref_line": 0.0,
+        "ref_label": None,
+        "zero_line": True,
+        "y_limits": None,
+    },
+    "entropy": {
+        "category": "optimizer",
+        "tag": "train/entropy_loss",
+        "filename": "comparative_entropy.png",
+        "model_filename": "optimizer_entropy.png",
+        "title": "Comparativa: Evolución de la Entropía de la Política",
+        "ylabel": "Entropía ($H$)",
+        "ref_line": None,
+        "ref_label": None,
+        "zero_line": False,
+        "y_limits": None,
+    },
+    "loss": {
+        "category": "optimizer",
+        "tag": "train/loss",
+        "filename": "comparative_loss.png",
+        "model_filename": "optimizer_total_loss.png",
+        "title": "Comparativa: Pérdida Total del Optimizador",
+        "ylabel": "Pérdida Total ($L_{total}$)",
+        "ref_line": None,
+        "ref_label": None,
+        "zero_line": False,
+        "y_limits": None,
+    },
+    "optimizer_summary": {
+        "category": "optimizer_panel",
+        "filename": "comparative_optimizer_summary.png",
+        "model_filename": "optimizer_convergence_summary.png",
+        "title": "Panel Resumen Comparativo del Optimizador",
+    },
+
+    # 2. Curvas de Aprendizaje (Evaluations.npz)
+    "learning_return": {
+        "category": "learning_curve",
+        "filename": "comparative_learning_return.png",
+        "model_filename": "learning_curve_return.png",
+        "title": "Comparativa: Curva de Aprendizaje de Retorno Episódico",
+        "ylabel": "Retorno Acumulado LQR",
+    },
+    "learning_success_rate": {
+        "category": "learning_curve",
+        "filename": "comparative_learning_success_rate.png",
+        "model_filename": "learning_curve_success_rate.png",
+        "title": "Comparativa: Curva de Aprendizaje de Tasa de Estabilización",
+        "ylabel": "Tasa de Estabilización (%)",
+    },
+
+    # 3. Métricas de Evaluación de Benchmark (episodes.csv)
+    "success_rate": {
+        "category": "evaluation",
+        "filename": "comparative_success_rate.png",
+        "model_filename": "success_rate.png",
+    },
+    "steady_state_error": {
+        "category": "evaluation",
+        "filename": "comparative_steady_state_error.png",
+        "model_filename": "steady_state_error.png",
+    },
+    "residual_velocity": {
+        "category": "evaluation",
+        "filename": "comparative_residual_velocity.png",
+        "model_filename": "residual_velocity.png",
+    },
+    "settling_time": {
+        "category": "evaluation",
+        "filename": "comparative_settling_time.png",
+        "model_filename": "settling_time.png",
+    },
+    "control_effort": {
+        "category": "evaluation",
+        "filename": "comparative_control_effort.png",
+        "model_filename": "control_effort.png",
+    },
+    "reward_components": {
+        "category": "evaluation",
+        "filename": "comparative_reward_components.png",
+        "model_filename": "reward_components.png",
+    },
+    "pareto_tradeoff": {
+        "category": "evaluation",
+        "filename": "comparative_pareto_tradeoff.png",
+        "model_filename": "pareto_tradeoff.png",
+    },
+    "spatial_error": {
+        "category": "evaluation",
+        "filename": "comparative_spatial_error.png",
+        "model_filename": "workspace_spatial_error.png",
+    },
+    "temporal_trajectories": {
+        "category": "evaluation",
+        "filename": "comparative_temporal_trajectories.png",
+        "model_filename": "temporal_trajectory_episode.png",
+    },
+}
+
+METRIC_ALIASES: Dict[str, str] = {
+    # Escalares del Optimizador
+    "explained_variance": "explained_variance",
+    "var_exp": "explained_variance",
+    "ev": "explained_variance",
+    "train/explained_variance": "explained_variance",
+    "approx_kl": "approx_kl",
+    "kl": "approx_kl",
+    "divergence": "approx_kl",
+    "train/approx_kl": "approx_kl",
+    "value_loss": "value_loss",
+    "critic_loss": "value_loss",
+    "vl": "value_loss",
+    "train/value_loss": "value_loss",
+    "policy_loss": "policy_loss",
+    "policy_gradient_loss": "policy_loss",
+    "pl": "policy_loss",
+    "train/policy_gradient_loss": "policy_loss",
+    "entropy": "entropy",
+    "entropy_loss": "entropy",
+    "ent": "entropy",
+    "train/entropy_loss": "entropy",
+    "loss": "loss",
+    "total_loss": "loss",
+    "train/loss": "loss",
+    "optimizer_summary": "optimizer_summary",
+    "optimizer_convergence_summary": "optimizer_summary",
+
+    # Curvas de Aprendizaje
+    "learning_return": "learning_return",
+    "return": "learning_return",
+    "return_curve": "learning_return",
+    "train_return": "learning_return",
+    "ret": "learning_return",
+    "learning_curve_return": "learning_return",
+    "learning_success_rate": "learning_success_rate",
+    "train_success": "learning_success_rate",
+    "learning_sr": "learning_success_rate",
+    "learning_curve_success_rate": "learning_success_rate",
+    "learning_success": "learning_success_rate",
+
+    # Métricas de Evaluación
+    "success_rate": "success_rate",
+    "success": "success_rate",
+    "sr": "success_rate",
+    "tasa_exito": "success_rate",
+    "steady_state_error": "steady_state_error",
+    "e_ss": "steady_state_error",
+    "error": "steady_state_error",
+    "error_estacionario": "steady_state_error",
+    "residual_velocity": "residual_velocity",
+    "v_ss": "residual_velocity",
+    "velocity": "residual_velocity",
+    "velocidad_residual": "residual_velocity",
+    "settling_time": "settling_time",
+    "t_s": "settling_time",
+    "time": "settling_time",
+    "tiempo_establecimiento": "settling_time",
+    "control_effort": "control_effort",
+    "j_u": "control_effort",
+    "effort": "control_effort",
+    "torque": "control_effort",
+    "esfuerzo_control": "control_effort",
+    "reward_components": "reward_components",
+    "costs": "reward_components",
+    "cost": "reward_components",
+    "componentes_costo": "reward_components",
+    "pareto_tradeoff": "pareto_tradeoff",
+    "pareto": "pareto_tradeoff",
+    "tradeoff": "pareto_tradeoff",
+    "frontera_pareto": "pareto_tradeoff",
+    "spatial_error": "spatial_error",
+    "spatial": "spatial_error",
+    "workspace": "spatial_error",
+    "mapa_espacial": "spatial_error",
+    "temporal_trajectories": "temporal_trajectories",
+    "temporal": "temporal_trajectories",
+    "trajectory": "temporal_trajectories",
+    "trajectories": "temporal_trajectories",
+    "trayectorias": "temporal_trajectories",
+}
+
+METRIC_MACROS: Dict[str, List[str]] = {
+    "eval": [
+        "success_rate", "steady_state_error", "residual_velocity",
+        "settling_time", "control_effort", "reward_components",
+        "pareto_tradeoff", "spatial_error", "temporal_trajectories"
+    ],
+    "evaluation": [
+        "success_rate", "steady_state_error", "residual_velocity",
+        "settling_time", "control_effort", "reward_components",
+        "pareto_tradeoff", "spatial_error", "temporal_trajectories"
+    ],
+    "train": [
+        "loss", "policy_loss", "value_loss", "entropy",
+        "approx_kl", "explained_variance", "optimizer_summary",
+        "learning_return", "learning_success_rate"
+    ],
+    "training": [
+        "loss", "policy_loss", "value_loss", "entropy",
+        "approx_kl", "explained_variance", "optimizer_summary",
+        "learning_return", "learning_success_rate"
+    ],
+    "optimizer": [
+        "loss", "policy_loss", "value_loss", "entropy",
+        "approx_kl", "explained_variance", "optimizer_summary"
+    ],
+    "learning_curves": [
+        "learning_return", "learning_success_rate"
+    ],
+    "all": [
+        "success_rate", "steady_state_error", "residual_velocity",
+        "settling_time", "control_effort", "reward_components",
+        "pareto_tradeoff", "spatial_error", "temporal_trajectories",
+        "loss", "policy_loss", "value_loss", "entropy",
+        "approx_kl", "explained_variance", "optimizer_summary",
+        "learning_return", "learning_success_rate"
+    ]
+}
+
+
+def resolve_requested_metrics(metric_arg: Optional[str]) -> List[str]:
+    """
+    Parsea y expande el argumento --metric / --metrics a una lista de claves canónicas.
+    Si metric_arg es None, retorna las 9 métricas de evaluación por defecto (retrocompatibilidad total).
+    """
+    if not metric_arg or metric_arg.strip().lower() in ["none", "default"]:
+        return METRIC_MACROS["eval"]
+
+    tokens = [t.strip().lower() for t in metric_arg.split(",") if t.strip()]
+    resolved: List[str] = []
+
+    for tok in tokens:
+        if tok in METRIC_MACROS:
+            for m in METRIC_MACROS[tok]:
+                if m not in resolved:
+                    resolved.append(m)
+        elif tok in METRIC_ALIASES:
+            canonical = METRIC_ALIASES[tok]
+            if canonical not in resolved:
+                resolved.append(canonical)
+        else:
+            avail_aliases = sorted(list(set(list(METRIC_ALIASES.keys()) + list(METRIC_MACROS.keys()))))
+            raise ValueError(
+                f"Métrica desconocida: '{tok}'.\n"
+                f"Métricas y macros disponibles: {', '.join(avail_aliases)}"
+            )
+
+    return resolved
+
+
+def load_model_training_telemetry(model_name: str, eval_log: Optional[Path] = None) -> Tuple[List[Path], List[Tuple[int, np.ndarray, np.ndarray, Optional[np.ndarray]]]]:
+    """Recupera los directorios de logs de TensorBoard y las curvas de evaluación (evaluations.npz) para un modelo."""
+    seed_dirs = sorted(list((REPO_ROOT / "experiments").glob(f"**/{model_name}/seed_*")))
+    log_dirs: List[Path] = []
+    eval_data_list: List[Tuple[int, np.ndarray, np.ndarray, Optional[np.ndarray]]] = []
+
+    if eval_log and eval_log.exists():
+        try:
+            data = np.load(eval_log)
+            eval_data_list.append((0, data["timesteps"], data["results"], data["successes"] if "successes" in data else None))
+            log_dirs.append(eval_log.parent)
+        except Exception:
+            pass
+
+    for s_idx, s_dir in enumerate(seed_dirs):
+        try:
+            seed_num = int(s_dir.name.replace("seed_", ""))
+        except ValueError:
+            seed_num = s_idx + 1
+        npz_candidates = list(s_dir.glob("**/evaluations.npz"))
+        if npz_candidates and not eval_log:
+            try:
+                d = np.load(npz_candidates[0])
+                eval_data_list.append((seed_num, d["timesteps"], d["results"], d["successes"] if "successes" in d else None))
+            except Exception:
+                pass
+        l_dir = s_dir / "logs"
+        if l_dir.exists():
+            log_dirs.append(l_dir)
+
+    return log_dirs, eval_data_list
 
 
 # ==============================================================================
@@ -475,8 +819,8 @@ def plot_model_temporal_trajectory(traj_df: pd.DataFrame, model_name: str, out_p
     ax2.plot(t, th1, color="#8e44ad", linewidth=1.8, label="$q_1(t)$ [rad]")
     ax2.plot(t, th2, color="#9b59b6", linestyle="--", linewidth=1.8, label="$q_2(t)$ [rad]")
     ax2_twin = ax2.twinx()
-    ax2_twin.plot(t, dth1, color="#16a085", linewidth=1.2, alpha=0.7, label="$\dot{q}_1(t)$ [rad/s]")
-    ax2_twin.plot(t, dth2, color="#1abc9c", linestyle=":", linewidth=1.2, alpha=0.7, label="$\dot{q}_2(t)$ [rad/s]")
+    ax2_twin.plot(t, dth1, color="#16a085", linewidth=1.2, alpha=0.7, label=r"$\dot{q}_1(t)$ [rad/s]")
+    ax2_twin.plot(t, dth2, color="#1abc9c", linestyle=":", linewidth=1.2, alpha=0.7, label=r"$\dot{q}_2(t)$ [rad/s]")
     ax2.set_ylabel("Posición [rad]")
     ax2_twin.set_ylabel("Velocidad [rad/s]")
     lines_2, labels_2 = ax2.get_legend_handles_labels()
@@ -605,7 +949,7 @@ def plot_model_learning_curves(eval_data_list: List[Tuple[int, np.ndarray, np.nd
     label_mean = f"Retorno Medio ($\mu$) ({len(eval_data_list)} semillas)" if len(eval_data_list) > 1 else "Retorno Medio"
     ax.plot(common_t, grand_mean, color="#27ae60", linewidth=2.2, label=label_mean)
     ax.fill_between(common_t, grand_mean - grand_std, grand_mean + grand_std, color="#27ae60", alpha=0.22,
-                    label="Dispersión $\pm 1\sigma$")
+                    label=r"Dispersión $\pm 1\sigma$")
 
     ax.set_xlabel("Pasos de Interacción (Timesteps)")
     ax.set_ylabel("Retorno Acumulado LQR")
@@ -638,7 +982,7 @@ def plot_model_learning_curves(eval_data_list: List[Tuple[int, np.ndarray, np.nd
             ax.plot(common_t, mean_succ, color="#2b5c8f", marker="o", markersize=3.5, linewidth=2.0, label=label_s)
             if len(eval_data_list) > 1:
                 ax.fill_between(common_t, np.maximum(0, mean_succ - std_succ), np.minimum(100, mean_succ + std_succ),
-                                color="#2b5c8f", alpha=0.20, label="Dispersión $\pm 1\sigma$")
+                                color="#2b5c8f", alpha=0.20, label=r"Dispersión $\pm 1\sigma$")
 
         ax.set_ylim(-2, 105)
         ax.set_ylabel("Tasa de Estabilización (%)")
@@ -654,13 +998,13 @@ def plot_model_learning_curves(eval_data_list: List[Tuple[int, np.ndarray, np.nd
     # 3. Multisemilla consolidada (2 paneles)
     if len(eval_data_list) > 1 and has_successes and all_succ:
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.2, 6.5), dpi=300, sharex=True)
-        ax1.plot(common_t, grand_mean, color="#27ae60", linewidth=2.0, label=f"Media $\mu$ ({len(eval_data_list)} semillas)")
+        ax1.plot(common_t, grand_mean, color="#27ae60", linewidth=2.0, label=rf"Media $\mu$ ({len(eval_data_list)} semillas)")
         ax1.fill_between(common_t, grand_mean - grand_std, grand_mean + grand_std, color="#27ae60", alpha=0.22)
         ax1.set_ylabel("Retorno Acumulado LQR")
         ax1.set_title(f"Convergencia Multisemilla con Bandas Estadísticas — {model_name}", pad=8)
         ax1.legend(loc="lower right")
 
-        ax2.plot(common_t, mean_succ, color="#2b5c8f", linewidth=2.0, label="Tasa de Éxito $\mu$")
+        ax2.plot(common_t, mean_succ, color="#2b5c8f", linewidth=2.0, label=r"Tasa de Éxito $\mu$")
         ax2.fill_between(common_t, np.maximum(0, mean_succ - std_succ), np.minimum(100, mean_succ + std_succ),
                          color="#2b5c8f", alpha=0.20)
         ax2.set_ylabel("Tasa Éxito (%)")
@@ -676,7 +1020,8 @@ def plot_model_learning_curves(eval_data_list: List[Tuple[int, np.ndarray, np.nd
 
 
 def plot_model_optimizer_curves(tb_data: Dict[str, List[Tuple[np.ndarray, np.ndarray]]],
-                                model_name: str, model_fig_dir: Path) -> None:
+                                model_name: str, model_fig_dir: Path,
+                                requested_metrics: Optional[List[str]] = None) -> None:
     """
     Genera gráficas estáticas independientes de las pérdidas del optimizador:
       - optimizer_total_loss.png
@@ -704,6 +1049,9 @@ def plot_model_optimizer_curves(tb_data: Dict[str, List[Tuple[np.ndarray, np.nda
     for tag, (fname, title, ylabel, color) in tag_meta.items():
         if tag not in tb_data:
             continue
+        canon_key = next((k for k, v in CANONICAL_METRICS.items() if v.get("tag") == tag), None)
+        if requested_metrics is not None and canon_key not in requested_metrics:
+            continue
         series_list = tb_data[tag]
         fig, ax = plt.subplots(figsize=(6.2, 4.2), dpi=300)
 
@@ -728,28 +1076,29 @@ def plot_model_optimizer_curves(tb_data: Dict[str, List[Tuple[np.ndarray, np.nda
         print(f">>> [FIGURA] Guardada: {out_f.name}")
 
     # 2. Panel Resumen 2x3
-    fig, axes = plt.subplots(2, 3, figsize=(14, 8), dpi=300)
-    axes_flat = axes.flatten()
+    if requested_metrics is None or "optimizer_summary" in requested_metrics:
+        fig, axes = plt.subplots(2, 3, figsize=(14, 8), dpi=300)
+        axes_flat = axes.flatten()
 
-    for idx, (tag, (_, title, ylabel, color)) in enumerate(tag_meta.items()):
-        ax = axes_flat[idx]
-        if tag in tb_data:
-            for s_idx, (steps, vals) in enumerate(tb_data[tag]):
-                w = min(15, max(3, len(vals) // 8))
-                smooth_vals = pd.Series(vals).rolling(window=w, min_periods=1).mean().values
-                ax.plot(steps, smooth_vals, color=color, linewidth=1.6, alpha=0.85)
-            ax.set_title(title, fontsize=10, pad=6)
-            ax.set_ylabel(ylabel, fontsize=9)
-            ax.set_xlabel("Timesteps", fontsize=9)
-        else:
-            ax.text(0.5, 0.5, f"Sin datos: {tag}", ha="center", va="center", fontsize=9)
+        for idx, (tag, (_, title, ylabel, color)) in enumerate(tag_meta.items()):
+            ax = axes_flat[idx]
+            if tag in tb_data:
+                for s_idx, (steps, vals) in enumerate(tb_data[tag]):
+                    w = min(15, max(3, len(vals) // 8))
+                    smooth_vals = pd.Series(vals).rolling(window=w, min_periods=1).mean().values
+                    ax.plot(steps, smooth_vals, color=color, linewidth=1.6, alpha=0.85)
+                ax.set_title(title, fontsize=10, pad=6)
+                ax.set_ylabel(ylabel, fontsize=9)
+                ax.set_xlabel("Timesteps", fontsize=9)
+            else:
+                ax.text(0.5, 0.5, f"Sin datos: {tag}", ha="center", va="center", fontsize=9)
 
-    fig.suptitle(f"Panel Consolidado de Convergencia del Optimizador — {model_name}", fontsize=13, y=0.99)
-    fig.tight_layout()
-    summary_path = model_fig_dir / "optimizer_convergence_summary.png"
-    fig.savefig(summary_path)
-    plt.close(fig)
-    print(f">>> [FIGURA] Guardada: {summary_path.name}")
+        fig.suptitle(f"Panel Consolidado de Convergencia del Optimizador — {model_name}", fontsize=13, y=0.99)
+        fig.tight_layout()
+        summary_path = model_fig_dir / "optimizer_convergence_summary.png"
+        fig.savefig(summary_path)
+        plt.close(fig)
+        print(f">>> [FIGURA] Guardada: {summary_path.name}")
 
 
 # ==============================================================================
@@ -1049,53 +1398,255 @@ def plot_comparative_temporal_trajectories(traj_by_model: Dict[str, pd.DataFrame
     print(f">>> [COMPARATIVA] Guardada: {out_path.name}")
 
 
+def plot_comparative_optimizer_metric(
+    models_tb_data: Dict[str, List[Tuple[np.ndarray, np.ndarray]]],
+    metric_key: str,
+    out_path: Path
+) -> None:
+    """Genera gráfica comparativa de un escalar del optimizador entre múltiples modelos."""
+    apply_plot_style()
+    meta = CANONICAL_METRICS[metric_key]
+    tag = meta["tag"]
+    title = meta["title"]
+    ylabel = meta["ylabel"]
+
+    fig, ax = plt.subplots(figsize=(7.5, 4.8), dpi=300)
+    palette = ["#2b5c8f", "#27ae60", "#e67e22", "#8e44ad", "#16a085", "#c0392b", "#d35400", "#2c3e50"]
+    linestyles = ["-", "--", "-.", ":"]
+
+    has_data = False
+    for idx, (m_name, series_list) in enumerate(models_tb_data.items()):
+        if not series_list:
+            continue
+        has_data = True
+        color = palette[idx % len(palette)]
+        ls = linestyles[(idx // len(palette)) % len(linestyles)]
+
+        if len(series_list) == 1:
+            s, v = series_list[0]
+            w = min(15, max(3, len(v) // 8))
+            sm_v = pd.Series(v).rolling(window=w, min_periods=1).mean().values
+            ax.plot(s, sm_v, color=color, linestyle=ls, linewidth=2.0, label=m_name)
+            ax.plot(s, v, color=color, alpha=0.15, linewidth=0.8)
+        else:
+            min_s = max(s[0].min() for s in series_list)
+            max_s = min(s[0].max() for s in series_list)
+            common_s = np.linspace(min_s, max_s, 100)
+            interp = []
+            for s, v in series_list:
+                w = min(15, max(3, len(v) // 8))
+                sm_v = pd.Series(v).rolling(window=w, min_periods=1).mean().values
+                interp.append(np.interp(common_s, s, sm_v))
+            mean_c = np.mean(interp, axis=0)
+            std_c = np.std(interp, axis=0)
+            lbl = f"{m_name} (μ, {len(series_list)} semillas)"
+            ax.plot(common_s, mean_c, color=color, linestyle=ls, linewidth=2.2, label=lbl)
+            ax.fill_between(common_s, mean_c - std_c, mean_c + std_c, color=color, alpha=0.18)
+
+    if not has_data:
+        plt.close(fig)
+        print(f">>> [OMITIDO] No se encontraron datos para la métrica '{metric_key}' ({tag})")
+        return
+
+    # Líneas de referencia
+    if meta.get("ref_line") is not None:
+        ax.axhline(meta["ref_line"], color="#c0392b", linestyle="--", linewidth=1.2,
+                   label=meta.get("ref_label"))
+    if meta.get("zero_line"):
+        ax.axhline(0.0, color="#7f8c8d", linestyle=":", linewidth=1.0)
+
+    if meta.get("y_limits") is not None:
+        ax.set_ylim(meta["y_limits"])
+
+    ax.set_xlabel("Pasos de Entrenamiento (Timesteps)")
+    ax.set_ylabel(ylabel)
+    ax.set_title(title, pad=10)
+    ax.legend(loc="best", framealpha=0.9)
+
+    fig.tight_layout()
+    fig.savefig(out_path)
+    plt.close(fig)
+    print(f">>> [COMPARATIVA] Guardada: {out_path.name}")
+
+
+def plot_comparative_optimizer_summary(
+    models_tb_dict: Dict[str, Dict[str, List[Tuple[np.ndarray, np.ndarray]]]],
+    out_path: Path
+) -> None:
+    """Genera panel 2x3 con las 6 métricas del optimizador comparando todos los modelos."""
+    apply_plot_style()
+    fig, axes = plt.subplots(2, 3, figsize=(15, 8.5), dpi=300)
+    axes_flat = axes.flatten()
+
+    opt_keys = ["loss", "policy_loss", "value_loss", "entropy", "approx_kl", "explained_variance"]
+    palette = ["#2b5c8f", "#27ae60", "#e67e22", "#8e44ad", "#16a085", "#c0392b", "#d35400", "#2c3e50"]
+
+    for idx, key in enumerate(opt_keys):
+        ax = axes_flat[idx]
+        meta = CANONICAL_METRICS[key]
+        tag = meta["tag"]
+        ylabel = meta["ylabel"]
+
+        has_data = False
+        for m_idx, (m_name, tb_data) in enumerate(models_tb_dict.items()):
+            series_list = tb_data.get(tag, [])
+            if not series_list:
+                continue
+            has_data = True
+            color = palette[m_idx % len(palette)]
+            if len(series_list) == 1:
+                s, v = series_list[0]
+                w = min(15, max(3, len(v) // 8))
+                sm_v = pd.Series(v).rolling(window=w, min_periods=1).mean().values
+                ax.plot(s, sm_v, color=color, linewidth=1.6, label=m_name)
+            else:
+                min_s = max(s[0].min() for s in series_list)
+                max_s = min(s[0].max() for s in series_list)
+                common_s = np.linspace(min_s, max_s, 100)
+                interp = []
+                for s, v in series_list:
+                    w = min(15, max(3, len(v) // 8))
+                    sm_v = pd.Series(v).rolling(window=w, min_periods=1).mean().values
+                    interp.append(np.interp(common_s, s, sm_v))
+                mean_c = np.mean(interp, axis=0)
+                std_c = np.std(interp, axis=0)
+                ax.plot(common_s, mean_c, color=color, linewidth=1.8, label=f"{m_name} (μ)")
+                ax.fill_between(common_s, mean_c - std_c, mean_c + std_c, color=color, alpha=0.15)
+
+        if not has_data:
+            ax.text(0.5, 0.5, f"Sin datos: {tag}", ha="center", va="center", fontsize=9)
+        else:
+            if meta.get("ref_line") is not None:
+                ax.axhline(meta["ref_line"], color="#c0392b", linestyle="--", linewidth=1.0)
+            if meta.get("zero_line"):
+                ax.axhline(0.0, color="#7f8c8d", linestyle=":", linewidth=0.8)
+            if meta.get("y_limits") is not None:
+                ax.set_ylim(meta["y_limits"])
+            if idx == 0:
+                ax.legend(loc="best", fontsize=8)
+
+        ax.set_title(meta["title"].replace("Comparativa: ", ""), fontsize=10, pad=6)
+        ax.set_ylabel(ylabel, fontsize=9)
+        ax.set_xlabel("Timesteps", fontsize=9)
+
+    fig.suptitle("Panel Consolidado Comparativo del Optimizador", fontsize=13, y=0.99)
+    fig.tight_layout()
+    fig.savefig(out_path)
+    plt.close(fig)
+    print(f">>> [COMPARATIVA] Guardada: {out_path.name}")
+
+
+def plot_comparative_learning_curves_metric(
+    models_eval_data: Dict[str, List[Tuple[int, np.ndarray, np.ndarray, Optional[np.ndarray]]]],
+    metric_key: str,
+    out_path: Path
+) -> None:
+    """Genera gráfica comparativa de curvas de aprendizaje (retorno o tasa de éxito) entre modelos."""
+    apply_plot_style()
+    meta = CANONICAL_METRICS[metric_key]
+    title = meta["title"]
+    ylabel = meta["ylabel"]
+
+    fig, ax = plt.subplots(figsize=(7.5, 4.8), dpi=300)
+    palette = ["#2b5c8f", "#27ae60", "#e67e22", "#8e44ad", "#16a085", "#c0392b", "#d35400", "#2c3e50"]
+
+    has_data = False
+    for idx, (m_name, eval_list) in enumerate(models_eval_data.items()):
+        if not eval_list:
+            continue
+        color = palette[idx % len(palette)]
+        if metric_key == "learning_return":
+            all_means = [np.mean(res, axis=1) for _, _, res, _ in eval_list]
+            t = eval_list[0][1]
+            if len(all_means) == 1:
+                ax.plot(t, all_means[0], color=color, linewidth=2.0, label=m_name)
+                std_eval = np.std(eval_list[0][2], axis=1)
+                ax.fill_between(t, all_means[0] - std_eval, all_means[0] + std_eval, color=color, alpha=0.15)
+            else:
+                arr = np.array(all_means)
+                grand_m = np.mean(arr, axis=0)
+                grand_s = np.std(arr, axis=0)
+                ax.plot(t, grand_m, color=color, linewidth=2.2, label=f"{m_name} (μ, {len(all_means)} sem)")
+                ax.fill_between(t, grand_m - grand_s, grand_m + grand_s, color=color, alpha=0.18)
+            has_data = True
+        elif metric_key == "learning_success_rate":
+            valid_succ = [(t, succ) for _, t, _, succ in eval_list if succ is not None]
+            if not valid_succ:
+                continue
+            all_sr = [np.mean(succ, axis=1) * 100.0 for _, succ in valid_succ]
+            t = valid_succ[0][0]
+            if len(all_sr) == 1:
+                ax.plot(t, all_sr[0], color=color, marker="o", markersize=3.5, linewidth=2.0, label=m_name)
+            else:
+                arr = np.array(all_sr)
+                grand_m = np.mean(arr, axis=0)
+                grand_s = np.std(arr, axis=0)
+                ax.plot(t, grand_m, color=color, marker="o", markersize=3.5, linewidth=2.2, label=f"{m_name} (μ, {len(all_sr)} sem)")
+                ax.fill_between(t, np.maximum(0, grand_m - grand_s), np.minimum(100, grand_m + grand_s),
+                                color=color, alpha=0.18)
+            has_data = True
+
+    if not has_data:
+        plt.close(fig)
+        print(f">>> [OMITIDO] No se encontraron datos para {metric_key}")
+        return
+
+    if metric_key == "learning_success_rate":
+        ax.set_ylim(-2, 105)
+
+    ax.set_xlabel("Pasos de Interacción (Timesteps)")
+    ax.set_ylabel(ylabel)
+    ax.set_title(title, pad=10)
+    ax.legend(loc="best", framealpha=0.9)
+
+    fig.tight_layout()
+    fig.savefig(out_path)
+    plt.close(fig)
+    print(f">>> [COMPARATIVA] Guardada: {out_path.name}")
+
+
 def _render_model_suite(df_m: pd.DataFrame, model_name: str, model_fig_dir: Path,
                         trajs_by_model: Dict[str, Optional[pd.DataFrame]],
-                        eval_log: Optional[Path] = None) -> None:
-    """Genera el conjunto completo de figuras individuales para un modelo específico."""
+                        eval_log: Optional[Path] = None,
+                        metrics: Optional[List[str]] = None) -> None:
+    """Genera el conjunto de figuras individuales para un modelo específico (filtrable por métrica)."""
     model_fig_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n--- Generando figuras individuales para: {model_name} en {model_fig_dir} ---")
-    plot_model_success_rate(df_m, model_name, model_fig_dir / "success_rate.png")
-    plot_model_steady_state_error(df_m, model_name, model_fig_dir / "steady_state_error.png")
-    plot_model_residual_velocity(df_m, model_name, model_fig_dir / "residual_velocity.png")
-    plot_model_settling_time(df_m, model_name, model_fig_dir / "settling_time.png")
-    plot_model_control_effort(df_m, model_name, model_fig_dir / "control_effort.png")
-    plot_model_reward_components(df_m, model_name, model_fig_dir / "reward_components.png")
-    plot_model_pareto_tradeoff(df_m, model_name, model_fig_dir / "pareto_tradeoff.png")
-    plot_model_workspace_spatial_error(df_m, model_name, model_fig_dir / "workspace_spatial_error.png")
 
-    if trajs_by_model.get(model_name) is not None:
+    def want(key: str) -> bool:
+        return metrics is None or key in metrics
+
+    if want("success_rate"):
+        plot_model_success_rate(df_m, model_name, model_fig_dir / "success_rate.png")
+    if want("steady_state_error"):
+        plot_model_steady_state_error(df_m, model_name, model_fig_dir / "steady_state_error.png")
+    if want("residual_velocity"):
+        plot_model_residual_velocity(df_m, model_name, model_fig_dir / "residual_velocity.png")
+    if want("settling_time"):
+        plot_model_settling_time(df_m, model_name, model_fig_dir / "settling_time.png")
+    if want("control_effort"):
+        plot_model_control_effort(df_m, model_name, model_fig_dir / "control_effort.png")
+    if want("reward_components"):
+        plot_model_reward_components(df_m, model_name, model_fig_dir / "reward_components.png")
+    if want("pareto_tradeoff"):
+        plot_model_pareto_tradeoff(df_m, model_name, model_fig_dir / "pareto_tradeoff.png")
+    if want("spatial_error"):
+        plot_model_workspace_spatial_error(df_m, model_name, model_fig_dir / "workspace_spatial_error.png")
+
+    if want("temporal_trajectories") and trajs_by_model.get(model_name) is not None:
         plot_model_temporal_trajectory(trajs_by_model[model_name], model_name,
                                       model_fig_dir / "temporal_trajectory_episode.png", episode_id=0)
 
     # Curvas de entrenamiento
-    seed_dirs = sorted(list((REPO_ROOT / "experiments").glob(f"**/{model_name}/seed_*")))
-    eval_data_list = []
-    log_dirs = []
+    log_dirs, eval_data_list = load_model_training_telemetry(model_name, eval_log)
 
-    if eval_log and eval_log.exists():
-        data = np.load(eval_log)
-        eval_data_list.append((0, data["timesteps"], data["results"], data["successes"] if "successes" in data else None))
-        log_dirs.append(eval_log.parent)
-
-    for s_dir in seed_dirs:
-        try:
-            seed_num = int(s_dir.name.replace("seed_", ""))
-        except ValueError:
-            seed_num = 0
-        npz_candidates = list(s_dir.glob("**/evaluations.npz"))
-        if npz_candidates and not eval_log:
-            d = np.load(npz_candidates[0])
-            eval_data_list.append((seed_num, d["timesteps"], d["results"], d["successes"] if "successes" in d else None))
-        l_dir = s_dir / "logs"
-        if l_dir.exists():
-            log_dirs.append(l_dir)
-
-    if eval_data_list:
+    needs_learning = want("learning_return") or want("learning_success_rate")
+    if eval_data_list and (metrics is None or needs_learning):
         print(f">>> Incorporando curvas de evaluación ({len(eval_data_list)} fuentes) para {model_name}")
-        plot_model_learning_curves(eval_data_list, model_name, model_fig_dir)
+        plot_model_learning_curves(eval_data_list, model_name, model_fig_dir, requested_metrics=metrics)
 
-    if log_dirs:
+    needs_optimizer = any(want(k) for k in ["loss", "policy_loss", "value_loss", "entropy", "approx_kl", "explained_variance", "optimizer_summary"])
+    if log_dirs and (metrics is None or needs_optimizer):
         tags_to_extract = [
             "train/loss", "train/policy_gradient_loss", "train/value_loss",
             "train/entropy_loss", "train/approx_kl", "train/explained_variance"
@@ -1103,7 +1654,7 @@ def _render_model_suite(df_m: pd.DataFrame, model_name: str, model_fig_dir: Path
         tb_scalars = extract_tensorboard_scalars(log_dirs, tags_to_extract)
         if tb_scalars:
             print(f">>> Incorporando telemetría del optimizador desde TensorBoard para {model_name}")
-            plot_model_optimizer_curves(tb_scalars, model_name, model_fig_dir)
+            plot_model_optimizer_curves(tb_scalars, model_name, model_fig_dir, requested_metrics=metrics)
 
 
 def resolve_figures_dir(out_dir: Path, partition_tag: str) -> Path:
@@ -1141,10 +1692,11 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
                        eval_log: Optional[Path] = None,
                        files: Optional[List[str]] = None,
                        dataset_filter: Optional[str] = None,
-                       strict: bool = False) -> None:
+                       strict: bool = False,
+                       metrics: Optional[str] = None) -> None:
     """Ejecuta el protocolo completo de generación modular de gráficas independientes particionadas por dataset."""
     datasets_map = discover_evaluation_datasets(data_dir, files)
-    if not datasets_map:
+    if not datasets_map and not compare_models:
         raise FileNotFoundError(f"No se encontraron evaluaciones válidas en {data_dir}")
 
     # Normalizar filtro de dataset
@@ -1158,21 +1710,30 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
         else:
             target_partition = df_norm
 
+    requested_metrics = resolve_requested_metrics(metrics)
+    has_eval_metrics = any(CANONICAL_METRICS[m]["category"] == "evaluation" for m in requested_metrics)
+    has_opt_metrics = any(CANONICAL_METRICS[m]["category"] in ["optimizer", "optimizer_panel"] for m in requested_metrics)
+    has_learn_metrics = any(CANONICAL_METRICS[m]["category"] == "learning_curve" for m in requested_metrics)
+
     # -------------------------------------------------------------
     # CASO 1: COMPARATIVA EXPLÍCITA (--compare M1,M2,...)
     # -------------------------------------------------------------
     if compare_models:
         is_mixed = False
+        chosen_partition = target_partition or "eval_300"
+        chosen_dfs = {}
+
         # 1.1 Si se especificó explícitamente el dataset
         if target_partition:
-            if target_partition not in datasets_map:
-                raise ValueError(f"No existe la partición {target_partition} en {data_dir}. Disponibles: {list(datasets_map.keys())}")
-            avail_models = datasets_map[target_partition]
-            missing = [m for m in compare_models if m not in avail_models]
-            if missing:
-                raise ValueError(f"[ERROR] Los siguientes modelos no cuentan con evaluación en {target_partition}: {missing}. Disponibles: {list(avail_models.keys())}")
             chosen_partition = target_partition
-            chosen_dfs = {m: avail_models[m].copy() for m in compare_models}
+            if target_partition in datasets_map:
+                avail_models = datasets_map[target_partition]
+                missing = [m for m in compare_models if m not in avail_models]
+                if missing and has_eval_metrics:
+                    raise ValueError(f"[ERROR] Los siguientes modelos no cuentan con evaluación en {target_partition}: {missing}. Disponibles: {list(avail_models.keys())}")
+                chosen_dfs = {m: avail_models[m].copy() for m in compare_models if m in avail_models}
+            elif has_eval_metrics:
+                raise ValueError(f"No existe la partición {target_partition} en {data_dir}. Disponibles: {list(datasets_map.keys())}")
         else:
             # 1.2 Detectar automáticamente en qué partición coinciden todos los modelos
             matching_partitions = [
@@ -1181,109 +1742,163 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
             ]
 
             if matching_partitions:
-                # Si coincide en varias particiones, priorizar eval_300 por ser el benchmark definitivo
                 chosen_partition = "eval_300" if "eval_300" in matching_partitions else matching_partitions[0]
                 chosen_dfs = {m: datasets_map[chosen_partition][m].copy() for m in compare_models}
             else:
-                # Discrepancia metodológica: no existe una sola partición que contenga a todos los modelos
                 where_models = {}
                 for m in compare_models:
                     where_models[m] = [d_tag for d_tag, m_dict in datasets_map.items() if m in m_dict]
 
                 missing_models = [m for m, parts in where_models.items() if not parts]
-                if missing_models:
+                if missing_models and has_eval_metrics:
                     raise FileNotFoundError(f"[ERROR] No se encontraron evaluaciones para los modelos: {missing_models}")
 
-                if strict:
-                    err_lines = [
+                if has_eval_metrics:
+                    if strict:
+                        err_lines = [
+                            "\n" + "=" * 78,
+                            " [ERROR METODOLÓGICO] DISCREPANCIA EN EL TAMAÑO DEL DATASET DE EVALUACIÓN (--strict)",
+                            "=" * 78,
+                            " No es metodológicamente válido comparar modelos evaluados sobre conjuntos",
+                            " de prueba de distinto tamaño (e.g. 200 episodios vs 300 episodios).",
+                            "",
+                            " Detalle de datasets por modelo solicitado:"
+                        ]
+                        for m, parts in where_models.items():
+                            p_str = ", ".join(parts) if parts else "Sin datos"
+                            err_lines.append(f"   • {m:10s} -> {p_str}")
+                        err_lines.extend([
+                            "",
+                            " Solución requerida:",
+                            "   1. Para comparar sobre 200 episodios: evalúe los modelos con validation_set_200.",
+                            "   2. Para comparar sobre 300 episodios: evalúe los modelos con final_eval_set_300.",
+                            "   3. Si existen ambas evaluaciones, especifique el flag: --dataset 200 o --dataset 300.",
+                            "=" * 78
+                        ])
+                        raise ValueError("\n".join(err_lines))
+
+                    # Modo no bloqueante: emitir advertencia metodológica y generar figuras anotando el tamaño muestral
+                    is_mixed = True
+                    chosen_partition = "eval_mixed"
+                    chosen_dfs = {}
+                    for m in compare_models:
+                        parts = where_models[m]
+                        pref_part = "eval_300" if "eval_300" in parts else ("eval_200" if "eval_200" in parts else parts[0])
+                        chosen_dfs[m] = datasets_map[pref_part][m].copy()
+
+                    warn_lines = [
                         "\n" + "=" * 78,
-                        " [ERROR METODOLÓGICO] DISCREPANCIA EN EL TAMAÑO DEL DATASET DE EVALUACIÓN (--strict)",
+                        " [ADVERTENCIA METODOLÓGICA] DISCREPANCIA EN EL TAMAÑO DEL DATASET DE EVALUACIÓN",
                         "=" * 78,
-                        " No es metodológicamente válido comparar modelos evaluados sobre conjuntos",
-                        " de prueba de distinto tamaño (e.g. 200 episodios vs 300 episodios).",
+                        " Comparación exploratoria entre modelos evaluados sobre conjuntos de distinto tamaño.",
+                        " Se genera la comparativa informativa anotando explícitamente el tamaño muestral N",
+                        " en las etiquetas y leyendas de cada gráfica.",
                         "",
-                        " Detalle de datasets por modelo solicitado:"
+                        " Detalle de particiones asignadas por modelo:"
                     ]
-                    for m, parts in where_models.items():
-                        p_str = ", ".join(parts) if parts else "Sin datos"
-                        err_lines.append(f"   • {m:10s} -> {p_str}")
-                    err_lines.extend([
+                    for m, df in chosen_dfs.items():
+                        warn_lines.append(f"   • {m:10s} -> N = {len(df)} episodios")
+                    warn_lines.extend([
                         "",
-                        " Solución requerida:",
-                        "   1. Para comparar sobre 200 episodios: evalúe los modelos con validation_set_200.",
-                        "   2. Para comparar sobre 300 episodios: evalúe los modelos con final_eval_set_300.",
-                        "   3. Si existen ambas evaluaciones, especifique el flag: --dataset 200 o --dataset 300.",
-                        "=" * 78
+                        " Nota: Para forzar consistencia homogénea estricta en el informe final use --strict.",
+                        "=" * 78 + "\n"
                     ])
-                    raise ValueError("\n".join(err_lines))
-
-                # Modo no bloqueante: emitir advertencia metodológica y generar figuras anotando el tamaño muestral
-                is_mixed = True
-                chosen_partition = "eval_mixed"
-                chosen_dfs = {}
-                for m in compare_models:
-                    parts = where_models[m]
-                    pref_part = "eval_300" if "eval_300" in parts else ("eval_200" if "eval_200" in parts else parts[0])
-                    chosen_dfs[m] = datasets_map[pref_part][m].copy()
-
-                warn_lines = [
-                    "\n" + "=" * 78,
-                    " [ADVERTENCIA METODOLÓGICA] DISCREPANCIA EN EL TAMAÑO DEL DATASET DE EVALUACIÓN",
-                    "=" * 78,
-                    " Comparación exploratoria entre modelos evaluados sobre conjuntos de distinto tamaño.",
-                    " Se genera la comparativa informativa anotando explícitamente el tamaño muestral N",
-                    " en las etiquetas y leyendas de cada gráfica.",
-                    "",
-                    " Detalle de particiones asignadas por modelo:"
-                ]
-                for m, df in chosen_dfs.items():
-                    warn_lines.append(f"   • {m:10s} -> N = {len(df)} episodios")
-                warn_lines.extend([
-                    "",
-                    " Nota: Para forzar consistencia homogénea estricta en el informe final use --strict.",
-                    "=" * 78 + "\n"
-                ])
-                print("\n".join(warn_lines))
+                    print("\n".join(warn_lines))
+                else:
+                    chosen_partition = "eval_300"
 
         part_fig_dir = resolve_figures_dir(out_dir, chosen_partition)
         target_comparative_dir = part_fig_dir / "_".join(compare_models)
         target_comparative_dir.mkdir(parents=True, exist_ok=True)
 
-        row_counts = {m: len(df) for m, df in chosen_dfs.items()}
+        row_counts = {m: len(df) for m, df in chosen_dfs.items()} if chosen_dfs else {}
         print(f"\n{'='*75}")
         print(f" GENERADOR GRÁFICO COMPARATIVO — Partición: {chosen_partition}")
-        print(f" Modelos: {compare_models} ({row_counts})")
+        print(f" Modelos: {compare_models} {f'({row_counts})' if row_counts else ''}")
+        print(f" Métricas solicitadas: {requested_metrics}")
         print(f" Directorio de salida: {target_comparative_dir}")
         print(f"{'='*75}\n")
 
-        trajs_by_model = {m: load_sample_trajectories(data_dir, m, None) for m in compare_models}
+        trajs_by_model = {}
+        if metrics is None or "temporal_trajectories" in requested_metrics:
+            trajs_by_model = {m: load_sample_trajectories(data_dir, m, None) for m in compare_models}
 
-        # Generar figuras individuales bajo la partición correspondiente
-        for m in compare_models:
-            _render_model_suite(chosen_dfs[m], m, part_fig_dir / m, trajs_by_model, eval_log)
+        # Generar figuras individuales SOLO si no se especificó un filtro de métricas (suite completa)
+        if metrics is None:
+            for m in compare_models:
+                if m in chosen_dfs:
+                    _render_model_suite(chosen_dfs[m], m, part_fig_dir / m, trajs_by_model, eval_log)
 
-        # Preparar DataFrames para las figuras comparativas (anotando N si hay mezcla)
+        # Preparar DataFrames para las figuras comparativas de evaluación
         plot_dfs = {}
-        for m, df in chosen_dfs.items():
-            df_plot = df.copy()
-            label_with_n = f"{m} (N={len(df_plot)})" if is_mixed else m
-            df_plot["agent"] = label_with_n
-            plot_dfs[label_with_n] = df_plot
+        sub_all_df = pd.DataFrame()
+        if has_eval_metrics and chosen_dfs:
+            for m, df in chosen_dfs.items():
+                df_plot = df.copy()
+                label_with_n = f"{m} (N={len(df_plot)})" if is_mixed else m
+                df_plot["agent"] = label_with_n
+                plot_dfs[label_with_n] = df_plot
+            sub_all_df = pd.concat(list(plot_dfs.values()), ignore_index=True)
 
-        sub_all_df = pd.concat(list(plot_dfs.values()), ignore_index=True)
         print(f"\n--- Generando figuras comparativas consolidadas en: {target_comparative_dir} ---")
-        plot_comparative_success_rates(sub_all_df, target_comparative_dir / "comparative_success_rate.png")
-        plot_comparative_steady_state_error(sub_all_df, target_comparative_dir / "comparative_steady_state_error.png")
-        plot_comparative_residual_velocity(sub_all_df, target_comparative_dir / "comparative_residual_velocity.png")
-        plot_comparative_settling_time(sub_all_df, target_comparative_dir / "comparative_settling_time.png")
-        plot_comparative_control_effort(sub_all_df, target_comparative_dir / "comparative_control_effort.png")
-        plot_comparative_reward_components(sub_all_df, target_comparative_dir / "comparative_reward_components.png")
-        plot_comparative_pareto_tradeoff(sub_all_df, target_comparative_dir / "comparative_pareto_tradeoff.png")
-        plot_comparative_spatial_error(plot_dfs, target_comparative_dir / "comparative_spatial_error.png")
 
-        valid_traj_comp = {m: trajs_by_model[m] for m in compare_models if trajs_by_model.get(m) is not None}
-        if len(valid_traj_comp) > 1:
-            plot_comparative_temporal_trajectories(valid_traj_comp, target_comparative_dir / "comparative_temporal_trajectories.png", episode_id=0)
+        # 1. Métricas de Evaluación
+        if "success_rate" in requested_metrics and not sub_all_df.empty:
+            plot_comparative_success_rates(sub_all_df, target_comparative_dir / "comparative_success_rate.png")
+        if "steady_state_error" in requested_metrics and not sub_all_df.empty:
+            plot_comparative_steady_state_error(sub_all_df, target_comparative_dir / "comparative_steady_state_error.png")
+        if "residual_velocity" in requested_metrics and not sub_all_df.empty:
+            plot_comparative_residual_velocity(sub_all_df, target_comparative_dir / "comparative_residual_velocity.png")
+        if "settling_time" in requested_metrics and not sub_all_df.empty:
+            plot_comparative_settling_time(sub_all_df, target_comparative_dir / "comparative_settling_time.png")
+        if "control_effort" in requested_metrics and not sub_all_df.empty:
+            plot_comparative_control_effort(sub_all_df, target_comparative_dir / "comparative_control_effort.png")
+        if "reward_components" in requested_metrics and not sub_all_df.empty:
+            plot_comparative_reward_components(sub_all_df, target_comparative_dir / "comparative_reward_components.png")
+        if "pareto_tradeoff" in requested_metrics and not sub_all_df.empty:
+            plot_comparative_pareto_tradeoff(sub_all_df, target_comparative_dir / "comparative_pareto_tradeoff.png")
+        if "spatial_error" in requested_metrics and plot_dfs:
+            plot_comparative_spatial_error(plot_dfs, target_comparative_dir / "comparative_spatial_error.png")
+        if "temporal_trajectories" in requested_metrics:
+            valid_traj_comp = {m: trajs_by_model[m] for m in compare_models if trajs_by_model.get(m) is not None}
+            if len(valid_traj_comp) > 1:
+                plot_comparative_temporal_trajectories(valid_traj_comp, target_comparative_dir / "comparative_temporal_trajectories.png", episode_id=0)
+
+        # 2. Métricas del Optimizador (TensorBoard)
+        if has_opt_metrics:
+            needed_tags = [CANONICAL_METRICS[m]["tag"] for m in requested_metrics if CANONICAL_METRICS[m]["category"] == "optimizer"]
+            if "optimizer_summary" in requested_metrics:
+                for k in ["loss", "policy_loss", "value_loss", "entropy", "approx_kl", "explained_variance"]:
+                    t = CANONICAL_METRICS[k]["tag"]
+                    if t not in needed_tags:
+                        needed_tags.append(t)
+
+            models_tb_dict = {}
+            for m in compare_models:
+                l_dirs, _ = load_model_training_telemetry(m, eval_log)
+                models_tb_dict[m] = extract_tensorboard_scalars(l_dirs, needed_tags)
+
+            for m_key in requested_metrics:
+                if CANONICAL_METRICS[m_key]["category"] == "optimizer":
+                    scalar_tag = CANONICAL_METRICS[m_key]["tag"]
+                    scalar_data = {m: models_tb_dict[m].get(scalar_tag, []) for m in compare_models}
+                    out_f = target_comparative_dir / CANONICAL_METRICS[m_key]["filename"]
+                    plot_comparative_optimizer_metric(scalar_data, m_key, out_f)
+
+            if "optimizer_summary" in requested_metrics:
+                plot_comparative_optimizer_summary(models_tb_dict, target_comparative_dir / "comparative_optimizer_summary.png")
+
+        # 3. Métricas de Curvas de Aprendizaje (Evaluations.npz)
+        if has_learn_metrics:
+            models_eval_data = {}
+            for m in compare_models:
+                _, e_list = load_model_training_telemetry(m, eval_log)
+                models_eval_data[m] = e_list
+
+            for m_key in requested_metrics:
+                if CANONICAL_METRICS[m_key]["category"] == "learning_curve":
+                    out_f = target_comparative_dir / CANONICAL_METRICS[m_key]["filename"]
+                    plot_comparative_learning_curves_metric(models_eval_data, m_key, out_f)
 
         print(f"\n>>> [PLOT OK] Comparativa completada exitosamente en {target_comparative_dir}.")
         return
@@ -1318,7 +1933,7 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
         trajs_by_model = {m: load_sample_trajectories(data_dir, m, part) for m in models_to_run}
 
         for m in models_to_run:
-            _render_model_suite(part_models_dict[m], m, part_fig_dir / m, trajs_by_model, eval_log)
+            _render_model_suite(part_models_dict[m], m, part_fig_dir / m, trajs_by_model, eval_log, metrics=requested_metrics if metrics else None)
 
     print(f"\n>>> [PLOT OK] Proceso completado exitosamente.")
 
@@ -1337,6 +1952,8 @@ def main() -> None:
                         help="Lista de modelos separados por comas para generar comparativa combinada exclusiva (ej. PPO_1,PPO_2,SAC_1).")
     parser.add_argument("--dataset", type=str, default=None,
                         help="Filtrar por tamaño de dataset de evaluación: 200, 300, eval_200, eval_300 o all.")
+    parser.add_argument("--metric", "--metrics", dest="metrics", type=str, default=None,
+                        help="Métrica o lista de métricas separadas por comas (ej. explained_variance, approx_kl, steady_state_error, optimizer, eval, all).")
     parser.add_argument("--files", type=str, default=None,
                         help="Lista opcional de rutas CSV separadas por comas.")
     parser.add_argument("--eval-log", type=str, default=None,
@@ -1362,6 +1979,7 @@ def main() -> None:
         files=file_list,
         dataset_filter=args.dataset,
         strict=args.strict,
+        metrics=args.metrics,
     )
 
 

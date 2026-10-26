@@ -72,7 +72,38 @@ Cada sesión de entrenamiento genera un directorio estructurado en `experiments/
 * `models/<algoritmo>_arm2d_final.zip`: Red neuronal con los pesos correspondientes al último paso de optimización.
 * `models/best_model/`: Checkpoint con el mayor retorno medio alcanzado durante las evaluaciones periódicas (`best_model.zip` junto al archivo serializado de normalización `vecnormalize_stats.pkl`).
 * `checkpoints/ckpt_<paso>/`: Puntos de control intermedios para auditoría de estabilidad temporal.
-* `logs/`: Registros continuos para TensorBoard (`tensorboard --logdir experiments/`) y archivo de validación periódica `evaluations.npz`.
+* `logs/`: Registros continuos de eventos para TensorBoard y archivo de validación periódica `evaluations.npz`.
+
+### 2.4 Monitoreo de Telemetría en Tiempo Real con TensorBoard
+
+El entrenamiento genera eventos de telemetría continuos procesables en tiempo real mediante la interfaz web de TensorBoard:
+
+```powershell
+# Iniciar servidor web de monitoreo apuntando al directorio raíz de experimentos
+tensorboard --logdir experiments/
+
+# Especificar puerto alternativo si el puerto por defecto (6006) estuviese ocupado
+tensorboard --logdir experiments/ --port 6007
+```
+
+Una vez iniciado el servicio, acceda desde el navegador a `http://localhost:6006/`. La interfaz organiza las siguientes series temporales:
+
+* **Métricas de Interacción (Rollout):**
+  * `rollout/ep_rew_mean`: Retorno escalar acumulado medio por episodio.
+  * `rollout/ep_len_mean`: Longitud media de los episodios en pasos de simulación.
+* **Métricas de Validación Periódica (EvalCallback):**
+  * `eval/mean_reward`: Retorno medio obtenido en episodios de validación periódicos con política determinista.
+  * `eval/success_rate`: Tasa empírica de estabilización alcanzada en validación intermedia.
+* **Métricas de Optimización (Train):**
+  * `train/loss`: Función de pérdida total agregada.
+  * `train/policy_gradient_loss`: Pérdida de la política (*clipped surrogate loss* en PPO / *actor loss* en SAC).
+  * `train/value_loss` o `train/critic_loss`: Pérdida cuadrática de la función de valor del crítico.
+  * `train/entropy_loss`: Nivel de exploración estocástica de la distribución gaussiana de acciones.
+  * `train/approx_kl`: Divergencia de Kullback-Leibler aproximada entre actualizaciones sucesivas de la política.
+  * `train/explained_variance`: Proporción de la varianza del retorno explicada por el crítico ($1 - \text{Var}(y - V)/\text{Var}(y)$).
+  * `train/ent_coef` (exclusivo SAC): Coeficiente de temperatura dinámico $\alpha$ que pondera el término de entropía.
+
+Para contrastar el progreso entre múltiples semillas o algoritmos, emplee la caja de filtrado por expresiones regulares en el panel izquierdo de la interfaz (por ejemplo, filtrando por `PPO_` o `SAC_`).
 
 ---
 
@@ -84,8 +115,8 @@ El script [evaluate.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase
 
 En [src/datasets.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/src/datasets.py) se generan dos conjuntos independientes con idéntica distribución cinemática en el espacio de trabajo:
 
-* **Conjunto de Validación Intermedia ([data/datasets/validation_set_200.json](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/data/datasets/validation_set_200.json)):** Contiene 200 episodios generados con semilla pseudoaleatoria 202601. Se emplea para comparar y descartar variantes de sintonización de hiperparámetros (pesos LQR, arquitecturas de red o funciones de activación) durante la fase de desarrollo.
-* **Conjunto de Evaluación Final de Referencia ([data/datasets/final_eval_set_300.json](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/data/datasets/final_eval_set_300.json)):** Contiene 300 episodios generados con semilla pseudoaleatoria 202602. Actúa como conjunto de prueba desacoplado (*test set*) para certificar formalmente las métricas definitivas del benchmark mecatrónico sin sesgo de optimización retrospectivo.
+* **Conjunto de Validación Intermedia ([datasets/validation_set_200.json](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/datasets/validation_set_200.json)):** Contiene 200 episodios generados con semilla pseudoaleatoria 202601. Se emplea para comparar y descartar variantes de sintonización de hiperparámetros (pesos LQR, arquitecturas de red o funciones de activación) durante la fase de desarrollo.
+* **Conjunto de Evaluación Final de Referencia ([datasets/final_eval_set_300.json](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/datasets/final_eval_set_300.json)):** Contiene 300 episodios generados con semilla pseudoaleatoria 202602. Actúa como conjunto de prueba desacoplado (*test set*) para certificar formalmente las métricas definitivas del benchmark mecatrónico sin sesgo de optimización retrospectivo.
 
 ### 3.2 Sintaxis del Comando y Parámetros
 
@@ -95,10 +126,10 @@ python evaluate.py [--model-path <ruta_modelo.zip>] [--label <identificador>] [-
 
 Comportamiento de los argumentos y valores por defecto:
 
-* `--dataset` (por defecto: `"data/datasets/validation_set_200.json"`): Especificación del conjunto de prueba. Admite:
+* `--dataset` (por defecto: `"datasets/validation_set_200.json"`): Especificación del conjunto de prueba. Admite:
   * `"all"`: Ejecuta consecutivamente la evaluación sobre el conjunto de 200 episodios y sobre el de 300 episodios en una sola instrucción.
-  * `"200"` o ruta `data/datasets/validation_set_200.json`: Evaluación de validación intermedia.
-  * `"300"` o ruta `data/datasets/final_eval_set_300.json`: Evaluación del benchmark final de 300 episodios.
+  * `"200"` o ruta `datasets/validation_set_200.json`: Evaluación de validación intermedia.
+  * `"300"` o ruta `datasets/final_eval_set_300.json`: Evaluación del benchmark final de 300 episodios.
 * `--model-path` (por defecto: `None`): Ruta al archivo `.zip` del modelo entrenado. Requerido para agentes RL a menos que se invoque el flag `--c0`.
 * `--label` (por defecto: `None`): Etiqueta asignada al modelo para estructurar las carpetas de salida. Si se omite, se infiere automáticamente a partir del nombre del archivo o del directorio del modelo (o se asigna `"C0"` si se evalúa el controlador analítico).
 * `--c0` (por defecto: `False`): Bandera para evaluar el controlador cinemático analítico con transpuesta de Jacobiano amortiguada. Admite modificar sus ganancias mediante `--kp` (por defecto: `50.0`), `--kd` (por defecto: `0.05`) y `--lambda-damping` (por defecto: `0.01`).
@@ -162,7 +193,7 @@ El script [plot.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V
 ### 4.1 Sintaxis del Comando y Parámetros
 
 ```powershell
-python plot.py [--model <nombre_modelo>] [--compare <modelo1,modelo2,...>] [--dataset <200|300|all>] [--data-dir <directorio_datos>] [--out-dir <directorio_salida>] [--eval-log <ruta_evaluations.npz>] [--strict]
+python plot.py [--model <nombre_modelo>] [--compare <modelo1,modelo2,...>] [--dataset <200|300|all>] [--metric <metrica1,metrica2,...>] [--data-dir <directorio_datos>] [--out-dir <directorio_salida>] [--eval-log <ruta_evaluations.npz>] [--strict]
 ```
 
 Comportamiento de los argumentos y valores por defecto:
@@ -170,14 +201,44 @@ Comportamiento de los argumentos y valores por defecto:
 * `--data-dir` (por defecto: `"reports/data/evaluation"`): Directorio base que contiene los datos tabulares evaluados. Explora recursivamente subcarpetas particionadas (`eval_200`, `eval_300`) y carpetas directas.
 * `--out-dir` (por defecto: `"reports"`): Directorio base para la salida gráfica. Se rutea automáticamente a `reports/figures_valid_200/` y `reports/figures_final_300/` según la partición evaluada.
 * `--dataset` (por defecto: `None`): Filtro de partición muestral. Admite `200`, `300`, `eval_200` o `eval_300`. Si se omite, procesa automáticamente todas las evaluaciones presentes en las particiones disponibles.
-* `--model` (por defecto: `None`): Genera exclusivamente las figuras individuales para el modelo indicado (por ejemplo, `--model PPO_7`). Si se omite y no se provee `--compare`, se generan las figuras de todos los modelos descubiertos.
-* `--compare` (por defecto: `None`): Lista de modelos separados por comas (sin espacios) para generar un panel gráfico comparativo consolidado (por ejemplo, `--compare C0,PPO_7,SAC_2`).
+* `--metric`, `--metrics` (por defecto: `None`): Selecciona de forma modular y paramétrica una métrica específica o lista separada por comas para generar exclusivamente las comparativas deseadas, omitiendo el renderizado innecesario del resto de la suite. Admite:
+  * **Escalares de Optimizador (TensorBoard):** `explained_variance` (alias: `var_exp`, `ev`), `approx_kl` (alias: `kl`), `value_loss` (alias: `critic_loss`, `vl`), `policy_loss` (alias: `pl`), `entropy`, `loss`, `optimizer_summary`.
+  * **Curvas de Aprendizaje:** `learning_return` (alias: `return`), `learning_success_rate` (alias: `train_success`, `learning_sr`), `learning_curves`.
+  * **Métricas de Benchmark (Evaluación):** `success_rate`, `steady_state_error` (alias: `e_ss`), `residual_velocity` (alias: `v_ss`), `settling_time` (alias: `t_s`), `control_effort` (alias: `j_u`), `reward_components`, `pareto_tradeoff`, `spatial_error`, `temporal_trajectories`.
+  * **Macros consolidadas:** `optimizer` (todas las del optimizador), `eval` (las 9 de benchmark), `all` (suite íntegra de evaluación y optimización).
+* `--model` (por defecto: `None`): Genera las figuras individuales para el modelo indicado (por ejemplo, `--model PPO_7`). Si se combina con `--metric`, genera únicamente las métricas solicitadas para ese modelo.
+* `--compare` (por defecto: `None`): Lista de modelos separados por comas (sin espacios) para generar un panel gráfico comparativo consolidado (por ejemplo, `--compare PPO_7,PPO_2.1,PPO_2.2`).
 * `--eval-log` (por defecto: `None`): Ruta opcional a un archivo `evaluations.npz` registrado durante el entrenamiento para graficar curvas de convergencia de optimización.
 * `--strict` (por defecto: `False`): Exige consistencia homogénea estricta en el tamaño muestral al comparar modelos. Si se activa y los modelos provienen de particiones distintas (200 vs 300), interrumpe la ejecución con una excepción. Si se omite (`False`), emite una advertencia metodológica en consola, anota el tamaño muestral (N) en cada gráfica y deposita la salida en `reports/figures_mixed/`.
 
 ### 4.2 Ejemplos de Ejecución Gráfica
 
-#### Comparativas sobre el Conjunto Definitivo de 300 Episodios
+#### Comparativas Personalizadas y Paramétricas por Métrica (--metric)
+
+```powershell
+# 1. Comparar varianza explicada (explained_variance) entre PPO_7, PPO_2.1 y PPO_2.2 en dataset 300
+python plot.py --dataset 300 --compare PPO_7,PPO_2.1,PPO_2.2 --metric explained_variance
+
+# 2. Comparar divergencia KL aproximada (approx_kl) entre modelos en dataset 300
+python plot.py --dataset 300 --compare PPO_7,PPO_2.1,PPO_2.2 --metric approx_kl
+
+# 3. Comparativa combinada de múltiples métricas de optimización
+python plot.py --dataset 300 --compare PPO_7,PPO_2.1,PPO_2.2 --metric value_loss,policy_loss
+
+# 4. Panel consolidado 2x3 con todas las pérdidas del optimizador comparadas
+python plot.py --dataset 300 --compare PPO_7,PPO_2.1,PPO_2.2 --metric optimizer_summary
+
+# 5. Comparativa de curvas de aprendizaje durante entrenamiento (retorno y tasa de estabilización)
+python plot.py --dataset 300 --compare PPO_7,PPO_2.1,PPO_2.2 --metric learning_curves
+
+# 6. Comparativa paramétrica de precisión y esfuerzo de control (e_ss y J_u)
+python plot.py --dataset 300 --compare PPO_7,PPO_2.1,PPO_2.2 --metric steady_state_error,control_effort
+
+# 7. Generación de una única métrica para un modelo individual (renderizado instantáneo)
+python plot.py --dataset 300 --model PPO_7 --metric explained_variance
+```
+
+#### Comparativas sobre el Conjunto Definitivo de 300 Episodios (Suite Completa)
 
 ```powershell
 # 1. Comparativa de modelos definitivos (Benchmark C0 vs PPO_7 vs SAC_2 en reports/figures_final_300/C0_PPO_7_SAC_2/)
@@ -239,17 +300,28 @@ Las figuras se almacenan de forma desacoplada y directa en `reports/figures_vali
   * `optimizer_explained_variance.png`: Varianza explicada de la función de valor.
   * `optimizer_convergence_summary.png`: Panel resumen 2x3 con todas las pérdidas del optimizador.
 
-#### Subcarpetas Comparativas (`reports/figures/eval_<N>/<modelo1>_<modelo2>_.../`)
+#### Subcarpetas Comparativas (`reports/figures_<dataset>/<modelo1>_<modelo2>_.../`)
 
-* `comparative_success_rate.png`: Comparación de la tasa de éxito entre los modelos contrastados con intervalos de Wilson.
-* `comparative_steady_state_error.png`: Comparativa de precisión cartesiana terminal e_ss.
-* `comparative_residual_velocity.png`: Comparativa de disipación de velocidad angular residual v_ss.
-* `comparative_settling_time.png`: Comparativa de rapidez de respuesta temporal t_s.
-* `comparative_control_effort.png`: Comparativa del gasto de control acumulado J_u.
-* `comparative_reward_components.png`: Comparativa del desglose de costos cuadráticos en barras agrupadas.
-* `comparative_pareto_tradeoff.png`: Dispersión de episodios y centroides en el espacio bi-objetivo e_ss vs J_u.
-* `comparative_spatial_error.png`: Subplots espaciales comparativos del error en el espacio de trabajo con indicación de puntos que superan el rango de escala.
-* `comparative_temporal_trajectories.png`: Superposición de respuestas temporales de los modelos sobre un mismo episodio.
+* **Métricas Mecatrónicas de Estabilización y Control:**
+  * `comparative_success_rate.png`: Comparación de la tasa de éxito entre los modelos contrastados con intervalos de Wilson al 95%.
+  * `comparative_steady_state_error.png`: Comparativa de precisión cartesiana terminal e_ss frente a tolerancia r_target = 20 mm.
+  * `comparative_residual_velocity.png`: Comparativa de disipación de velocidad angular residual v_ss frente a cota v_tol = 0.10 rad/s.
+  * `comparative_settling_time.png`: Comparativa de rapidez de respuesta temporal t_s al 5%.
+  * `comparative_control_effort.png`: Comparativa del gasto de control acumulado J_u.
+  * `comparative_reward_components.png`: Comparativa del desglose de costos cuadráticos LQR en barras agrupadas.
+  * `comparative_pareto_tradeoff.png`: Dispersión de episodios y centroides en el espacio bi-objetivo e_ss vs J_u con frontera de Pareto.
+  * `comparative_spatial_error.png`: Subplots espaciales comparativos del error cartesiano en el espacio de trabajo.
+  * `comparative_temporal_trajectories.png`: Superposición de respuestas temporales de los modelos sobre un mismo episodio.
+* **Telemetría de Entrenamiento y Convergencia de Optimización:**
+  * `comparative_explained_variance.png`: Varianza explicada de la función de valor del crítico frente a referencia óptima 1.0.
+  * `comparative_approx_kl.png`: Divergencia KL aproximada entre políticas consecutivas con umbral de guía 0.015.
+  * `comparative_value_loss.png`: Pérdida cuadrática de la función de valor (MSE del crítico).
+  * `comparative_policy_loss.png`: Pérdida de la política por gradiente truncado (clipped surrogate).
+  * `comparative_entropy.png`: Evolución temporal de la entropía de la distribución de acciones.
+  * `comparative_loss.png`: Pérdida escalar total del optimizador.
+  * `comparative_optimizer_summary.png`: Panel 2x3 consolidando las 6 curvas de telemetría del optimizador comparadas.
+  * `comparative_learning_return.png`: Retorno episódico acumulado durante el entrenamiento (con bandas de dispersión +-1 sigma si existen múltiples semillas).
+  * `comparative_learning_success_rate.png`: Tasa de estabilización durante el entrenamiento evaluada periódicamente.
 
 ---
 

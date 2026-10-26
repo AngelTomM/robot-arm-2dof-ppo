@@ -223,7 +223,7 @@ def main() -> None:
                         help="Amortiguamiento Levenberg-Marquardt para C0 (por defecto: 0.01).")
     parser.add_argument("--vecnormalize", type=str, default=None,
                         help="Ruta opcional al archivo vecnormalize_stats.pkl.")
-    parser.add_argument("--dataset", type=str, default="data/datasets/validation_set_200.json",
+    parser.add_argument("--dataset", type=str, default="datasets/validation_set_200.json",
                         help="Ruta al JSON del dataset, o palabra clave: 'all' (ejecuta 200 y 300), '200' o '300'.")
     parser.add_argument("--env-config", type=str, default="configs/environment.yaml",
                         help="Ruta a la configuración física del entorno (SSOT).")
@@ -244,13 +244,13 @@ def main() -> None:
     ds_arg = args.dataset.strip().lower()
     if ds_arg == "all":
         dataset_paths = [
-            "data/datasets/validation_set_200.json",
-            "data/datasets/final_eval_set_300.json"
+            "datasets/validation_set_200.json",
+            "datasets/final_eval_set_300.json"
         ]
     elif ds_arg in ["200", "eval_200"]:
-        dataset_paths = ["data/datasets/validation_set_200.json"]
+        dataset_paths = ["datasets/validation_set_200.json"]
     elif ds_arg in ["300", "eval_300"]:
-        dataset_paths = ["data/datasets/final_eval_set_300.json"]
+        dataset_paths = ["datasets/final_eval_set_300.json"]
     else:
         dataset_paths = [args.dataset]
 

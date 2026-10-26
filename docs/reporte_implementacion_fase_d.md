@@ -102,8 +102,8 @@ python train.py --config configs/phase_D/prueba/PPO_1.yaml --seed 42
 python train.py --config configs/phase_D/prueba/SAC_1.yaml --seed 42
 
 # 3. Evaluación de Políticas Entrenadas y Baseline Analítico C0
-python evaluate.py --c0 --dataset data/datasets/validation_set_200.json
-python evaluate.py --agent ppo --model-path experiments/phase_D_prueba/PPO_1/seed_42/models/ppo_arm2d_final.zip --dataset data/datasets/final_eval_set_300.json
+python evaluate.py --c0 --dataset datasets/validation_set_200.json
+python evaluate.py --agent ppo --model-path experiments/phase_D_prueba/PPO_1/seed_42/models/ppo_arm2d_final.zip --dataset datasets/final_eval_set_300.json
 
 # 4. Generación de Figuras Comparativas
 python plot.py --data-dir reports/data/evaluation --out-dir reports/figures

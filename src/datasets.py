@@ -70,7 +70,7 @@ def generate_dataset(n_episodes: int, seed: int, l1: float = None, l2: float = N
 
     return episodes
 
-def save_and_get_datasets(data_dir: str = "data/datasets", force_regenerate: bool = False):
+def save_and_get_datasets(data_dir: str = "datasets", force_regenerate: bool = False):
     p = Path(data_dir)
     resolved_dir = p if p.is_absolute() else (REPO_ROOT / p)
     resolved_dir.mkdir(parents=True, exist_ok=True)

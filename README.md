@@ -109,7 +109,7 @@ Fase_D_V3/
 python train.py --config configs/entorno/PPO_1.yaml --seed 42
 
 # 3. Evaluar el baseline analítico C0 sobre el dataset de validación
-python evaluate.py --c0 --dataset data/datasets/validation_set_200.json
+python evaluate.py --c0 --dataset datasets/validation_set_200.json
 
 # 4. Generar curvas y figuras comparativas
 python plot.py
