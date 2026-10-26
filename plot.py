@@ -64,42 +64,51 @@ def apply_plot_style() -> None:
     })
 
 
-def load_evaluation_data(data_dir: Path, files: Optional[List[str]] = None) -> Tuple[Dict[str, pd.DataFrame], pd.DataFrame]:
+def discover_evaluation_datasets(data_dir: Path, files: Optional[List[str]] = None) -> Dict[str, Dict[str, pd.DataFrame]]:
     """
-    Carga los resultados tabulares buscando tanto en subdirectorios
-    (reports/data/evaluation/<modelo>/episodes.csv) como en archivos planos (*_episodes.csv).
-    Retorna un diccionario {nombre_modelo: df} y un DataFrame concatenado.
+    Descubre y particiona las evaluaciones según el tamaño del conjunto de datos (eval_200, eval_300, etc.).
+    Retorna un diccionario {dataset_tag: {nombre_modelo: df}}.
     """
-    dfs_by_model: Dict[str, pd.DataFrame] = {}
+    ref_coords = {}
+    for ds_name in ["final_eval_set_300.json", "validation_set_200.json"]:
+        p_ds = REPO_ROOT / "data/datasets" / ds_name
+        if p_ds.exists():
+            try:
+                with open(p_ds, "r", encoding="utf-8") as f:
+                    ds = json.load(f)
+                    for item in ds:
+                        ref_coords[int(item["episode_id"])] = (float(item["target_x"]), float(item["target_y"]))
+            except Exception:
+                pass
+
+    datasets_map: Dict[str, Dict[str, pd.DataFrame]] = {}
 
     if files:
-        csv_paths = [Path(f) for f in files]
+        csv_paths = [(Path(f), None) for f in files]
     else:
-        subfolder_csvs = sorted(list(data_dir.glob("*/episodes.csv")))
-        if subfolder_csvs:
-            csv_paths = subfolder_csvs
-        else:
-            csv_paths = sorted(list(data_dir.glob("*_episodes.csv")))
+        csv_paths = []
+        # 1. Explorar subdirectorios particionados (eval_200, eval_300, etc.)
+        for part_dir in sorted(data_dir.glob("eval_*")):
+            if part_dir.is_dir():
+                for sub in sorted(part_dir.glob("*/episodes.csv")):
+                    csv_paths.append((sub, part_dir.name))
 
-    if not csv_paths:
-        raise FileNotFoundError(f"No se encontraron archivos de evaluación en {data_dir}")
+        # 2. Explorar subdirectorios planos directos
+        for sub in sorted(data_dir.glob("*/episodes.csv")):
+            if not sub.parent.parent.name.startswith("eval_"):
+                csv_paths.append((sub, None))
 
-    # Cargar coordenadas del dataset de referencia si se requieren para completar target_x, target_y
-    ref_dataset_path = REPO_ROOT / "data/datasets/validation_set_200.json"
-    ref_coords = {}
-    if ref_dataset_path.exists():
-        try:
-            with open(ref_dataset_path, "r", encoding="utf-8") as f:
-                ds = json.load(f)
-                for item in ds:
-                    ref_coords[int(item["episode_id"])] = (float(item["target_x"]), float(item["target_y"]))
-        except Exception:
-            pass
+        # 3. Explorar archivos planos en la raíz (*_episodes.csv)
+        for flat in sorted(data_dir.glob("*_episodes.csv")):
+            csv_paths.append((flat, None))
 
-    for p in csv_paths:
+    for p, known_tag in csv_paths:
         if not p.exists() or p.is_dir():
             continue
-        df = pd.read_csv(p)
+        try:
+            df = pd.read_csv(p)
+        except Exception:
+            continue
         if df.empty:
             continue
 
@@ -112,13 +121,57 @@ def load_evaluation_data(data_dir: Path, files: Optional[List[str]] = None) -> T
             model_name = p.stem.replace("_episodes", "")
             df["agent"] = model_name
 
-        # Asegurar coordenadas target_x, target_y si faltasen
+        # Asegurar coordenadas si no existieran
         if "target_x" not in df.columns and ref_coords:
             df["target_x"] = df["episode_id"].map(lambda ep: ref_coords.get(int(ep), (0.0, 0.0))[0])
             df["target_y"] = df["episode_id"].map(lambda ep: ref_coords.get(int(ep), (0.0, 0.0))[1])
 
-        if model_name not in dfs_by_model:
-            dfs_by_model[model_name] = df
+        # Determinar partición de dataset
+        if known_tag:
+            d_tag = known_tag
+        else:
+            ep_count = len(df)
+            d_tag = f"eval_{ep_count}"
+
+        if d_tag not in datasets_map:
+            datasets_map[d_tag] = {}
+
+        # Priorizar no sobreescribir si ya existe en esa partición
+        if model_name not in datasets_map[d_tag]:
+            datasets_map[d_tag][model_name] = df
+
+    return datasets_map
+
+
+def load_evaluation_data(data_dir: Path, files: Optional[List[str]] = None,
+                         dataset_filter: Optional[str] = None) -> Tuple[Dict[str, pd.DataFrame], pd.DataFrame]:
+    """
+    Carga los resultados tabulares buscando en las particiones o en subdirectorios directos.
+    Si se especifica dataset_filter ('200', '300', 'eval_200', 'eval_300'), filtra por dicha partición.
+    """
+    datasets_map = discover_evaluation_datasets(data_dir, files)
+    if not datasets_map:
+        raise FileNotFoundError(f"No se encontraron evaluaciones válidas en {data_dir}")
+
+    if dataset_filter:
+        norm_filter = dataset_filter.strip().lower()
+        if norm_filter in ["200", "eval_200"]:
+            target_key = "eval_200"
+        elif norm_filter in ["300", "eval_300"]:
+            target_key = "eval_300"
+        else:
+            target_key = norm_filter
+
+        if target_key not in datasets_map:
+            raise ValueError(f"No existe la partición {target_key} en {data_dir}. Particiones disponibles: {list(datasets_map.keys())}")
+        dfs_by_model = datasets_map[target_key]
+    else:
+        # Fusionar todas las particiones (si un modelo está en 300 tiene prioridad sobre 200 para la vista consolidada)
+        dfs_by_model = {}
+        for d_tag in sorted(datasets_map.keys(), reverse=True):
+            for m_name, df in datasets_map[d_tag].items():
+                if m_name not in dfs_by_model:
+                    dfs_by_model[m_name] = df
 
     if not dfs_by_model:
         raise ValueError("No se pudieron cargar datos válidos de evaluación.")
@@ -127,14 +180,22 @@ def load_evaluation_data(data_dir: Path, files: Optional[List[str]] = None) -> T
     return dfs_by_model, all_concat
 
 
-def load_sample_trajectories(data_dir: Path, model_name: str) -> Optional[pd.DataFrame]:
-    """Carga sample_trajectories.csv si existe para el modelo especificado."""
-    traj_path = data_dir / model_name / "sample_trajectories.csv"
-    if traj_path.exists():
-        try:
-            return pd.read_csv(traj_path)
-        except Exception:
-            return None
+def load_sample_trajectories(data_dir: Path, model_name: str, dataset_tag: Optional[str] = None) -> Optional[pd.DataFrame]:
+    """Carga sample_trajectories.csv buscando en la partición o en la raíz."""
+    candidates = []
+    if dataset_tag:
+        candidates.append(data_dir / dataset_tag / model_name / "sample_trajectories.csv")
+    candidates.extend([
+        data_dir / "eval_300" / model_name / "sample_trajectories.csv",
+        data_dir / "eval_200" / model_name / "sample_trajectories.csv",
+        data_dir / model_name / "sample_trajectories.csv"
+    ])
+    for p in candidates:
+        if p.exists():
+            try:
+                return pd.read_csv(p)
+            except Exception:
+                pass
     return None
 
 
@@ -922,6 +983,10 @@ def plot_comparative_spatial_error(dfs_by_model: Dict[str, pd.DataFrame], out_pa
     r_min = 0.01
     theta = np.linspace(0, 2 * np.pi, 200)
 
+    # Paleta con indicador explícito de saturación para e_ss > 250 mm
+    cmap = plt.cm.viridis.copy()
+    cmap.set_over("#e74c3c")
+
     for idx, a in enumerate(agents):
         ax = axes[idx]
         df = dfs_by_model[a]
@@ -932,7 +997,7 @@ def plot_comparative_spatial_error(dfs_by_model: Dict[str, pd.DataFrame], out_pa
         ax.plot(r_max * np.cos(theta), r_max * np.sin(theta), color="#34495e", linestyle="--", linewidth=1.2)
         ax.plot(r_min * np.cos(theta), r_min * np.sin(theta), color="#7f8c8d", linestyle=":", linewidth=0.9)
 
-        sc = ax.scatter(tgt_x, tgt_y, c=e_ss, cmap="viridis", vmin=0, vmax=250, s=28, alpha=0.85)
+        sc = ax.scatter(tgt_x, tgt_y, c=e_ss, cmap=cmap, vmin=0, vmax=250, s=28, alpha=0.85)
         ax.set_title(a, fontweight="bold", pad=8)
         ax.set_xlabel("X [m]")
         if idx == 0:
@@ -941,8 +1006,8 @@ def plot_comparative_spatial_error(dfs_by_model: Dict[str, pd.DataFrame], out_pa
         ax.set_ylim(-0.25, 0.25)
         ax.set_aspect("equal")
 
-    cbar = fig.colorbar(sc, ax=axes, fraction=0.02, pad=0.03)
-    cbar.set_label("Error Estacionario $e_{ss}$ [mm]")
+    cbar = fig.colorbar(sc, ax=axes, fraction=0.02, pad=0.03, extend="max")
+    cbar.set_label("Error Estacionario $e_{ss}$ [mm] (Rojo: > 250 mm)")
     fig.suptitle("Comparativa Espacial del Error Cartesiano en el Espacio de Trabajo", y=1.02)
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
@@ -984,107 +1049,215 @@ def plot_comparative_temporal_trajectories(traj_by_model: Dict[str, pd.DataFrame
     print(f">>> [COMPARATIVA] Guardada: {out_path.name}")
 
 
-# ==============================================================================
-# 3. PIPELINE DE EJECUCIÓN PRINCIPAL
-# ==============================================================================
+def _render_model_suite(df_m: pd.DataFrame, model_name: str, model_fig_dir: Path,
+                        trajs_by_model: Dict[str, Optional[pd.DataFrame]],
+                        eval_log: Optional[Path] = None) -> None:
+    """Genera el conjunto completo de figuras individuales para un modelo específico."""
+    model_fig_dir.mkdir(parents=True, exist_ok=True)
+    print(f"\n--- Generando figuras individuales para: {model_name} en {model_fig_dir} ---")
+    plot_model_success_rate(df_m, model_name, model_fig_dir / "success_rate.png")
+    plot_model_steady_state_error(df_m, model_name, model_fig_dir / "steady_state_error.png")
+    plot_model_residual_velocity(df_m, model_name, model_fig_dir / "residual_velocity.png")
+    plot_model_settling_time(df_m, model_name, model_fig_dir / "settling_time.png")
+    plot_model_control_effort(df_m, model_name, model_fig_dir / "control_effort.png")
+    plot_model_reward_components(df_m, model_name, model_fig_dir / "reward_components.png")
+    plot_model_pareto_tradeoff(df_m, model_name, model_fig_dir / "pareto_tradeoff.png")
+    plot_model_workspace_spatial_error(df_m, model_name, model_fig_dir / "workspace_spatial_error.png")
+
+    if trajs_by_model.get(model_name) is not None:
+        plot_model_temporal_trajectory(trajs_by_model[model_name], model_name,
+                                      model_fig_dir / "temporal_trajectory_episode.png", episode_id=0)
+
+    # Curvas de entrenamiento
+    seed_dirs = sorted(list((REPO_ROOT / "experiments").glob(f"**/{model_name}/seed_*")))
+    eval_data_list = []
+    log_dirs = []
+
+    if eval_log and eval_log.exists():
+        data = np.load(eval_log)
+        eval_data_list.append((0, data["timesteps"], data["results"], data["successes"] if "successes" in data else None))
+        log_dirs.append(eval_log.parent)
+
+    for s_dir in seed_dirs:
+        try:
+            seed_num = int(s_dir.name.replace("seed_", ""))
+        except ValueError:
+            seed_num = 0
+        npz_candidates = list(s_dir.glob("**/evaluations.npz"))
+        if npz_candidates and not eval_log:
+            d = np.load(npz_candidates[0])
+            eval_data_list.append((seed_num, d["timesteps"], d["results"], d["successes"] if "successes" in d else None))
+        l_dir = s_dir / "logs"
+        if l_dir.exists():
+            log_dirs.append(l_dir)
+
+    if eval_data_list:
+        print(f">>> Incorporando curvas de evaluación ({len(eval_data_list)} fuentes) para {model_name}")
+        plot_model_learning_curves(eval_data_list, model_name, model_fig_dir)
+
+    if log_dirs:
+        tags_to_extract = [
+            "train/loss", "train/policy_gradient_loss", "train/value_loss",
+            "train/entropy_loss", "train/approx_kl", "train/explained_variance"
+        ]
+        tb_scalars = extract_tensorboard_scalars(log_dirs, tags_to_extract)
+        if tb_scalars:
+            print(f">>> Incorporando telemetría del optimizador desde TensorBoard para {model_name}")
+            plot_model_optimizer_curves(tb_scalars, model_name, model_fig_dir)
+
+
+def resolve_figures_dir(out_dir: Path, partition_tag: str) -> Path:
+    """
+    Mapea particiones (eval_200, eval_300, eval_mixed) a carpetas dedicadas (figures_200, figures_300, figures_mixed).
+    Si out_dir apunta a 'reports/figures' o 'reports', rutea a reports/figures_200 o reports/figures_300.
+    """
+    n_str = partition_tag.replace("eval_", "")
+    target_name = f"figures_{n_str}" if n_str in ["200", "300", "mixed"] else f"figures_{partition_tag}"
+    if out_dir.name in ["figures_200", "figures_300", "figures_mixed"]:
+        return out_dir
+    if out_dir.name == "figures":
+        return out_dir.parent / target_name
+    if out_dir.name == "reports":
+        return out_dir / target_name
+    return out_dir / target_name
+
 
 def generate_all_plots(data_dir: Path, out_dir: Path,
                        specific_model: Optional[str] = None,
                        compare_models: Optional[List[str]] = None,
                        eval_log: Optional[Path] = None,
-                       files: Optional[List[str]] = None) -> None:
-    """Ejecuta el protocolo completo de generación modular de gráficas independientes."""
-    dfs_by_model, all_df = load_evaluation_data(data_dir, files)
+                       files: Optional[List[str]] = None,
+                       dataset_filter: Optional[str] = None,
+                       strict: bool = False) -> None:
+    """Ejecuta el protocolo completo de generación modular de gráficas independientes particionadas por dataset."""
+    datasets_map = discover_evaluation_datasets(data_dir, files)
+    if not datasets_map:
+        raise FileNotFoundError(f"No se encontraron evaluaciones válidas en {data_dir}")
 
-    # Filtrar según modelos a comparar o procesar
+    # Normalizar filtro de dataset
+    target_partition: Optional[str] = None
+    if dataset_filter and dataset_filter.strip().lower() != "all":
+        df_norm = dataset_filter.strip().lower()
+        if df_norm in ["200", "eval_200"]:
+            target_partition = "eval_200"
+        elif df_norm in ["300", "eval_300"]:
+            target_partition = "eval_300"
+        else:
+            target_partition = df_norm
+
+    # -------------------------------------------------------------
+    # CASO 1: COMPARATIVA EXPLÍCITA (--compare M1,M2,...)
+    # -------------------------------------------------------------
     if compare_models:
-        selected_models = [m for m in compare_models if m in dfs_by_model]
-        if not selected_models:
-            raise ValueError(f"Ninguno de los modelos en {compare_models} existe en {data_dir}. Disponibles: {list(dfs_by_model.keys())}")
-        target_comparative_dir = out_dir / "_".join(selected_models)
-        models_to_process = selected_models
-    elif specific_model:
-        models_to_process = [specific_model] if specific_model in dfs_by_model else []
-        target_comparative_dir = None
-    else:
-        models_to_process = list(dfs_by_model.keys())
-        target_comparative_dir = (out_dir / "_".join(models_to_process)) if len(models_to_process) > 1 else None
-
-    print(f"\n{'='*75}")
-    print(f" GENERADOR GRÁFICO MODULAR (FASE D)")
-    print(f" Modelos seleccionados: {models_to_process}")
-    print(f" Directorio base de figuras: {out_dir}")
-    print(f"{'='*75}\n")
-
-    # Cargar trayectorias de muestra
-    trajs_by_model = {m: load_sample_trajectories(data_dir, m) for m in models_to_process}
-
-    # 1. Gráficas por modelo en carpetas dedicadas
-    for model_name in models_to_process:
-        df_m = dfs_by_model[model_name]
-        model_fig_dir = out_dir / model_name
-        model_fig_dir.mkdir(parents=True, exist_ok=True)
-
-        print(f"\n--- Generando figuras individuales para: {model_name} ---")
-        plot_model_success_rate(df_m, model_name, model_fig_dir / "success_rate.png")
-        plot_model_steady_state_error(df_m, model_name, model_fig_dir / "steady_state_error.png")
-        plot_model_residual_velocity(df_m, model_name, model_fig_dir / "residual_velocity.png")
-        plot_model_settling_time(df_m, model_name, model_fig_dir / "settling_time.png")
-        plot_model_control_effort(df_m, model_name, model_fig_dir / "control_effort.png")
-        plot_model_reward_components(df_m, model_name, model_fig_dir / "reward_components.png")
-        plot_model_pareto_tradeoff(df_m, model_name, model_fig_dir / "pareto_tradeoff.png")
-        plot_model_workspace_spatial_error(df_m, model_name, model_fig_dir / "workspace_spatial_error.png")
-
-        # Gráfica de trayectoria temporal
-        if trajs_by_model.get(model_name) is not None:
-            plot_model_temporal_trajectory(trajs_by_model[model_name], model_name,
-                                          model_fig_dir / "temporal_trajectory_episode.png", episode_id=0)
-
-        # Buscar logs de entrenamiento (multisemilla o semilla única)
-        seed_dirs = sorted(list((REPO_ROOT / "experiments").glob(f"**/{model_name}/seed_*")))
-        eval_data_list = []
-        log_dirs = []
-
-        if eval_log and eval_log.exists():
-            data = np.load(eval_log)
-            eval_data_list.append((0, data["timesteps"], data["results"], data["successes"] if "successes" in data else None))
-            log_dirs.append(eval_log.parent)
-
-        for s_dir in seed_dirs:
-            try:
-                seed_num = int(s_dir.name.replace("seed_", ""))
-            except ValueError:
-                seed_num = 0
-            npz_candidates = list(s_dir.glob("**/evaluations.npz"))
-            if npz_candidates and not eval_log:
-                d = np.load(npz_candidates[0])
-                eval_data_list.append((seed_num, d["timesteps"], d["results"], d["successes"] if "successes" in d else None))
-            l_dir = s_dir / "logs"
-            if l_dir.exists():
-                log_dirs.append(l_dir)
-
-        # Curvas de evaluación durante entrenamiento
-        if eval_data_list:
-            print(f">>> Incorporando curvas de evaluación ({len(eval_data_list)} fuentes) para {model_name}")
-            plot_model_learning_curves(eval_data_list, model_name, model_fig_dir)
-
-        # Curvas de pérdidas del optimizador desde TensorBoard
-        if log_dirs:
-            tags_to_extract = [
-                "train/loss", "train/policy_gradient_loss", "train/value_loss",
-                "train/entropy_loss", "train/approx_kl", "train/explained_variance"
+        is_mixed = False
+        # 1.1 Si se especificó explícitamente el dataset
+        if target_partition:
+            if target_partition not in datasets_map:
+                raise ValueError(f"No existe la partición {target_partition} en {data_dir}. Disponibles: {list(datasets_map.keys())}")
+            avail_models = datasets_map[target_partition]
+            missing = [m for m in compare_models if m not in avail_models]
+            if missing:
+                raise ValueError(f"[ERROR] Los siguientes modelos no cuentan con evaluación en {target_partition}: {missing}. Disponibles: {list(avail_models.keys())}")
+            chosen_partition = target_partition
+            chosen_dfs = {m: avail_models[m].copy() for m in compare_models}
+        else:
+            # 1.2 Detectar automáticamente en qué partición coinciden todos los modelos
+            matching_partitions = [
+                d_tag for d_tag, m_dict in datasets_map.items()
+                if all(m in m_dict for m in compare_models)
             ]
-            tb_scalars = extract_tensorboard_scalars(log_dirs, tags_to_extract)
-            if tb_scalars:
-                print(f">>> Incorporando telemetría del optimizador desde TensorBoard para {model_name}")
-                plot_model_optimizer_curves(tb_scalars, model_name, model_fig_dir)
 
-    # 2. Gráficas comparativas consolidadas
-    if target_comparative_dir and len(models_to_process) > 1:
+            if matching_partitions:
+                # Si coincide en varias particiones, priorizar eval_300 por ser el benchmark definitivo
+                chosen_partition = "eval_300" if "eval_300" in matching_partitions else matching_partitions[0]
+                chosen_dfs = {m: datasets_map[chosen_partition][m].copy() for m in compare_models}
+            else:
+                # Discrepancia metodológica: no existe una sola partición que contenga a todos los modelos
+                where_models = {}
+                for m in compare_models:
+                    where_models[m] = [d_tag for d_tag, m_dict in datasets_map.items() if m in m_dict]
+
+                missing_models = [m for m, parts in where_models.items() if not parts]
+                if missing_models:
+                    raise FileNotFoundError(f"[ERROR] No se encontraron evaluaciones para los modelos: {missing_models}")
+
+                if strict:
+                    err_lines = [
+                        "\n" + "=" * 78,
+                        " [ERROR METODOLÓGICO] DISCREPANCIA EN EL TAMAÑO DEL DATASET DE EVALUACIÓN (--strict)",
+                        "=" * 78,
+                        " No es metodológicamente válido comparar modelos evaluados sobre conjuntos",
+                        " de prueba de distinto tamaño (e.g. 200 episodios vs 300 episodios).",
+                        "",
+                        " Detalle de datasets por modelo solicitado:"
+                    ]
+                    for m, parts in where_models.items():
+                        p_str = ", ".join(parts) if parts else "Sin datos"
+                        err_lines.append(f"   • {m:10s} -> {p_str}")
+                    err_lines.extend([
+                        "",
+                        " Solución requerida:",
+                        "   1. Para comparar sobre 200 episodios: evalúe los modelos con validation_set_200.",
+                        "   2. Para comparar sobre 300 episodios: evalúe los modelos con final_eval_set_300.",
+                        "   3. Si existen ambas evaluaciones, especifique el flag: --dataset 200 o --dataset 300.",
+                        "=" * 78
+                    ])
+                    raise ValueError("\n".join(err_lines))
+
+                # Modo no bloqueante: emitir advertencia metodológica y generar figuras anotando el tamaño muestral
+                is_mixed = True
+                chosen_partition = "eval_mixed"
+                chosen_dfs = {}
+                for m in compare_models:
+                    parts = where_models[m]
+                    pref_part = "eval_300" if "eval_300" in parts else ("eval_200" if "eval_200" in parts else parts[0])
+                    chosen_dfs[m] = datasets_map[pref_part][m].copy()
+
+                warn_lines = [
+                    "\n" + "=" * 78,
+                    " [ADVERTENCIA METODOLÓGICA] DISCREPANCIA EN EL TAMAÑO DEL DATASET DE EVALUACIÓN",
+                    "=" * 78,
+                    " Comparación exploratoria entre modelos evaluados sobre conjuntos de distinto tamaño.",
+                    " Se genera la comparativa informativa anotando explícitamente el tamaño muestral N",
+                    " en las etiquetas y leyendas de cada gráfica.",
+                    "",
+                    " Detalle de particiones asignadas por modelo:"
+                ]
+                for m, df in chosen_dfs.items():
+                    warn_lines.append(f"   • {m:10s} -> N = {len(df)} episodios")
+                warn_lines.extend([
+                    "",
+                    " Nota: Para forzar consistencia homogénea estricta en el informe final use --strict.",
+                    "=" * 78 + "\n"
+                ])
+                print("\n".join(warn_lines))
+
+        part_fig_dir = resolve_figures_dir(out_dir, chosen_partition)
+        target_comparative_dir = part_fig_dir / "_".join(compare_models)
         target_comparative_dir.mkdir(parents=True, exist_ok=True)
-        sub_all_df = all_df[all_df["agent"].isin(models_to_process)]
-        sub_dfs = {m: dfs_by_model[m] for m in models_to_process}
 
+        row_counts = {m: len(df) for m, df in chosen_dfs.items()}
+        print(f"\n{'='*75}")
+        print(f" GENERADOR GRÁFICO COMPARATIVO — Partición: {chosen_partition}")
+        print(f" Modelos: {compare_models} ({row_counts})")
+        print(f" Directorio de salida: {target_comparative_dir}")
+        print(f"{'='*75}\n")
+
+        trajs_by_model = {m: load_sample_trajectories(data_dir, m, None) for m in compare_models}
+
+        # Generar figuras individuales bajo la partición correspondiente
+        for m in compare_models:
+            _render_model_suite(chosen_dfs[m], m, part_fig_dir / m, trajs_by_model, eval_log)
+
+        # Preparar DataFrames para las figuras comparativas (anotando N si hay mezcla)
+        plot_dfs = {}
+        for m, df in chosen_dfs.items():
+            df_plot = df.copy()
+            label_with_n = f"{m} (N={len(df_plot)})" if is_mixed else m
+            df_plot["agent"] = label_with_n
+            plot_dfs[label_with_n] = df_plot
+
+        sub_all_df = pd.concat(list(plot_dfs.values()), ignore_index=True)
         print(f"\n--- Generando figuras comparativas consolidadas en: {target_comparative_dir} ---")
         plot_comparative_success_rates(sub_all_df, target_comparative_dir / "comparative_success_rate.png")
         plot_comparative_steady_state_error(sub_all_df, target_comparative_dir / "comparative_steady_state_error.png")
@@ -1093,11 +1266,46 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
         plot_comparative_control_effort(sub_all_df, target_comparative_dir / "comparative_control_effort.png")
         plot_comparative_reward_components(sub_all_df, target_comparative_dir / "comparative_reward_components.png")
         plot_comparative_pareto_tradeoff(sub_all_df, target_comparative_dir / "comparative_pareto_tradeoff.png")
-        plot_comparative_spatial_error(sub_dfs, target_comparative_dir / "comparative_spatial_error.png")
+        plot_comparative_spatial_error(plot_dfs, target_comparative_dir / "comparative_spatial_error.png")
 
-        valid_traj_comp = {m: trajs_by_model[m] for m in models_to_process if trajs_by_model.get(m) is not None}
+        valid_traj_comp = {m: trajs_by_model[m] for m in compare_models if trajs_by_model.get(m) is not None}
         if len(valid_traj_comp) > 1:
             plot_comparative_temporal_trajectories(valid_traj_comp, target_comparative_dir / "comparative_temporal_trajectories.png", episode_id=0)
+
+        print(f"\n>>> [PLOT OK] Comparativa completada exitosamente en {target_comparative_dir}.")
+        return
+
+    # -------------------------------------------------------------
+    # CASO 2: MODELO ESPECÍFICO O LOTE COMPLETO
+    # -------------------------------------------------------------
+    active_partitions = [target_partition] if target_partition else sorted(datasets_map.keys())
+
+    for part in active_partitions:
+        part_models_dict = datasets_map[part]
+        if specific_model:
+            if specific_model not in part_models_dict:
+                if target_partition:
+                    raise ValueError(f"El modelo {specific_model} no existe en {part}. Disponibles: {list(part_models_dict.keys())}")
+                continue
+            models_to_run = [specific_model]
+        else:
+            models_to_run = sorted(list(part_models_dict.keys()))
+
+        if not models_to_run:
+            continue
+
+        part_fig_dir = resolve_figures_dir(out_dir, part)
+        part_fig_dir.mkdir(parents=True, exist_ok=True)
+
+        print(f"\n{'='*75}")
+        print(f" PROCESANDO PARTICIÓN: {part} ({len(models_to_run)} modelos)")
+        print(f" Directorio de salida: {part_fig_dir}")
+        print(f"{'='*75}")
+
+        trajs_by_model = {m: load_sample_trajectories(data_dir, m, part) for m in models_to_run}
+
+        for m in models_to_run:
+            _render_model_suite(part_models_dict[m], m, part_fig_dir / m, trajs_by_model, eval_log)
 
     print(f"\n>>> [PLOT OK] Proceso completado exitosamente.")
 
@@ -1114,12 +1322,16 @@ def main() -> None:
                         help="Nombre del modelo específico para graficar únicamente sus figuras (ej. PPO_2).")
     parser.add_argument("--compare", type=str, default=None,
                         help="Lista de modelos separados por comas para generar comparativa combinada exclusiva (ej. PPO_1,PPO_2,SAC_1).")
+    parser.add_argument("--dataset", type=str, default=None,
+                        help="Filtrar por tamaño de dataset de evaluación: 200, 300, eval_200, eval_300 o all.")
     parser.add_argument("--files", type=str, default=None,
                         help="Lista opcional de rutas CSV separadas por comas.")
     parser.add_argument("--eval-log", type=str, default=None,
                         help="Ruta al archivo evaluations.npz del log de entrenamiento.")
     parser.add_argument("--out-dir", type=str, default="reports/figures",
-                        help="Directorio base para la salida gráfica (se crean subcarpetas por modelo y combinaciones).")
+                        help="Directorio base para la salida gráfica (se rutea automáticamente a reports/figures_200 y reports/figures_300).")
+    parser.add_argument("--strict", action="store_true", default=False,
+                        help="Exigir consistencia estricta en el tamaño de dataset en comparativas (lanza excepción en lugar de advertencia).")
     args = parser.parse_args()
 
     data_dir = REPO_ROOT / args.data_dir
@@ -1135,6 +1347,8 @@ def main() -> None:
         compare_models=compare_list,
         eval_log=eval_log_path,
         files=file_list,
+        dataset_filter=args.dataset,
+        strict=args.strict,
     )
 
 

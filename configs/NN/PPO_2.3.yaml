@@ -1,0 +1,39 @@
+# ==============================================================================
+# CONFIGURACIÓN DEL AGENTE: Variacion de PPO_7
+# ==============================================================================
+experiment:
+  description: PPO con recompensa LQR. net_arch tanh.
+  phase: phase_D
+
+# Referencia al entorno físico común
+env_config: configs/environment.yaml
+
+# Preprocesamiento y normalización
+normalization:
+  norm_obs: true
+  norm_reward: false
+  clip_obs: 10.0
+
+# Hiperparámetros del algoritmo PPO (calibrados para control continuo por torque en MuJoCo)
+ppo:
+  learning_rate: 0.0001        # Tasa estándar para PPO en Reacher-v5 (evita estancamiento por gradientes pequeños)
+  n_steps: 1024                # Tamaño de rollout por entorno (4096 pasos totales con 4 envs)
+  batch_size: 128              # Tamaño de minilote equilibrado (32 minilotes por época)
+  n_epochs: 10                 # Épocas de optimización por rollout
+  gamma: 0.98                  # Factor de descuento alineado al horizonte de 100 pasos (50 pasos efectivos)
+  gae_lambda: 0.95             # Factor GAE de reducción de varianza
+  clip_range: 0.2              # Rango de recorte PPO
+  ent_coef: 0.002              # Coeficiente nulo de entropía para políticas continuas gaussianas
+  max_grad_norm: 0.5           # Recorte de norma de gradiente
+  num_envs: 4                  # Entornos concurrentes
+
+  net_arch:
+    layers: [256, 256, 128]   # Capas ocultas
+    hidden_activation: tanh   # Función de activación
+
+# Parámetros del proceso de entrenamiento
+training:
+  total_timesteps: 300000      # Presupuesto suficiente para convergencia y estabilización fina
+  checkpoint_freq: 50000
+  eval_freq: 5000
+  n_eval_episodes: 15

@@ -65,6 +65,7 @@ experiments/
 !reports/figures/*.png
 !reports/figures/*.jpg
 !reports/figures/*.svg
+!reports/figures_*/**
 
 # Entornos y configuración de IDEs
 .vscode/

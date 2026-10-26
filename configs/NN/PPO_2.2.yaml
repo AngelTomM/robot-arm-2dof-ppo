@@ -28,7 +28,7 @@ ppo:
   num_envs: 4                  # Entornos concurrentes
 
   net_arch:
-    layers: [512, 512, 256]   # Capas ocultas
+    layers: [1024, 1024, 512, 256]   # Capas ocultas
     hidden_activation: relu   # Función de activación
 
 # Parámetros del proceso de entrenamiento

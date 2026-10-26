@@ -126,10 +126,22 @@ def run_evaluation(agent_type: str,
         episodes_df, summary = eval_res
         trajectories_df = None
 
-    # 4. Guardar resultados estructurados en carpeta exclusiva por modelo
+    # 4. Guardar resultados estructurados en carpeta exclusiva por tamaño de dataset y modelo
+    ds_len = len(dataset)
+    if ds_len == 200 or "200" in ds_name:
+        dataset_tag = "eval_200"
+    elif ds_len == 300 or "300" in ds_name:
+        dataset_tag = "eval_300"
+    else:
+        dataset_tag = f"eval_{ds_len}"
+
     out_dir_path = REPO_ROOT / output_dir
-    model_data_dir = out_dir_path / agent_label
+    model_data_dir = out_dir_path / dataset_tag / agent_label
     model_data_dir.mkdir(parents=True, exist_ok=True)
+
+    # Directorio de compatibilidad directa
+    legacy_model_dir = out_dir_path / agent_label
+    legacy_model_dir.mkdir(parents=True, exist_ok=True)
 
     csv_path = model_data_dir / "episodes.csv"
     json_path = model_data_dir / "summary.json"
@@ -138,11 +150,13 @@ def run_evaluation(agent_type: str,
 
     episodes_df.insert(0, "agent", agent_label)
     episodes_df.to_csv(csv_path, index=False)
+    episodes_df.to_csv(legacy_model_dir / "episodes.csv", index=False)
     episodes_df.to_csv(legacy_csv, index=False)
 
     if trajectories_df is not None and not trajectories_df.empty:
         trajectories_df.insert(0, "agent", agent_label)
         trajectories_df.to_csv(model_data_dir / "sample_trajectories.csv", index=False)
+        trajectories_df.to_csv(legacy_model_dir / "sample_trajectories.csv", index=False)
 
     summary_out = {
         "agent": agent_label,
@@ -152,11 +166,13 @@ def run_evaluation(agent_type: str,
     }
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(summary_out, f, indent=2)
+    with open(legacy_model_dir / "summary.json", "w", encoding="utf-8") as f:
+        json.dump(summary_out, f, indent=2)
     with open(legacy_json, "w", encoding="utf-8") as f:
         json.dump(summary_out, f, indent=2)
 
     # 5. Salida por consola
-    print(f">>> [RESULTADOS {agent_label}]")
+    print(f">>> [RESULTADOS {agent_label}] ({dataset_tag})")
     print(f"  • Tasa de Éxito:               {summary['success_rate_ci']}")
     print(f"  • Error Estacionario e_ss:     {summary.get('e_ss_mean', 0.0):.4f} m (p90: {summary.get('e_ss_p90', 0.0):.4f} m)")
     print(f"  • Velocidad Residual v_ss:     {summary.get('v_ss_mean', 0.0):.4f} rad/s")
@@ -169,8 +185,9 @@ def run_evaluation(agent_type: str,
     if generate_plots:
         try:
             from plot import generate_all_plots
-            fig_dir = REPO_ROOT / "reports/figures"
-            generate_all_plots(data_dir=out_dir_path, out_dir=fig_dir, specific_model=agent_label)
+            n_val = "200" if "200" in dataset_tag or ds_len == 200 else ("300" if "300" in dataset_tag or ds_len == 300 else str(ds_len))
+            fig_dir = REPO_ROOT / f"reports/figures_{n_val}"
+            generate_all_plots(data_dir=out_dir_path / dataset_tag, out_dir=fig_dir, specific_model=agent_label)
             print(f">>> [PLOTS] Figuras actualizadas en: {fig_dir / agent_label}\n")
         except Exception as e:
             print(f">>> [AVISO] No fue posible generar automáticamente las figuras: {e}\n")
