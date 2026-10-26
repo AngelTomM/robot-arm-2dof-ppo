@@ -1,0 +1,26 @@
+{
+  "agent": "PPO_FAR",
+  "eval_set": "final_eval_set_300",
+  "eval_mode": "deterministic",
+  "metrics": {
+    "total_episodes": 300,
+    "successful_episodes": 16,
+    "success_rate": 0.05333333333333334,
+    "success_rate_ci": "5.3% [3.3%, 8.5%] (16/300)",
+    "ci_low": 0.03309194428620835,
+    "ci_high": 0.08486906466614534,
+    "e_ss_mean": 0.08176058506878157,
+    "e_ss_median": 0.058959409679765235,
+    "e_ss_p90": 0.1808643994385753,
+    "final_dist_mean": 0.07962473523860275,
+    "v_ss_mean": 0.456164944347895,
+    "v_ss_median": 0.3265703007583949,
+    "t_s_mean": 1.8398666666666663,
+    "t_s_median": 2.0,
+    "j_u_mean": 0.22112957256218824,
+    "j_lqr_mean": -10.150793293911635,
+    "j_lqr_median": -7.618764888622298,
+    "j_lqr_std": 8.728099850678147,
+    "mean_action_delta": 0.05988189149290399
+  }
+}
