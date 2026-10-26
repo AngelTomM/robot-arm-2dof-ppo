@@ -1,0 +1,51 @@
+# ==============================================================================
+# CONFIGURACIÓN DEL AGENTE: SAC_4 (SAC_eval)
+# ==============================================================================
+# Iteración mejorada respecto a SAC_3 para potenciar la corrección de:
+#   - Fenómeno 3 (Posicionamiento fino terminal):
+#       * batch_size: 64 (reduce la dilución del gradiente en errores sub-centimétricos)
+#       * learning_starts: 15000 (mayor densidad y variabilidad en el replay buffer)
+#       * net_arch: [256, 256, 128] (arquitectura de embudo para modular torque fino)
+#       * gradient_steps: 2 con train_freq: 1 (UTD = 2.0 para agilizar contracción Bellman)
+#   - Fenómeno 2 (Amortiguamiento y frenado calibrado):
+#       * gamma: 0.99 (horizonte efectivo de 100 pasos alineado exactamente al max_steps)
+# ==============================================================================
+experiment:
+  name: SAC_4
+  description: SAC_4 optimizacion intensiva de posicionamiento fino sobre el blanco (UTD=2.0, batch=64, [256,256,128], gamma=0.99)
+  phase: SAC_eval
+
+# Referencia al entorno físico común (SSOT)
+env_config: configs/environment.yaml
+
+# Preprocesamiento y normalización
+normalization:
+  norm_obs: true
+  norm_reward: false
+  clip_obs: 10.0
+
+# Hiperparámetros del algoritmo SAC
+sac:
+  learning_rate: 0.0002        # Preservado de SAC_3
+  buffer_size: 300000          # Preservado de SAC_3
+  learning_starts: 15000       # Fenómeno 3: 150 episodios iniciales de exploración para mayor densidad en el buffer
+  batch_size: 64               # Fenómeno 3: Minilote compacto para máxima sensibilidad a gradientes de error milimétrico
+  tau: 0.005                   # Preservado de SAC_3 (actualización suave)
+  gamma: 0.99                  # Fenómeno 2/3: Horizonte efectivo H_eff=100 pasos alineado al límite físico del episodio
+  train_freq: 1                # Fenómeno 2/3: Evaluación paso a paso
+  gradient_steps: 2            # Fenómeno 2/3: Ratio UTD=2.0 (doble actualización de crítico para resolver el mapa de valor fino)
+  ent_coef: auto               # Preservado de SAC_3
+  target_entropy: -1.0         # Preservado de SAC_3
+  num_envs: 1                  # Preservado de SAC_3
+
+  net_arch:
+    layers: [256, 256, 128]    # Fenómeno 3: Estructura de embudo especializada en resolución de micro-torques
+    hidden_activation: leaky_relu # Preservado de SAC_3
+
+# Parámetros del proceso de entrenamiento
+training:
+  total_timesteps: 300000
+  checkpoint_freq: 50000
+  eval_freq: 5000
+  n_eval_episodes: 15
+
