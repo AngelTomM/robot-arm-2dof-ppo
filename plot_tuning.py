@@ -20,7 +20,7 @@ import matplotlib.ticker as ticker
 
 REPO_ROOT = Path(__file__).resolve().parent
 DATA_JSON = REPO_ROOT / "reports/data/evaluation/tuning_c0.json"
-FIGS_DIR = REPO_ROOT / "reports/figures"
+FIGS_DIR = REPO_ROOT / "reports/figures_valid_200"
 
 
 def apply_publication_style():

@@ -78,7 +78,7 @@ Cada sesión de entrenamiento genera un directorio estructurado en `experiments/
 
 ## 3. Evaluación Mecatrónica y Benchmarking (`evaluate.py`)
 
-El script [evaluate.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/evaluate.py) ejecuta la evaluación determinista de políticas de aprendizaje por refuerzo o del controlador cinemático analítico C0 sobre conjuntos congelados y reproducibles de trayectorias. 
+El script [evaluate.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/evaluate.py) ejecuta la evaluación determinista de políticas de aprendizaje por refuerzo o del controlador cinemático analítico C0 sobre conjuntos congelados y reproducibles de trayectorias.
 
 ### 3.1 Conjuntos de Datos Disponibles (Datasets Congelados)
 
@@ -95,7 +95,10 @@ python evaluate.py [--model-path <ruta_modelo.zip>] [--label <identificador>] [-
 
 Comportamiento de los argumentos y valores por defecto:
 
-* `--dataset` (por defecto: `"data/datasets/validation_set_200.json"`): Ruta al archivo JSON con los episodios de prueba. Si no se indica, la evaluación se ejecuta sobre los 200 episodios de validación intermedia. Para evaluar el benchmark definitivo debe especificarse `--dataset data/datasets/final_eval_set_300.json`.
+* `--dataset` (por defecto: `"data/datasets/validation_set_200.json"`): Especificación del conjunto de prueba. Admite:
+  * `"all"`: Ejecuta consecutivamente la evaluación sobre el conjunto de 200 episodios y sobre el de 300 episodios en una sola instrucción.
+  * `"200"` o ruta `data/datasets/validation_set_200.json`: Evaluación de validación intermedia.
+  * `"300"` o ruta `data/datasets/final_eval_set_300.json`: Evaluación del benchmark final de 300 episodios.
 * `--model-path` (por defecto: `None`): Ruta al archivo `.zip` del modelo entrenado. Requerido para agentes RL a menos que se invoque el flag `--c0`.
 * `--label` (por defecto: `None`): Etiqueta asignada al modelo para estructurar las carpetas de salida. Si se omite, se infiere automáticamente a partir del nombre del archivo o del directorio del modelo (o se asigna `"C0"` si se evalúa el controlador analítico).
 * `--c0` (por defecto: `False`): Bandera para evaluar el controlador cinemático analítico con transpuesta de Jacobiano amortiguada. Admite modificar sus ganancias mediante `--kp` (por defecto: `50.0`), `--kd` (por defecto: `0.05`) y `--lambda-damping` (por defecto: `0.01`).
@@ -106,17 +109,24 @@ Comportamiento de los argumentos y valores por defecto:
 
 ### 3.3 Ejemplos de Evaluación
 
+#### Evaluación Completa sobre Ambos Datasets (Opción `all`: 200 y 300 Episodios)
+
+```powershell
+# Ejecuta la evaluación secuencial sobre 200 y 300 episodios generando figuras en ambas particiones
+python evaluate.py --model-path experiments/entorno/PPO_7/seed_42/models/best_model/best_model.zip --dataset all --plot
+```
+
 #### Evaluaciones sobre el Dataset Definitivo de 300 Episodios (Benchmark Final)
 
 ```powershell
 # 1. Evaluación del modelo definitivo PPO_7 sobre el conjunto de 300 episodios
-python evaluate.py --model-path experiments/entorno/PPO_7/seed_42/models/best_model/best_model.zip --label PPO_7 --dataset data/datasets/final_eval_set_300.json
+python evaluate.py --model-path experiments/entorno/PPO_7/seed_42/models/best_model/best_model.zip --label PPO_7 --dataset 300
 
 # 2. Evaluación de SAC_2 sobre 300 episodios con generación inmediata de figuras
-python evaluate.py --model-path experiments/entorno/SAC_2/seed_42/models/best_model/best_model.zip --label SAC_2 --dataset data/datasets/final_eval_set_300.json --plot
+python evaluate.py --model-path experiments/entorno/SAC_2/seed_42/models/best_model/best_model.zip --label SAC_2 --dataset 300 --plot
 
 # 3. Evaluación del controlador cinemático analítico C0 sobre 300 episodios
-python evaluate.py --c0 --label C0 --dataset data/datasets/final_eval_set_300.json
+python evaluate.py --c0 --label C0 --dataset 300
 ```
 
 #### Evaluaciones sobre el Dataset de Validación de 200 Episodios (Sintonización y Ablación)
@@ -125,9 +135,9 @@ python evaluate.py --c0 --label C0 --dataset data/datasets/final_eval_set_300.js
 # 1. Evaluación de modelo intermedio PPO_2 (emplea por defecto el dataset de 200 episodios)
 python evaluate.py --model-path experiments/entorno/PPO_2/seed_42/models/best_model/best_model.zip --label PPO_2
 
-# 2. Evaluación explícita de variantes de arquitectura de red sobre el dataset de 200 episodios
-python evaluate.py --model-path experiments/NN/PPO_2.1/seed_42/models/best_model/best_model.zip --label PPO_2.1 --dataset data/datasets/validation_set_200.json
-python evaluate.py --model-path experiments/NN/PPO_2.2/seed_42/models/best_model/best_model.zip --label PPO_2.2 --dataset data/datasets/validation_set_200.json
+# 2. Evaluación explícita indicando --dataset 200
+python evaluate.py --model-path experiments/NN/PPO_2.1/seed_42/models/best_model/best_model.zip --label PPO_2.1 --dataset 200
+python evaluate.py --model-path experiments/NN/PPO_2.2/seed_42/models/best_model/best_model.zip --label PPO_2.2 --dataset 200
 ```
 
 ### 3.4 Estructura y Segregación de Datos de Salida
@@ -158,7 +168,7 @@ python plot.py [--model <nombre_modelo>] [--compare <modelo1,modelo2,...>] [--da
 Comportamiento de los argumentos y valores por defecto:
 
 * `--data-dir` (por defecto: `"reports/data/evaluation"`): Directorio base que contiene los datos tabulares evaluados. Explora recursivamente subcarpetas particionadas (`eval_200`, `eval_300`) y carpetas directas.
-* `--out-dir` (por defecto: `"reports/figures"`): Directorio base para la salida gráfica. Se rutea automáticamente a `reports/figures_200/` y `reports/figures_300/` según la partición evaluada.
+* `--out-dir` (por defecto: `"reports"`): Directorio base para la salida gráfica. Se rutea automáticamente a `reports/figures_valid_200/` y `reports/figures_final_300/` según la partición evaluada.
 * `--dataset` (por defecto: `None`): Filtro de partición muestral. Admite `200`, `300`, `eval_200` o `eval_300`. Si se omite, procesa automáticamente todas las evaluaciones presentes en las particiones disponibles.
 * `--model` (por defecto: `None`): Genera exclusivamente las figuras individuales para el modelo indicado (por ejemplo, `--model PPO_7`). Si se omite y no se provee `--compare`, se generan las figuras de todos los modelos descubiertos.
 * `--compare` (por defecto: `None`): Lista de modelos separados por comas (sin espacios) para generar un panel gráfico comparativo consolidado (por ejemplo, `--compare C0,PPO_7,SAC_2`).
@@ -170,10 +180,10 @@ Comportamiento de los argumentos y valores por defecto:
 #### Comparativas sobre el Conjunto Definitivo de 300 Episodios
 
 ```powershell
-# 1. Comparativa de modelos definitivos (Benchmark C0 vs PPO_7 vs SAC_2 en reports/figures_300/C0_PPO_7_SAC_2/)
+# 1. Comparativa de modelos definitivos (Benchmark C0 vs PPO_7 vs SAC_2 en reports/figures_final_300/C0_PPO_7_SAC_2/)
 python plot.py --dataset 300 --compare C0,PPO_7,SAC_2
 
-# 2. Comparativa de impacto de capacidad de red neuronal sobre 300 episodios (salida en reports/figures_300/PPO_7_PPO_2.1_PPO_2.2/)
+# 2. Comparativa de impacto de capacidad de red neuronal sobre 300 episodios (salida en reports/figures_final_300/PPO_7_PPO_2.1_PPO_2.2/)
 python plot.py --dataset 300 --compare PPO_7,PPO_2.1,PPO_2.2
 
 # 3. Generación de figuras individuales para todos los modelos evaluados en 300 episodios
@@ -183,7 +193,7 @@ python plot.py --dataset 300
 #### Comparativas sobre el Conjunto de Validación de 200 Episodios
 
 ```powershell
-# 1. Comparativa de funciones de activación sobre 200 episodios (salida en reports/figures_200/PPO_2.1_PPO_2.3_PPO_2.4/)
+# 1. Comparativa de funciones de activación sobre 200 episodios (salida en reports/figures_valid_200/PPO_2.1_PPO_2.3_PPO_2.4/)
 python plot.py --dataset 200 --compare PPO_2.1,PPO_2.3,PPO_2.4
 
 # 2. Generación exclusiva para un único modelo evaluado en 200 episodios
@@ -202,7 +212,7 @@ python plot.py --compare PPO_7,PPO_2.3,PPO_2.4 --strict
 
 ### 4.3 Organización de las Figuras Generadas
 
-Las figuras se almacenan de forma desacoplada y directa en `reports/figures_200/`, `reports/figures_300/` y `reports/figures_mixed/`:
+Las figuras se almacenan de forma desacoplada y directa en `reports/figures_valid_200/`, `reports/figures_final_300/` y `reports/figures_mixed/`:
 
 #### Subcarpetas por Modelo (`reports/figures_<N>/<modelo>/`)
 

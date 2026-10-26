@@ -185,8 +185,13 @@ def run_evaluation(agent_type: str,
     if generate_plots:
         try:
             from plot import generate_all_plots
-            n_val = "200" if "200" in dataset_tag or ds_len == 200 else ("300" if "300" in dataset_tag or ds_len == 300 else str(ds_len))
-            fig_dir = REPO_ROOT / f"reports/figures_{n_val}"
+            if "300" in dataset_tag or ds_len == 300:
+                fig_folder = "figures_final_300"
+            elif "200" in dataset_tag or ds_len == 200:
+                fig_folder = "figures_valid_200"
+            else:
+                fig_folder = f"figures_{ds_len}"
+            fig_dir = REPO_ROOT / "reports" / fig_folder
             generate_all_plots(data_dir=out_dir_path / dataset_tag, out_dir=fig_dir, specific_model=agent_label)
             print(f">>> [PLOTS] Figuras actualizadas en: {fig_dir / agent_label}\n")
         except Exception as e:
@@ -219,7 +224,7 @@ def main() -> None:
     parser.add_argument("--vecnormalize", type=str, default=None,
                         help="Ruta opcional al archivo vecnormalize_stats.pkl.")
     parser.add_argument("--dataset", type=str, default="data/datasets/validation_set_200.json",
-                        help="Ruta al JSON del conjunto de episodios de evaluación.")
+                        help="Ruta al JSON del dataset, o palabra clave: 'all' (ejecuta 200 y 300), '200' o '300'.")
     parser.add_argument("--env-config", type=str, default="configs/environment.yaml",
                         help="Ruta a la configuración física del entorno (SSOT).")
     parser.add_argument("--output-dir", type=str, default="reports/data/evaluation",
@@ -228,27 +233,42 @@ def main() -> None:
                         choices=["deterministic", "stochastic"],
                         help="Modo de ejecución de la política.")
     parser.add_argument("--plot", action="store_true", default=False,
-                        help="Regenerar automáticamente las figuras comparativas en reports/figures/.")
+                        help="Regenerar automáticamente las figuras en reports/figures_valid_200/ o reports/figures_final_300/.")
     args = parser.parse_args()
 
     # Resolver tipo de agente
     agent_type = "c0" if args.c0 or (args.agent and args.agent.lower() == "c0") else "rl"
     model_path = args.model_path or (args.agent if agent_type != "c0" else None)
 
-    run_evaluation(
-        agent_type=agent_type,
-        model_path=model_path,
-        vec_norm_path=args.vecnormalize,
-        label=args.label,
-        kp=args.kp,
-        kd=args.kd,
-        lambda_damping=args.lambda_damping,
-        dataset_path=args.dataset,
-        env_config_path=args.env_config,
-        output_dir=args.output_dir,
-        eval_mode=args.mode,
-        generate_plots=args.plot
-    )
+    # Resolver rutas de datasets a ejecutar
+    ds_arg = args.dataset.strip().lower()
+    if ds_arg == "all":
+        dataset_paths = [
+            "data/datasets/validation_set_200.json",
+            "data/datasets/final_eval_set_300.json"
+        ]
+    elif ds_arg in ["200", "eval_200"]:
+        dataset_paths = ["data/datasets/validation_set_200.json"]
+    elif ds_arg in ["300", "eval_300"]:
+        dataset_paths = ["data/datasets/final_eval_set_300.json"]
+    else:
+        dataset_paths = [args.dataset]
+
+    for ds_path in dataset_paths:
+        run_evaluation(
+            agent_type=agent_type,
+            model_path=model_path,
+            vec_norm_path=args.vecnormalize,
+            label=args.label,
+            kp=args.kp,
+            kd=args.kd,
+            lambda_damping=args.lambda_damping,
+            dataset_path=ds_path,
+            env_config_path=args.env_config,
+            output_dir=args.output_dir,
+            eval_mode=args.mode,
+            generate_plots=args.plot
+        )
 
 
 

@@ -1108,14 +1108,27 @@ def _render_model_suite(df_m: pd.DataFrame, model_name: str, model_fig_dir: Path
 
 def resolve_figures_dir(out_dir: Path, partition_tag: str) -> Path:
     """
-    Mapea particiones (eval_200, eval_300, eval_mixed) a carpetas dedicadas (figures_200, figures_300, figures_mixed).
-    Si out_dir apunta a 'reports/figures' o 'reports', rutea a reports/figures_200 o reports/figures_300.
+    Mapea particiones (eval_200, eval_300, eval_mixed) a carpetas semánticas dedicadas:
+      - eval_200   -> figures_valid_200
+      - eval_300   -> figures_final_300
+      - eval_mixed -> figures_mixed
+    Si out_dir apunta directamente a una de estas carpetas, se respeta.
+    Si out_dir es 'reports' o 'reports/figures', se rutea a reports/<target_name>.
     """
-    n_str = partition_tag.replace("eval_", "")
-    target_name = f"figures_{n_str}" if n_str in ["200", "300", "mixed"] else f"figures_{partition_tag}"
-    if out_dir.name in ["figures_200", "figures_300", "figures_mixed"]:
+    norm_tag = partition_tag.strip().lower()
+    if norm_tag in ["200", "eval_200", "valid_200", "figures_valid_200"]:
+        target_name = "figures_valid_200"
+    elif norm_tag in ["300", "eval_300", "final_300", "figures_final_300"]:
+        target_name = "figures_final_300"
+    elif norm_tag in ["mixed", "eval_mixed", "figures_mixed"]:
+        target_name = "figures_mixed"
+    else:
+        n_str = norm_tag.replace("eval_", "")
+        target_name = f"figures_{n_str}" if n_str.isdigit() else f"figures_{norm_tag}"
+
+    if out_dir.name in ["figures_valid_200", "figures_final_300", "figures_mixed"]:
         return out_dir
-    if out_dir.name == "figures":
+    if out_dir.name in ["figures", "figures_200", "figures_300"]:
         return out_dir.parent / target_name
     if out_dir.name == "reports":
         return out_dir / target_name
@@ -1328,8 +1341,8 @@ def main() -> None:
                         help="Lista opcional de rutas CSV separadas por comas.")
     parser.add_argument("--eval-log", type=str, default=None,
                         help="Ruta al archivo evaluations.npz del log de entrenamiento.")
-    parser.add_argument("--out-dir", type=str, default="reports/figures",
-                        help="Directorio base para la salida gráfica (se rutea automáticamente a reports/figures_200 y reports/figures_300).")
+    parser.add_argument("--out-dir", type=str, default="reports",
+                        help="Directorio base para la salida gráfica (se rutea automáticamente a reports/figures_valid_200, reports/figures_final_300 y reports/figures_mixed).")
     parser.add_argument("--strict", action="store_true", default=False,
                         help="Exigir consistencia estricta en el tamaño de dataset en comparativas (lanza excepción en lugar de advertencia).")
     args = parser.parse_args()
