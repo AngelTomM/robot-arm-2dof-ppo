@@ -36,7 +36,7 @@ El script en la raíz [train.py](file:///c:/Users/ulica/Documents/AprendizajeAuo
 ### 2.1 Sintaxis del Comando y Parámetros
 
 ```powershell
-python train.py --config <ruta_yaml> [--seed <int|lista>] [--device <str>] [--total_timesteps <int>] [--checkpoint_freq <int>] [--env-config <ruta_yaml>]
+python train.py --config <ruta_yaml> [--seed <int|lista>] [--device <str>] [--total_timesteps <int>] [--checkpoint_freq <int>] [--resume [ruta_o_auto]] [--env-config <ruta_yaml>]
 ```
 
 Comportamiento de los argumentos y valores por defecto:
@@ -46,6 +46,7 @@ Comportamiento de los argumentos y valores por defecto:
 * `--device` (por defecto: `"auto"`): Dispositivo de cómputo para los tensores de PyTorch. Selecciona aceleración por GPU (`cuda`) si está disponible; de lo contrario, asigna `cpu`.
 * `--total_timesteps` (por defecto: `None`): Presupuesto total de pasos de interacción en el entorno. Si se omite, adopta el valor especificado en el YAML bajo la clave `train.total_timesteps` (fijado típicamente en 300.000 timesteps).
 * `--checkpoint_freq` (por defecto: `None`): Intervalo de pasos para serializar puntos de control periódicos. Si se omite, adopta el valor de `train.checkpoint_freq` definido en el archivo YAML (típicamente cada 50.000 timesteps).
+* `--resume` (opcional, por defecto: `None`): Reanuda el entrenamiento de la política desde un punto de control (*checkpoint*). Si se invoca sin argumentos adicionales (`--resume`) o con el valor `"auto"`, detecta de manera autónoma el último punto de control válido (`ckpt_<paso>`) disponible en el directorio `experiments/<fase>/<exp_id>/seed_<seed>/checkpoints/`. Alternativamente, admite una ruta explícita a una carpeta de punto de control o a su archivo `model.zip`. Restablece los pesos de la red neuronal, las estadísticas acumuladas de normalización de observaciones (`vecnormalize_stats.pkl`), la telemetría acumulada en TensorBoard y calcula los timesteps remanentes para completar el presupuesto fijado.
 * `--env-config` (por defecto: `None`): Ruta al archivo de configuración del entorno físico común. Si se omite, utiliza la referencia interna indicada en el archivo YAML o carga directamente [configs/environment.yaml](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/configs/environment.yaml).
 
 ### 2.2 Comandos de Ejecución Estándar
@@ -53,6 +54,12 @@ Comportamiento de los argumentos y valores por defecto:
 ```powershell
 # Entrenamiento con una única semilla (300.000 timesteps, seed 42)
 python train.py --config configs/entorno/PPO_1.yaml --seed 42
+
+# Reanudación automática desde el último checkpoint registrado (detecta automáticamente ckpt_<paso>)
+python train.py --config configs/entorno/PPO_1.yaml --resume
+
+# Reanudación manual especificando la ruta al checkpoint deseado
+python train.py --config configs/entorno/PPO_1.yaml --resume experiments/entorno/PPO_1/seed_42/checkpoints/ckpt_50000
 
 # Entrenamiento multisemilla secuencial en una sola instrucción (semillas 42, 100 y 2026)
 python train.py --config configs/entorno/PPO_1.yaml --seed "42, 100, 2026"
