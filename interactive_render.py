@@ -137,7 +137,7 @@ if __name__ == "__main__":
     parser.add_argument("model_path", nargs="?", default=None, help="Ruta al modelo entrenado (.zip)")
     parser.add_argument("--config", "-c", type=str, default=None, help="Ruta al YAML de configuración del entorno")
     parser.add_argument("--c0", action="store_true", help="Ejecutar el controlador cinemático C0")
-    parser.add_argument("--episodes", "-e", type=int, default=5, help="Número de episodios a simular")
+    parser.add_argument("--episodes", "-e", type=int, default=10, help="Número de episodios a simular")
     args = parser.parse_args()
 
     interactive_render(args.model_path, args.config, c0=args.c0, episodes=args.episodes)

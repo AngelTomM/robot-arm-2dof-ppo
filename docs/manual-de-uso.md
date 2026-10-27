@@ -82,10 +82,13 @@ Cuando se requiere evaluar el impacto de un mayor horizonte de optimización (po
 
 1. **Configuración del nuevo experimento**: Se crea un archivo YAML derivado (por ejemplo, `configs/PPO_eval/PPO_17_1M.yaml`) especificando un nuevo identificador en `experiment.name: PPO_17_1M` y fijando el presupuesto objetivo en `training.total_timesteps: 1000000`.
 2. **Ejecución con enlace al punto de control**: Se invoca [train.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/train.py) suministrando la ruta explícita al punto de control del modelo base:
+
    ```powershell
    python train.py --config configs/PPO_eval/PPO_17_1M.yaml --resume experiments/PPO_eval/PPO_17/seed_42/checkpoints/ckpt_500000
    ```
+
 3. **Mecanismo de preservación**: El script carga los pesos y las estadísticas de `VecNormalize` acumuladas en el paso 500.000, calcula automáticamente las iteraciones remanentes ($1.000.000 - 500.000 = 500.000$ pasos) y deposita los nuevos puntos de control y telemetría en `experiments/PPO_eval/PPO_17_1M/seed_42/`. El modelo original (`PPO_17`) permanece inalterado, permitiendo ejecutar comparativas directas mediante:
+
    ```powershell
    python plot.py --dataset 300 --compare PPO_17,PPO_17_1M --metric steady_state_error,success_rate,learning_curves
    ```
@@ -365,7 +368,7 @@ Comportamiento de los argumentos y valores por defecto:
 * `model_path` (posicional, por defecto: `None`): Ruta al archivo `.zip` del modelo entrenado. Requerido si no se utiliza `--c0`. Localiza automáticamente las estadísticas de normalización adyacentes.
 * `--c0` (por defecto: `False`): Activa la simulación del controlador analítico cinemático en lugar de una política de RL.
 * `--config` / `-c` (por defecto: `None`): Ruta al archivo YAML con los parámetros del entorno. Si se omite, carga [configs/environment.yaml](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/configs/environment.yaml).
-* `--episodes` / `-e` (por defecto: `5`): Número de episodios a simular en la sesión visual.
+* `--episodes` / `-e` (por defecto: `10`): Número de episodios a simular en la sesión visual.
 
 ### 5.2 Ejemplos de Visualización
 

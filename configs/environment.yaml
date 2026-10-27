@@ -40,9 +40,9 @@ env:
 
   # Ponderaciones calibradas de la función de recompensa cuadrática canónica LQR
   reward_params:
-    w_pos: 20.0                # Penalización cuadrática de error cartesiano ||p_ee - p_tgt||^2
-    w_vel: 0.025               # Amortiguamiento cinético calibrado sobre ||qvel||^2 (evita estrangulamiento transitorio)
-    w_ctrl: 0.01              # Regularización de esfuerzo de torque ||a_t||^2 en punto Pareto óptimo
+    w_pos: 20.0     #45.0      # Penalización cuadrática de error cartesiano ||p_ee - p_tgt||^2
+    w_vel: 0.025    #0.0285    # Amortiguamiento cinético calibrado sobre ||qvel||^2 (evita estrangulamiento transitorio)
+    w_ctrl: 0.01    #0.009     # Regularización de esfuerzo de torque ||a_t||^2 en punto Pareto óptimo
     w_v: 0.0                   # Penalización gaussiana de velocidad desactivada
     w_a: 0.0                   # Penalización por variación de acción desactivada
 
