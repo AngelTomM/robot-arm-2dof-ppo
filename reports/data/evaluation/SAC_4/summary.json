@@ -1,0 +1,26 @@
+{
+  "agent": "SAC_4",
+  "eval_set": "final_eval_set_300",
+  "eval_mode": "deterministic",
+  "metrics": {
+    "total_episodes": 300,
+    "successful_episodes": 67,
+    "success_rate": 0.22333333333333333,
+    "success_rate_ci": "22.3% [18.0%, 27.4%] (67/300)",
+    "ci_low": 0.17987143882150458,
+    "ci_high": 0.2737909771713712,
+    "e_ss_mean": 0.04085562777019832,
+    "e_ss_median": 0.025319159685127865,
+    "e_ss_p90": 0.08602293432603263,
+    "final_dist_mean": 0.040019814682212204,
+    "v_ss_mean": 0.21572559775259795,
+    "v_ss_median": 0.12372538907566297,
+    "t_s_mean": 1.5608666666666666,
+    "t_s_median": 2.0,
+    "j_u_mean": 0.1539057903463438,
+    "j_lqr_mean": -12.14119917714281,
+    "j_lqr_median": -10.564494536775845,
+    "j_lqr_std": 9.19983698031928,
+    "mean_action_delta": 0.015862231554612142
+  }
+}
