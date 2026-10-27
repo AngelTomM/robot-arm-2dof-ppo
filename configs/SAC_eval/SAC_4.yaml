@@ -11,7 +11,6 @@
 #       * gamma: 0.99 (horizonte efectivo de 100 pasos alineado exactamente al max_steps)
 # ==============================================================================
 experiment:
-  name: SAC_4
   description: SAC_4 optimizacion intensiva de posicionamiento fino sobre el blanco (UTD=2.0, batch=64, [256,256,128], gamma=0.99)
   phase: SAC_eval
 

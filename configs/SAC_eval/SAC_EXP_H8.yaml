@@ -4,7 +4,7 @@
 # Eficiencia Muestral y Búfer de Repetición
 # ==============================================================================
 experiment:
-  description: SAC_4 - Exploracion excesiva gradient_steps- 8 
+  description: SAC_4 - Exploracion excesiva gradient_steps- 8
   phase: SAC_eval
 
 # Referencia al entorno físico común (SSOT)

@@ -61,6 +61,10 @@ python train.py --config configs/entorno/PPO_1.yaml --resume
 # Reanudación manual especificando la ruta al checkpoint deseado
 python train.py --config configs/entorno/PPO_1.yaml --resume experiments/entorno/PPO_1/seed_42/checkpoints/ckpt_50000
 
+# Extensión desacoplada de presupuesto (Warm-Start): Reanudar desde el checkpoint de un experimento previo
+# hacia una nueva configuración con mayor presupuesto (ej. de 500.000 a 1.000.000 pasos) preservando ambos modelos
+python train.py --config configs/PPO_eval/PPO_17_1M.yaml --resume experiments/PPO_eval/PPO_17/seed_42/checkpoints/ckpt_500000
+
 # Entrenamiento multisemilla secuencial en una sola instrucción (semillas 42, 100 y 2026)
 python train.py --config configs/entorno/PPO_1.yaml --seed "42, 100, 2026"
 
@@ -72,7 +76,21 @@ python train.py --config configs/smoke/PPO_smoke.yaml --total_timesteps 256
 python train.py --config configs/smoke/SAC_smoke.yaml --total_timesteps 256
 ```
 
-### 2.3 Estructura de Artefactos de Salida
+### 2.3 Extensión Desacoplada de Presupuesto (*Warm-Start*)
+
+Cuando se requiere evaluar el impacto de un mayor horizonte de optimización (por ejemplo, extender el entrenamiento de 500.000 a 1.000.000 de pasos) sin incurrir nuevamente en el costo temporal de las iteraciones iniciales, se emplea la técnica de reanudación desacoplada:
+
+1. **Configuración del nuevo experimento**: Se crea un archivo YAML derivado (por ejemplo, `configs/PPO_eval/PPO_17_1M.yaml`) especificando un nuevo identificador en `experiment.name: PPO_17_1M` y fijando el presupuesto objetivo en `training.total_timesteps: 1000000`.
+2. **Ejecución con enlace al punto de control**: Se invoca [train.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/train.py) suministrando la ruta explícita al punto de control del modelo base:
+   ```powershell
+   python train.py --config configs/PPO_eval/PPO_17_1M.yaml --resume experiments/PPO_eval/PPO_17/seed_42/checkpoints/ckpt_500000
+   ```
+3. **Mecanismo de preservación**: El script carga los pesos y las estadísticas de `VecNormalize` acumuladas en el paso 500.000, calcula automáticamente las iteraciones remanentes ($1.000.000 - 500.000 = 500.000$ pasos) y deposita los nuevos puntos de control y telemetría en `experiments/PPO_eval/PPO_17_1M/seed_42/`. El modelo original (`PPO_17`) permanece inalterado, permitiendo ejecutar comparativas directas mediante:
+   ```powershell
+   python plot.py --dataset 300 --compare PPO_17,PPO_17_1M --metric steady_state_error,success_rate,learning_curves
+   ```
+
+### 2.4 Estructura de Artefactos de Salida
 
 Cada sesión de entrenamiento genera un directorio estructurado en `experiments/<fase>/<experimento>/seed_<semilla>/`:
 
@@ -81,7 +99,7 @@ Cada sesión de entrenamiento genera un directorio estructurado en `experiments/
 * `checkpoints/ckpt_<paso>/`: Puntos de control intermedios para auditoría de estabilidad temporal.
 * `logs/`: Registros continuos de eventos para TensorBoard y archivo de validación periódica `evaluations.npz`.
 
-### 2.4 Monitoreo de Telemetría en Tiempo Real con TensorBoard
+### 2.5 Monitoreo de Telemetría en Tiempo Real con TensorBoard
 
 El entrenamiento genera eventos de telemetría continuos procesables en tiempo real mediante la interfaz web de TensorBoard:
 

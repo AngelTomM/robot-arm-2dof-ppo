@@ -208,6 +208,29 @@ def run_training(cfg: dict, config_path: Path, seed: int, device: str,
                 print(f">>> [ADVERTENCIA] Ruta de checkpoint no válida o sin model.zip: {resume_arg}. Iniciando desde cero.")
                 ckpt_dir = None
 
+    # Si el checkpoint proviene de otro experimento (warm-start entre experimentos distintos),
+    # transferir telemetría previa de TensorBoard y evaluations.npz para preservar la curva completa (0 a N)
+    if ckpt_dir and ckpt_dir.resolve().parent != checkpoints_dir.resolve():
+        src_exp_dir = ckpt_dir.parent.parent
+        src_logs_dir = src_exp_dir / "logs"
+        if src_logs_dir.exists():
+            import shutil
+            src_npz = src_logs_dir / "evaluations.npz"
+            dst_npz = logs_dir / "evaluations.npz"
+            if src_npz.exists() and not dst_npz.exists():
+                shutil.copy2(src_npz, dst_npz)
+                print(f">>> [WARM-START] Historial de evaluations.npz transferido desde '{src_exp_dir.name}'")
+
+            prior_tfevents = list(src_logs_dir.rglob("*tfevents*"))
+            copied_tfevents = 0
+            for pef in prior_tfevents:
+                dst_ef = logs_dir / f"prior_{pef.name}"
+                if not dst_ef.exists():
+                    shutil.copy2(pef, dst_ef)
+                    copied_tfevents += 1
+            if copied_tfevents > 0:
+                print(f">>> [WARM-START] Telemetría previa de TensorBoard transferida ({copied_tfevents} eventos) para continuidad completa (0 a {resume_step:,} pasos)")
+
     # 1. Entornos vectorizados con Monitor y VecNormalize opcional
     norm_cfg = cfg.get("normalization", {})
     norm_obs = bool(norm_cfg.get("norm_obs", False))
@@ -255,14 +278,32 @@ def run_training(cfg: dict, config_path: Path, seed: int, device: str,
                                         clip_obs=clip_obs, training=False)
             eval_env.training = False
             eval_env.norm_reward = False
-        callbacks.append(VecNormalizeSyncEvalCallback(
+        eval_cb = VecNormalizeSyncEvalCallback(
             eval_env,
             best_model_save_path=str(models_dir / "best_model"),
             log_path=str(logs_dir),
             eval_freq=eval_freq,
             n_eval_episodes=int(train_cfg.get("n_eval_episodes", 15)),
             deterministic=True, render=False,
-        ))
+        )
+        if resume_step > 0 and (logs_dir / "evaluations.npz").exists():
+            try:
+                old_evals = np.load(logs_dir / "evaluations.npz")
+                mask = old_evals["timesteps"] <= resume_step
+                if np.any(mask):
+                    eval_cb.evaluations_timesteps = list(old_evals["timesteps"][mask])
+                    eval_cb.evaluations_results = list(old_evals["results"][mask])
+                    if "ep_lengths" in old_evals:
+                        eval_cb.evaluations_length = list(old_evals["ep_lengths"][mask])
+                    if "successes" in old_evals:
+                        eval_cb.evaluations_successes = list(old_evals["successes"][mask])
+                    means = [float(np.mean(res)) for res in eval_cb.evaluations_results]
+                    if means:
+                        eval_cb.best_mean_reward = max(means)
+                    print(f">>> [RESUME] Restauradas {len(eval_cb.evaluations_timesteps)} evaluaciones históricas desde evaluations.npz")
+            except Exception as e:
+                print(f">>> [RESUME ADVERTENCIA] No fue posible restaurar histórico de evaluations.npz: {e}")
+        callbacks.append(eval_cb)
     callbacks.append(checkpoint_cb)
 
     # 3. Instanciar o cargar el agente

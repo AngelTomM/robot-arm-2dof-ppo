@@ -213,6 +213,7 @@ def load_sample_trajectories(data_dir: Path, model_name: str, dataset_tag: Optio
 def extract_tensorboard_scalars(log_dirs: List[Path], tags: List[str]) -> Dict[str, List[Tuple[np.ndarray, np.ndarray]]]:
     """
     Extrae series temporales de escalares (steps, values) desde archivos de eventos de TensorBoard.
+    Concatena y ordena cronológicamente los archivos de eventos de una misma semilla (sesiones reanudadas).
     Retorna un diccionario {tag: [(steps_seed1, values_seed1), (steps_seed2, values_seed2), ...]}.
     """
     try:
@@ -223,9 +224,12 @@ def extract_tensorboard_scalars(log_dirs: List[Path], tags: List[str]) -> Dict[s
     results: Dict[str, List[Tuple[np.ndarray, np.ndarray]]] = {t: [] for t in tags}
 
     for ld in log_dirs:
-        event_files = sorted(list(ld.glob("**/events.out.tfevents*")))
+        event_files = sorted(list(ld.glob("**/events.out.tfevents*")), key=lambda p: p.stat().st_mtime)
         if not event_files:
             continue
+
+        seed_series: Dict[str, Dict[int, float]] = {t: {} for t in tags}
+
         for ef in event_files:
             try:
                 ea = EventAccumulator(str(ef))
@@ -233,13 +237,16 @@ def extract_tensorboard_scalars(log_dirs: List[Path], tags: List[str]) -> Dict[s
                 available_scalars = ea.Tags().get("scalars", [])
                 for t in tags:
                     if t in available_scalars:
-                        events = ea.Scalars(t)
-                        steps = np.array([e.step for e in events])
-                        vals = np.array([e.value for e in events])
-                        if len(steps) > 0:
-                            results[t].append((steps, vals))
+                        for e in ea.Scalars(t):
+                            seed_series[t][int(e.step)] = float(e.value)
             except Exception:
                 continue
+
+        for t in tags:
+            if seed_series[t]:
+                steps_sorted = np.array(sorted(seed_series[t].keys()))
+                vals_sorted = np.array([seed_series[t][s] for s in steps_sorted])
+                results[t].append((steps_sorted, vals_sorted))
 
     return {k: v for k, v in results.items() if len(v) > 0}
 
@@ -253,6 +260,7 @@ CANONICAL_METRICS: Dict[str, Dict[str, Any]] = {
     "explained_variance": {
         "category": "optimizer",
         "tag": "train/explained_variance",
+        "tags": ["train/explained_variance"],
         "filename": "comparative_explained_variance.png",
         "model_filename": "optimizer_explained_variance.png",
         "title": "Comparativa: Varianza Explicada de la Función de Valor",
@@ -265,6 +273,7 @@ CANONICAL_METRICS: Dict[str, Dict[str, Any]] = {
     "approx_kl": {
         "category": "optimizer",
         "tag": "train/approx_kl",
+        "tags": ["train/approx_kl"],
         "filename": "comparative_approx_kl.png",
         "model_filename": "optimizer_approx_kl.png",
         "title": "Comparativa: Divergencia KL Aproximada",
@@ -277,10 +286,11 @@ CANONICAL_METRICS: Dict[str, Dict[str, Any]] = {
     "value_loss": {
         "category": "optimizer",
         "tag": "train/value_loss",
+        "tags": ["train/value_loss", "train/critic_loss"],
         "filename": "comparative_value_loss.png",
         "model_filename": "optimizer_value_loss.png",
         "title": "Comparativa: Pérdida Cuadrática de la Función de Valor (Crítico)",
-        "ylabel": "Pérdida de Valor ($L_V$)",
+        "ylabel": "Pérdida de Valor ($L_V$ / Crítico)",
         "ref_line": None,
         "ref_label": None,
         "zero_line": False,
@@ -289,10 +299,11 @@ CANONICAL_METRICS: Dict[str, Dict[str, Any]] = {
     "policy_loss": {
         "category": "optimizer",
         "tag": "train/policy_gradient_loss",
+        "tags": ["train/policy_gradient_loss", "train/actor_loss"],
         "filename": "comparative_policy_loss.png",
         "model_filename": "optimizer_policy_loss.png",
-        "title": "Comparativa: Pérdida del Gradiente de la Política",
-        "ylabel": "Pérdida de Política ($L_{clip}$)",
+        "title": "Comparativa: Pérdida de la Política (PPO / SAC)",
+        "ylabel": "Pérdida de Política ($L_{clip}$ / Actor)",
         "ref_line": 0.0,
         "ref_label": None,
         "zero_line": True,
@@ -301,10 +312,11 @@ CANONICAL_METRICS: Dict[str, Dict[str, Any]] = {
     "entropy": {
         "category": "optimizer",
         "tag": "train/entropy_loss",
+        "tags": ["train/entropy_loss", "train/ent_coef", "train/ent_coef_loss"],
         "filename": "comparative_entropy.png",
         "model_filename": "optimizer_entropy.png",
-        "title": "Comparativa: Evolución de la Entropía de la Política",
-        "ylabel": "Entropía ($H$)",
+        "title": "Comparativa: Evolución de Entropía / Temp. α",
+        "ylabel": "Entropía ($H$) / Coef. $\\alpha$",
         "ref_line": None,
         "ref_label": None,
         "zero_line": False,
@@ -313,10 +325,11 @@ CANONICAL_METRICS: Dict[str, Dict[str, Any]] = {
     "loss": {
         "category": "optimizer",
         "tag": "train/loss",
+        "tags": ["train/loss", "train/critic_loss"],
         "filename": "comparative_loss.png",
         "model_filename": "optimizer_total_loss.png",
-        "title": "Comparativa: Pérdida Total del Optimizador",
-        "ylabel": "Pérdida Total ($L_{total}$)",
+        "title": "Comparativa: Pérdida Total / Crítico del Optimizador",
+        "ylabel": "Pérdida Total ($L_{total}$ / Crítico)",
         "ref_line": None,
         "ref_label": None,
         "zero_line": False,
@@ -420,6 +433,13 @@ METRIC_ALIASES: Dict[str, str] = {
     "train/loss": "loss",
     "optimizer_summary": "optimizer_summary",
     "optimizer_convergence_summary": "optimizer_summary",
+    "actor_loss": "policy_loss",
+    "train/actor_loss": "policy_loss",
+    "train/critic_loss": "value_loss",
+    "ent_coef": "entropy",
+    "train/ent_coef": "entropy",
+    "ent_coef_loss": "entropy",
+    "train/ent_coef_loss": "entropy",
 
     # Curvas de Aprendizaje
     "learning_return": "learning_return",
@@ -567,7 +587,42 @@ def load_model_training_telemetry(model_name: str, eval_log: Optional[Path] = No
         if npz_candidates and not eval_log:
             try:
                 d = np.load(npz_candidates[0])
-                eval_data_list.append((seed_num, d["timesteps"], d["results"], d["successes"] if "successes" in d else None))
+                ts = d["timesteps"]
+                res = d["results"]
+                succ = d["successes"] if "successes" in d else None
+
+                # Si el archivo npz fue truncado por resume (comienza en >10.000 pasos),
+                # recuperar evaluaciones iniciales registradas en TensorBoard
+                if len(ts) > 0 and ts[0] > 10000:
+                    l_dir = s_dir / "logs"
+                    if l_dir.exists():
+                        try:
+                            from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
+                            tb_r, tb_s = {}, {}
+                            for ef in sorted(list(l_dir.glob("**/events.out.tfevents*")), key=lambda p: p.stat().st_mtime):
+                                ea = EventAccumulator(str(ef))
+                                ea.Reload()
+                                avail = ea.Tags().get("scalars", [])
+                                if "eval/mean_reward" in avail:
+                                    for e in ea.Scalars("eval/mean_reward"):
+                                        if e.step < ts[0]:
+                                            tb_r[int(e.step)] = float(e.value)
+                                if "eval/success_rate" in avail:
+                                    for e in ea.Scalars("eval/success_rate"):
+                                        if e.step < ts[0]:
+                                            tb_s[int(e.step)] = float(e.value)
+                            if tb_r:
+                                extra_ts = np.array(sorted(tb_r.keys()))
+                                extra_res = np.array([[tb_r[st]] * res.shape[1] for st in extra_ts])
+                                ts = np.concatenate([extra_ts, ts])
+                                res = np.concatenate([extra_res, res])
+                                if succ is not None:
+                                    extra_succ = np.array([[bool(tb_s.get(st, 0.0) >= 0.5)] * succ.shape[1] for st in extra_ts])
+                                    succ = np.concatenate([extra_succ, succ])
+                        except Exception:
+                            pass
+
+                eval_data_list.append((seed_num, ts, res, succ))
             except Exception:
                 pass
         l_dir = s_dir / "logs"
@@ -1049,28 +1104,30 @@ def plot_model_optimizer_curves(tb_data: Dict[str, List[Tuple[np.ndarray, np.nda
     if not tb_data:
         return
 
-    tag_meta = {
-        "train/loss": ("optimizer_total_loss.png", "Pérdida Total del Optimizador", "Pérdida Total ($L_{total}$)", "#c0392b"),
-        "train/policy_gradient_loss": ("optimizer_policy_loss.png", "Pérdida del Gradiente de la Política", "Pérdida de Política ($L_{clip}$)", "#e67e22"),
-        "train/value_loss": ("optimizer_value_loss.png", "Pérdida de la Función de Valor (Crítico)", "Pérdida de Valor ($L_V$)", "#2980b9"),
-        "train/entropy_loss": ("optimizer_entropy.png", "Evolución de la Entropía de la Política", "Entropía ($H$)", "#8e44ad"),
-        "train/approx_kl": ("optimizer_approx_kl.png", "Divergencia KL Aproximada", "Divergencia KL ($D_{KL}$)", "#16a085"),
-        "train/explained_variance": ("optimizer_explained_variance.png", "Varianza Explicada de la Función de Valor", "Varianza Explicada", "#27ae60"),
-    }
+    opt_config = [
+        ("loss", "optimizer_total_loss.png", "Pérdida Total / Crítico del Optimizador", "Pérdida Total ($L_{total}$ / Crítico)", "#c0392b", ["train/loss", "train/critic_loss"]),
+        ("policy_loss", "optimizer_policy_loss.png", "Pérdida de la Política", "Pérdida de Política ($L_{clip}$ / Actor)", "#e67e22", ["train/policy_gradient_loss", "train/actor_loss"]),
+        ("value_loss", "optimizer_value_loss.png", "Pérdida de la Función de Valor (Crítico)", "Pérdida de Valor ($L_V$ / Crítico)", "#2980b9", ["train/value_loss", "train/critic_loss"]),
+        ("entropy", "optimizer_entropy.png", "Evolución de Entropía / Temp. α", "Entropía ($H$) / $\\alpha$", "#8e44ad", ["train/entropy_loss", "train/ent_coef", "train/ent_coef_loss"]),
+        ("approx_kl", "optimizer_approx_kl.png", "Divergencia KL Aproximada", "Divergencia KL ($D_{KL}$)", "#16a085", ["train/approx_kl"]),
+        ("explained_variance", "optimizer_explained_variance.png", "Varianza Explicada de la Función de Valor", "Varianza Explicada", "#27ae60", ["train/explained_variance"]),
+    ]
 
     # 1. Gráficas independientes por escalar
-    for tag, (fname, title, ylabel, color) in tag_meta.items():
-        if tag not in tb_data:
-            continue
-        canon_key = next((k for k, v in CANONICAL_METRICS.items() if v.get("tag") == tag), None)
+    for canon_key, fname, title, ylabel, color, cand_tags in opt_config:
         if requested_metrics is not None and canon_key not in requested_metrics:
             continue
-        series_list = tb_data[tag]
+        series_list = []
+        for ct in cand_tags:
+            if ct in tb_data and tb_data[ct]:
+                series_list = tb_data[ct]
+                break
+        if not series_list:
+            continue
         fig, ax = plt.subplots(figsize=(6.2, 4.2), dpi=300)
 
         for idx, (steps, vals) in enumerate(series_list):
             lbl = f"Semilla {idx + 1}" if len(series_list) > 1 else None
-            # Suavizado de media móvil
             w = min(15, max(3, len(vals) // 8))
             smooth_vals = pd.Series(vals).rolling(window=w, min_periods=1).mean().values
             ax.plot(steps, smooth_vals, color=color, alpha=0.85 if len(series_list) == 1 else 0.5,
@@ -1093,10 +1150,15 @@ def plot_model_optimizer_curves(tb_data: Dict[str, List[Tuple[np.ndarray, np.nda
         fig, axes = plt.subplots(2, 3, figsize=(14, 8), dpi=300)
         axes_flat = axes.flatten()
 
-        for idx, (tag, (_, title, ylabel, color)) in enumerate(tag_meta.items()):
+        for idx, (canon_key, _, title, ylabel, color, cand_tags) in enumerate(opt_config):
             ax = axes_flat[idx]
-            if tag in tb_data:
-                for s_idx, (steps, vals) in enumerate(tb_data[tag]):
+            series_list = []
+            for ct in cand_tags:
+                if ct in tb_data and tb_data[ct]:
+                    series_list = tb_data[ct]
+                    break
+            if series_list:
+                for s_idx, (steps, vals) in enumerate(series_list):
                     w = min(15, max(3, len(vals) // 8))
                     smooth_vals = pd.Series(vals).rolling(window=w, min_periods=1).mean().values
                     ax.plot(steps, smooth_vals, color=color, linewidth=1.6, alpha=0.85)
@@ -1104,7 +1166,8 @@ def plot_model_optimizer_curves(tb_data: Dict[str, List[Tuple[np.ndarray, np.nda
                 ax.set_ylabel(ylabel, fontsize=9)
                 ax.set_xlabel("Timesteps", fontsize=9)
             else:
-                ax.text(0.5, 0.5, f"Sin datos: {tag}", ha="center", va="center", fontsize=9)
+                na_msg = "N/A para SAC (Off-Policy)" if canon_key in ["approx_kl", "explained_variance"] else f"Sin datos: {cand_tags[0]}"
+                ax.text(0.5, 0.5, na_msg, ha="center", va="center", fontsize=9, color="#7f8c8d")
 
         fig.suptitle(f"Panel Consolidado de Convergencia del Optimizador — {model_name}", fontsize=13, y=0.99)
         fig.tight_layout()
@@ -1501,8 +1564,13 @@ def plot_comparative_optimizer_summary(
         ylabel = meta["ylabel"]
 
         has_data = False
+        cand_tags = meta.get("tags", [meta.get("tag")])
         for m_idx, (m_name, tb_data) in enumerate(models_tb_dict.items()):
-            series_list = tb_data.get(tag, [])
+            series_list = []
+            for ct in cand_tags:
+                if ct in tb_data and tb_data[ct]:
+                    series_list = tb_data[ct]
+                    break
             if not series_list:
                 continue
             has_data = True
@@ -1527,7 +1595,8 @@ def plot_comparative_optimizer_summary(
                 ax.fill_between(common_s, mean_c - std_c, mean_c + std_c, color=color, alpha=0.15)
 
         if not has_data:
-            ax.text(0.5, 0.5, f"Sin datos: {tag}", ha="center", va="center", fontsize=9)
+            na_msg = "N/A para SAC (Off-Policy)" if key in ["approx_kl", "explained_variance"] else f"Sin datos: {cand_tags[0]}"
+            ax.text(0.5, 0.5, na_msg, ha="center", va="center", fontsize=9, color="#7f8c8d")
         else:
             if meta.get("ref_line") is not None:
                 ax.axhline(meta["ref_line"], color="#c0392b", linestyle="--", linewidth=1.0)
@@ -1661,8 +1730,9 @@ def _render_model_suite(df_m: pd.DataFrame, model_name: str, model_fig_dir: Path
     needs_optimizer = any(want(k) for k in ["loss", "policy_loss", "value_loss", "entropy", "approx_kl", "explained_variance", "optimizer_summary"])
     if log_dirs and (metrics is None or needs_optimizer):
         tags_to_extract = [
-            "train/loss", "train/policy_gradient_loss", "train/value_loss",
-            "train/entropy_loss", "train/approx_kl", "train/explained_variance"
+            "train/loss", "train/policy_gradient_loss", "train/actor_loss",
+            "train/value_loss", "train/critic_loss", "train/entropy_loss",
+            "train/ent_coef", "train/ent_coef_loss", "train/approx_kl", "train/explained_variance"
         ]
         tb_scalars = extract_tensorboard_scalars(log_dirs, tags_to_extract)
         if tb_scalars:
@@ -1879,12 +1949,18 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
 
         # 2. Métricas del Optimizador (TensorBoard)
         if has_opt_metrics:
-            needed_tags = [CANONICAL_METRICS[m]["tag"] for m in requested_metrics if CANONICAL_METRICS[m]["category"] == "optimizer"]
+            needed_tags = []
+            for m in requested_metrics:
+                if CANONICAL_METRICS[m]["category"] in ["optimizer", "optimizer_panel"]:
+                    cand = CANONICAL_METRICS[m].get("tags", [CANONICAL_METRICS[m].get("tag")])
+                    for t in cand:
+                        if t and t not in needed_tags:
+                            needed_tags.append(t)
             if "optimizer_summary" in requested_metrics:
                 for k in ["loss", "policy_loss", "value_loss", "entropy", "approx_kl", "explained_variance"]:
-                    t = CANONICAL_METRICS[k]["tag"]
-                    if t not in needed_tags:
-                        needed_tags.append(t)
+                    for t in CANONICAL_METRICS[k].get("tags", [CANONICAL_METRICS[k].get("tag")]):
+                        if t and t not in needed_tags:
+                            needed_tags.append(t)
 
             models_tb_dict = {}
             for m in compare_models:
@@ -1893,8 +1969,15 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
 
             for m_key in requested_metrics:
                 if CANONICAL_METRICS[m_key]["category"] == "optimizer":
-                    scalar_tag = CANONICAL_METRICS[m_key]["tag"]
-                    scalar_data = {m: models_tb_dict[m].get(scalar_tag, []) for m in compare_models}
+                    cand_tags = CANONICAL_METRICS[m_key].get("tags", [CANONICAL_METRICS[m_key].get("tag")])
+                    scalar_data = {}
+                    for m in compare_models:
+                        found_series = []
+                        for ct in cand_tags:
+                            if ct in models_tb_dict[m] and models_tb_dict[m][ct]:
+                                found_series = models_tb_dict[m][ct]
+                                break
+                        scalar_data[m] = found_series
                     out_f = target_comparative_dir / CANONICAL_METRICS[m_key]["filename"]
                     plot_comparative_optimizer_metric(scalar_data, m_key, out_f)
 
