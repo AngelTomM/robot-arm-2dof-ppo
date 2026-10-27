@@ -9,7 +9,6 @@
 #     (train_freq=1 con UTD=1.0, gamma=0.995).
 # ==============================================================================
 experiment:
-  name: SAC_3
   description: SAC_3 optimizado para precision fina sobre el target (Fenomeno 3) y amortiguamiento inercial anticipado (Fenomeno 2)
   phase: SAC_eval
 

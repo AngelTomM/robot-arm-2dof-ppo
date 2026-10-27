@@ -12,6 +12,7 @@ Soporte algorítmico dual vía Stable-Baselines3:
 
 Uso:
   python train.py --config configs/phase_b/X3.yaml --seed 42 --device auto
+  python train.py --config configs/phase_b/X3.yaml --resume
 """
 
 import argparse
@@ -127,6 +128,22 @@ def resolve_phase(config_path: Path) -> str:
     return "_".join("ext" if p == "extension" else p for p in parts)
 
 
+def find_latest_checkpoint(checkpoints_dir: Path):
+    """Busca en el directorio de checkpoints el subdirectorio ckpt_<paso> más avanzado con model.zip."""
+    if not checkpoints_dir.exists():
+        return None
+    candidates = []
+    for d in checkpoints_dir.iterdir():
+        if d.is_dir() and d.name.startswith("ckpt_"):
+            m = re.match(r"^ckpt_(\d+)$", d.name)
+            if m and (d / "model.zip").exists():
+                candidates.append((int(m.group(1)), d))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates[0]
+
+
 def select_algorithm(cfg: dict) -> str:
     """Selecciona el algoritmo según las secciones del YAML (dual PPO/SAC)."""
     has_ppo = "ppo" in cfg
@@ -146,7 +163,8 @@ def select_algorithm(cfg: dict) -> str:
 
 def run_training(cfg: dict, config_path: Path, seed: int, device: str,
                  total_timesteps_override=None,
-                 checkpoint_freq_override=None) -> Path:
+                 checkpoint_freq_override=None,
+                 resume_arg: str = None) -> Path:
     """Ejecuta el entrenamiento PPO/SAC y devuelve el directorio de salida."""
     algo = select_algorithm(cfg)
     algo_cfg = cfg.get("sac" if algo == "SAC" else "ppo", {})
@@ -164,6 +182,55 @@ def run_training(cfg: dict, config_path: Path, seed: int, device: str,
 
     set_all_seeds(seed)
 
+    # 0. Detección de Checkpoint para Reanudación (--resume)
+    resume_step = 0
+    ckpt_dir = None
+    if resume_arg is not None:
+        norm_arg = str(resume_arg).strip().lower()
+        if norm_arg in ["", "true", "auto", "latest", "none"]:
+            ckpt_info = find_latest_checkpoint(checkpoints_dir)
+            if ckpt_info is not None:
+                resume_step, ckpt_dir = ckpt_info
+                print(f">>> [RESUME] Detectado automáticamente último checkpoint: {ckpt_dir.name} (paso {resume_step:,})")
+            else:
+                print(f">>> [RESUME] No se encontraron checkpoints previos en {checkpoints_dir}. Iniciando desde cero.")
+        else:
+            p = Path(resume_arg)
+            if p.is_file() and p.name == "model.zip":
+                ckpt_dir = p.parent
+            elif p.is_dir():
+                ckpt_dir = p
+            if ckpt_dir and ckpt_dir.exists() and (ckpt_dir / "model.zip").exists():
+                m = re.match(r"^ckpt_(\d+)$", ckpt_dir.name)
+                resume_step = int(m.group(1)) if m else 0
+                print(f">>> [RESUME] Reanudando desde checkpoint especificado: {ckpt_dir} (paso {resume_step:,})")
+            else:
+                print(f">>> [ADVERTENCIA] Ruta de checkpoint no válida o sin model.zip: {resume_arg}. Iniciando desde cero.")
+                ckpt_dir = None
+
+    # Si el checkpoint proviene de otro experimento (warm-start entre experimentos distintos),
+    # transferir telemetría previa de TensorBoard y evaluations.npz para preservar la curva completa (0 a N)
+    if ckpt_dir and ckpt_dir.resolve().parent != checkpoints_dir.resolve():
+        src_exp_dir = ckpt_dir.parent.parent
+        src_logs_dir = src_exp_dir / "logs"
+        if src_logs_dir.exists():
+            import shutil
+            src_npz = src_logs_dir / "evaluations.npz"
+            dst_npz = logs_dir / "evaluations.npz"
+            if src_npz.exists() and not dst_npz.exists():
+                shutil.copy2(src_npz, dst_npz)
+                print(f">>> [WARM-START] Historial de evaluations.npz transferido desde '{src_exp_dir.name}'")
+
+            prior_tfevents = list(src_logs_dir.rglob("*tfevents*"))
+            copied_tfevents = 0
+            for pef in prior_tfevents:
+                dst_ef = logs_dir / f"prior_{pef.name}"
+                if not dst_ef.exists():
+                    shutil.copy2(pef, dst_ef)
+                    copied_tfevents += 1
+            if copied_tfevents > 0:
+                print(f">>> [WARM-START] Telemetría previa de TensorBoard transferida ({copied_tfevents} eventos) para continuidad completa (0 a {resume_step:,} pasos)")
+
     # 1. Entornos vectorizados con Monitor y VecNormalize opcional
     norm_cfg = cfg.get("normalization", {})
     norm_obs = bool(norm_cfg.get("norm_obs", False))
@@ -173,75 +240,116 @@ def run_training(cfg: dict, config_path: Path, seed: int, device: str,
     num_envs = int(algo_cfg.get("num_envs", 4 if algo == "PPO" else 1))
 
     vec_env = DummyVecEnv([make_env_fn(cfg, rank=i, base_seed=seed) for i in range(num_envs)])
+    stats_file = (ckpt_dir / "vecnormalize_stats.pkl") if (ckpt_dir and (ckpt_dir / "vecnormalize_stats.pkl").exists()) else None
     if norm_obs or norm_reward:
-        vec_env = VecNormalize(vec_env, norm_obs=norm_obs, norm_reward=norm_reward,
-                               clip_obs=clip_obs, gamma=gamma)
+        if stats_file and stats_file.exists():
+            vec_env = VecNormalize.load(str(stats_file), vec_env)
+            print(f">>> [RESUME] Estadísticas de VecNormalize restauradas desde {stats_file.name}")
+        else:
+            vec_env = VecNormalize(vec_env, norm_obs=norm_obs, norm_reward=norm_reward,
+                                   clip_obs=clip_obs, gamma=gamma)
         vec_env.training = True
 
     # 2. Callbacks
     train_cfg = cfg.get("training", {})
     ckpt_freq = int(checkpoint_freq_override or train_cfg.get("checkpoint_freq", 40960))
     checkpoint_cb = CoupledCheckpointCallback(save_freq=ckpt_freq,
-                                             save_path=str(checkpoints_dir), verbose=1)
+                                              save_path=str(checkpoints_dir), verbose=1)
+    if resume_step > 0:
+        checkpoint_cb.last_saved_step = resume_step
+        prior_ckpts = []
+        if checkpoints_dir.exists():
+            for d in checkpoints_dir.iterdir():
+                if d.is_dir() and d.name.startswith("ckpt_"):
+                    m = re.match(r"^ckpt_(\d+)$", d.name)
+                    if m:
+                        prior_ckpts.append(int(m.group(1)))
+        checkpoint_cb.saved_checkpoints = sorted(prior_ckpts)
 
     callbacks = [LQRMetricsCallback(window_size=100)]
     eval_freq = int(train_cfg.get("eval_freq", 0))
     if eval_freq > 0:
-        # Entorno de evaluación: VecNormalize en modo inference
-        # (training=False, norm_reward=False; sincronizado por VecNormalizeSyncEvalCallback).
         eval_env = DummyVecEnv([make_env_fn(cfg, rank=999, base_seed=seed + 9999)])
         if norm_obs or norm_reward:
-            eval_env = VecNormalize(eval_env, norm_obs=norm_obs, norm_reward=False,
-                                    clip_obs=clip_obs, training=False)
-        callbacks.append(VecNormalizeSyncEvalCallback(
+            if stats_file and stats_file.exists():
+                eval_env = VecNormalize.load(str(stats_file), eval_env)
+            else:
+                eval_env = VecNormalize(eval_env, norm_obs=norm_obs, norm_reward=False,
+                                        clip_obs=clip_obs, training=False)
+            eval_env.training = False
+            eval_env.norm_reward = False
+        eval_cb = VecNormalizeSyncEvalCallback(
             eval_env,
             best_model_save_path=str(models_dir / "best_model"),
             log_path=str(logs_dir),
             eval_freq=eval_freq,
             n_eval_episodes=int(train_cfg.get("n_eval_episodes", 15)),
             deterministic=True, render=False,
-        ))
+        )
+        if resume_step > 0 and (logs_dir / "evaluations.npz").exists():
+            try:
+                old_evals = np.load(logs_dir / "evaluations.npz")
+                mask = old_evals["timesteps"] <= resume_step
+                if np.any(mask):
+                    eval_cb.evaluations_timesteps = list(old_evals["timesteps"][mask])
+                    eval_cb.evaluations_results = list(old_evals["results"][mask])
+                    if "ep_lengths" in old_evals:
+                        eval_cb.evaluations_length = list(old_evals["ep_lengths"][mask])
+                    if "successes" in old_evals:
+                        eval_cb.evaluations_successes = list(old_evals["successes"][mask])
+                    means = [float(np.mean(res)) for res in eval_cb.evaluations_results]
+                    if means:
+                        eval_cb.best_mean_reward = max(means)
+                    print(f">>> [RESUME] Restauradas {len(eval_cb.evaluations_timesteps)} evaluaciones históricas desde evaluations.npz")
+            except Exception as e:
+                print(f">>> [RESUME ADVERTENCIA] No fue posible restaurar histórico de evaluations.npz: {e}")
+        callbacks.append(eval_cb)
     callbacks.append(checkpoint_cb)
 
-    # 3. Instanciar el agente
-    common_kwargs = dict(
-        policy="MlpPolicy", env=vec_env, seed=seed, verbose=1,
-        tensorboard_log=str(logs_dir), device=device,
-        gamma=gamma, policy_kwargs=parse_net_arch(algo_cfg.get("net_arch", "256x256_relu")),
-    )
-
+    # 3. Instanciar o cargar el agente
+    final_name = "sac_arm2d_final.zip" if algo == "SAC" else "ppo_arm2d_final.zip"
     budget = int(total_timesteps_override or train_cfg.get("total_timesteps", 1_000_000))
 
-    if algo == "PPO":
-        model = PPO(
-            learning_rate=float(algo_cfg.get("learning_rate", 1.5e-4)),
-            n_steps=int(algo_cfg.get("n_steps", 2048)),
-            batch_size=int(algo_cfg.get("batch_size", 64)),
-            n_epochs=int(algo_cfg.get("n_epochs", 10)),
-            gae_lambda=float(algo_cfg.get("gae_lambda", 0.95)),
-            clip_range=float(algo_cfg.get("clip_range", 0.2)),
-            ent_coef=float(algo_cfg.get("ent_coef", 0.002)),
-            max_grad_norm=float(algo_cfg.get("max_grad_norm", 0.5)),
-            **common_kwargs,
-        )
-        final_name = "ppo_arm2d_final.zip"
+    if ckpt_dir is not None:
+        model_zip = ckpt_dir / "model.zip"
+        loader = SAC.load if algo == "SAC" else PPO.load
+        model = loader(str(model_zip), env=vec_env, device=device)
+        model.tensorboard_log = str(logs_dir)
+        print(f">>> [RESUME] Modelo {algo} restaurado exitosamente desde {model_zip}")
     else:
-        target_entropy_raw = algo_cfg.get("target_entropy", "auto")
-        target_entropy = ("auto" if str(target_entropy_raw).lower() == "auto"
-                          else float(target_entropy_raw))
-        model = SAC(
-            learning_rate=float(algo_cfg.get("learning_rate", 3e-4)),
-            buffer_size=int(algo_cfg.get("buffer_size", 300_000)),
-            learning_starts=int(algo_cfg.get("learning_starts", 5_000)),
-            batch_size=int(algo_cfg.get("batch_size", 256)),
-            tau=float(algo_cfg.get("tau", 0.005)),
-            train_freq=int(algo_cfg.get("train_freq", 1)),
-            gradient_steps=int(algo_cfg.get("gradient_steps", 1)),
-            ent_coef=str(algo_cfg.get("ent_coef", "auto")),
-            target_entropy=target_entropy,
-            **common_kwargs,
+        common_kwargs = dict(
+            policy="MlpPolicy", env=vec_env, seed=seed, verbose=1,
+            tensorboard_log=str(logs_dir), device=device,
+            gamma=gamma, policy_kwargs=parse_net_arch(algo_cfg.get("net_arch", "256x256_relu")),
         )
-        final_name = "sac_arm2d_final.zip"
+        if algo == "PPO":
+            model = PPO(
+                learning_rate=float(algo_cfg.get("learning_rate", 1.5e-4)),
+                n_steps=int(algo_cfg.get("n_steps", 2048)),
+                batch_size=int(algo_cfg.get("batch_size", 64)),
+                n_epochs=int(algo_cfg.get("n_epochs", 10)),
+                gae_lambda=float(algo_cfg.get("gae_lambda", 0.95)),
+                clip_range=float(algo_cfg.get("clip_range", 0.2)),
+                ent_coef=float(algo_cfg.get("ent_coef", 0.002)),
+                max_grad_norm=float(algo_cfg.get("max_grad_norm", 0.5)),
+                **common_kwargs,
+            )
+        else:
+            target_entropy_raw = algo_cfg.get("target_entropy", "auto")
+            target_entropy = ("auto" if str(target_entropy_raw).lower() == "auto"
+                              else float(target_entropy_raw))
+            model = SAC(
+                learning_rate=float(algo_cfg.get("learning_rate", 3e-4)),
+                buffer_size=int(algo_cfg.get("buffer_size", 300_000)),
+                learning_starts=int(algo_cfg.get("learning_starts", 5_000)),
+                batch_size=int(algo_cfg.get("batch_size", 256)),
+                tau=float(algo_cfg.get("tau", 0.005)),
+                train_freq=int(algo_cfg.get("train_freq", 1)),
+                gradient_steps=int(algo_cfg.get("gradient_steps", 1)),
+                ent_coef=str(algo_cfg.get("ent_coef", "auto")),
+                target_entropy=target_entropy,
+                **common_kwargs,
+            )
 
     # 4. Metadatos del experimento
     meta = {
@@ -260,12 +368,25 @@ def run_training(cfg: dict, config_path: Path, seed: int, device: str,
         json.dump(meta, f, indent=2, ensure_ascii=False)
 
     # 5. Entrenamiento
+    remaining_timesteps = max(0, budget - resume_step)
+    if remaining_timesteps <= 0 and resume_step > 0:
+        print(f"\n>>> [RESUME] El modelo ya completó los {budget:,} pasos planificados (paso actual: {resume_step:,}).")
+        model.save(str(models_dir / final_name))
+        if isinstance(vec_env, VecNormalize):
+            vec_env.save(str(models_dir / "vecnormalize_stats.pkl"))
+        vec_env.close()
+        if eval_freq > 0:
+            eval_env.close()
+        return exp_dir
+
     print(f"\n>>> [TRAIN] {algo} | fase={phase} | exp={exp_id} | seed={seed} "
-          f"| device={device} | budget={budget:,} pasos")
+          f"| device={device} | budget={budget:,} pasos"
+          + (f" | reanudando desde paso {resume_step:,} ({remaining_timesteps:,} pasos restantes)" if resume_step > 0 else ""))
     print(f">>> [TRAIN] Salida: {exp_dir}\n")
 
     t0 = time.perf_counter()
-    model.learn(total_timesteps=budget, callback=callbacks, progress_bar=True,
+    model.learn(total_timesteps=remaining_timesteps, callback=callbacks, progress_bar=True,
+                reset_num_timesteps=False if resume_step > 0 else True,
                 tb_log_name=f"{exp_id}_seed_{seed}")
     elapsed = time.perf_counter() - t0
 
@@ -313,6 +434,8 @@ def main():
                         help="Override del presupuesto de timesteps")
     parser.add_argument("--checkpoint_freq", type=int, default=None,
                         help="Override de la frecuencia de checkpoints")
+    parser.add_argument("--resume", nargs="?", const="auto", default=None,
+                        help="Reanuda el entrenamiento desde un checkpoint. Sin argumentos o 'auto', detecta automáticamente el último checkpoint disponible en experiments.")
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -336,7 +459,8 @@ def main():
 
         exp_dir = run_training(cfg, config_path, seed=s, device=args.device,
                                total_timesteps_override=args.total_timesteps,
-                               checkpoint_freq_override=args.checkpoint_freq)
+                               checkpoint_freq_override=args.checkpoint_freq,
+                               resume_arg=args.resume)
         completed_dirs.append(exp_dir)
 
     print(f"\n>>> [MULTISEED OK] Finalizado entrenamiento de {len(seeds)} semillas: {seeds}")
