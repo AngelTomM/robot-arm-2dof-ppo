@@ -1,0 +1,26 @@
+{
+  "agent": "SAC_NOM_NREWARD",
+  "eval_set": "final_eval_set_300",
+  "eval_mode": "deterministic",
+  "metrics": {
+    "total_episodes": 300,
+    "successful_episodes": 49,
+    "success_rate": 0.16333333333333333,
+    "success_rate_ci": "16.3% [12.6%, 20.9%] (49/300)",
+    "ci_low": 0.12580650084729772,
+    "ci_high": 0.20937306560186436,
+    "e_ss_mean": 0.05403528133948548,
+    "e_ss_median": 0.036022137842293855,
+    "e_ss_p90": 0.1278530265691,
+    "final_dist_mean": 0.052626863930096794,
+    "v_ss_mean": 0.6705412873949828,
+    "v_ss_median": 0.3047818999114998,
+    "t_s_mean": 1.6621333333333332,
+    "t_s_median": 2.0,
+    "j_u_mean": 0.660620086574865,
+    "j_lqr_mean": -18.672789630362896,
+    "j_lqr_median": -13.570943905236264,
+    "j_lqr_std": 18.418981294841334,
+    "mean_action_delta": 0.5684791753999053
+  }
+}

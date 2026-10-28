@@ -260,26 +260,26 @@ CANONICAL_METRICS: Dict[str, Dict[str, Any]] = {
     "explained_variance": {
         "category": "optimizer",
         "tag": "train/explained_variance",
-        "tags": ["train/explained_variance"],
+        "tags": ["train/explained_variance", "train/final_distance_mean"],
         "filename": "comparative_explained_variance.png",
         "model_filename": "optimizer_explained_variance.png",
-        "title": "Comparativa: Varianza Explicada de la Función de Valor",
-        "ylabel": "Varianza Explicada ($1 - \\mathrm{Var}(y-V)/\\mathrm{Var}(y)$)",
+        "title": "Comparativa: Varianza Explicada (PPO) / Distancia Final (SAC)",
+        "ylabel": "Varianza Explicada / Distancia (m)",
         "ref_line": 1.0,
         "ref_label": "Óptimo ($1.0$)",
         "zero_line": True,
-        "y_limits": (-0.1, 1.05),
+        "y_limits": None,
     },
     "approx_kl": {
         "category": "optimizer",
         "tag": "train/approx_kl",
-        "tags": ["train/approx_kl"],
+        "tags": ["train/approx_kl", "train/ent_coef_loss"],
         "filename": "comparative_approx_kl.png",
         "model_filename": "optimizer_approx_kl.png",
-        "title": "Comparativa: Divergencia KL Aproximada",
-        "ylabel": "Divergencia KL ($D_{KL}$)",
-        "ref_line": 0.015,
-        "ref_label": "Guía $D_{KL} = 0.015$",
+        "title": "Comparativa: Divergencia KL (PPO) / Pérdida Temp. α (SAC)",
+        "ylabel": "Divergencia KL ($D_{KL}$) / Pérdida $\\alpha$",
+        "ref_line": 0.0,
+        "ref_label": "Referencia ($0.0$)",
         "zero_line": True,
         "y_limits": None,
     },
@@ -438,8 +438,13 @@ METRIC_ALIASES: Dict[str, str] = {
     "train/critic_loss": "value_loss",
     "ent_coef": "entropy",
     "train/ent_coef": "entropy",
-    "ent_coef_loss": "entropy",
-    "train/ent_coef_loss": "entropy",
+    "ent_coef_loss": "approx_kl",
+    "train/ent_coef_loss": "approx_kl",
+    "final_distance_mean": "explained_variance",
+    "train/final_distance_mean": "explained_variance",
+    "train_final_distance": "explained_variance",
+    "final_joint_speed_mean": "explained_variance",
+    "train/final_joint_speed_mean": "explained_variance",
 
     # Curvas de Aprendizaje
     "learning_return": "learning_return",
@@ -1104,14 +1109,31 @@ def plot_model_optimizer_curves(tb_data: Dict[str, List[Tuple[np.ndarray, np.nda
     if not tb_data:
         return
 
-    opt_config = [
-        ("loss", "optimizer_total_loss.png", "Pérdida Total / Crítico del Optimizador", "Pérdida Total ($L_{total}$ / Crítico)", "#c0392b", ["train/loss", "train/critic_loss"]),
-        ("policy_loss", "optimizer_policy_loss.png", "Pérdida de la Política", "Pérdida de Política ($L_{clip}$ / Actor)", "#e67e22", ["train/policy_gradient_loss", "train/actor_loss"]),
-        ("value_loss", "optimizer_value_loss.png", "Pérdida de la Función de Valor (Crítico)", "Pérdida de Valor ($L_V$ / Crítico)", "#2980b9", ["train/value_loss", "train/critic_loss"]),
-        ("entropy", "optimizer_entropy.png", "Evolución de Entropía / Temp. α", "Entropía ($H$) / $\\alpha$", "#8e44ad", ["train/entropy_loss", "train/ent_coef", "train/ent_coef_loss"]),
-        ("approx_kl", "optimizer_approx_kl.png", "Divergencia KL Aproximada", "Divergencia KL ($D_{KL}$)", "#16a085", ["train/approx_kl"]),
-        ("explained_variance", "optimizer_explained_variance.png", "Varianza Explicada de la Función de Valor", "Varianza Explicada", "#27ae60", ["train/explained_variance"]),
-    ]
+    is_sac = ("train/actor_loss" in tb_data and "train/approx_kl" not in tb_data) or "SAC" in model_name.upper()
+
+    if is_sac:
+        opt_config = [
+            ("loss", "optimizer_total_loss.png", "Pérdida del Crítico Q (SAC)", "Pérdida del Crítico ($L_Q$)", "#c0392b", ["train/critic_loss", "train/loss"]),
+            ("policy_loss", "optimizer_policy_loss.png", "Pérdida del Actor (SAC)", "Pérdida del Actor ($L_\\pi$)", "#e67e22", ["train/actor_loss", "train/policy_gradient_loss"]),
+            ("value_loss", "optimizer_value_loss.png", "Pérdida de Valor Q / Crítico (SAC)", "Pérdida de Valor ($L_Q$ / Crítico)", "#2980b9", ["train/critic_loss", "train/value_loss"]),
+            ("entropy", "optimizer_entropy.png", "Temperatura de Entropía α (SAC)", "Temperatura ($\\alpha$)", "#8e44ad", ["train/ent_coef", "train/entropy_loss"]),
+            ("approx_kl", "optimizer_approx_kl.png", "Pérdida Temp. Dual α ($L_\\alpha$)", "Pérdida Temp. ($L_\\alpha$)", "#16a085", ["train/ent_coef_loss", "train/approx_kl"]),
+            ("explained_variance", "optimizer_explained_variance.png", "Distancia Terminal en Entrenamiento", "Distancia Final Media (m)", "#27ae60", ["train/final_distance_mean", "train/explained_variance"]),
+        ]
+        alt_filenames = {
+            "approx_kl": "optimizer_ent_coef_loss.png",
+            "explained_variance": "optimizer_final_distance.png",
+        }
+    else:
+        opt_config = [
+            ("loss", "optimizer_total_loss.png", "Pérdida Total del Optimizador", "Pérdida Total ($L_{total}$)", "#c0392b", ["train/loss", "train/critic_loss"]),
+            ("policy_loss", "optimizer_policy_loss.png", "Pérdida de la Política", "Pérdida de Política ($L_{clip}$ / Actor)", "#e67e22", ["train/policy_gradient_loss", "train/actor_loss"]),
+            ("value_loss", "optimizer_value_loss.png", "Pérdida de la Función de Valor (Crítico)", "Pérdida de Valor ($L_V$ / Crítico)", "#2980b9", ["train/value_loss", "train/critic_loss"]),
+            ("entropy", "optimizer_entropy.png", "Evolución de Entropía", "Entropía ($H$)", "#8e44ad", ["train/entropy_loss", "train/ent_coef", "train/ent_coef_loss"]),
+            ("approx_kl", "optimizer_approx_kl.png", "Divergencia KL Aproximada", "Divergencia KL ($D_{KL}$)", "#16a085", ["train/approx_kl"]),
+            ("explained_variance", "optimizer_explained_variance.png", "Varianza Explicada de la Función de Valor", "Varianza Explicada", "#27ae60", ["train/explained_variance"]),
+        ]
+        alt_filenames = {}
 
     # 1. Gráficas independientes por escalar
     for canon_key, fname, title, ylabel, color, cand_tags in opt_config:
@@ -1142,6 +1164,10 @@ def plot_model_optimizer_curves(tb_data: Dict[str, List[Tuple[np.ndarray, np.nda
         fig.tight_layout()
         out_f = model_fig_dir / fname
         fig.savefig(out_f)
+        if canon_key in alt_filenames:
+            alt_f = model_fig_dir / alt_filenames[canon_key]
+            fig.savefig(alt_f)
+            print(f">>> [FIGURA] Guardada: {alt_f.name}")
         plt.close(fig)
         print(f">>> [FIGURA] Guardada: {out_f.name}")
 
@@ -1166,7 +1192,7 @@ def plot_model_optimizer_curves(tb_data: Dict[str, List[Tuple[np.ndarray, np.nda
                 ax.set_ylabel(ylabel, fontsize=9)
                 ax.set_xlabel("Timesteps", fontsize=9)
             else:
-                na_msg = "N/A para SAC (Off-Policy)" if canon_key in ["approx_kl", "explained_variance"] else f"Sin datos: {cand_tags[0]}"
+                na_msg = f"Sin datos: {cand_tags[0]}"
                 ax.text(0.5, 0.5, na_msg, ha="center", va="center", fontsize=9, color="#7f8c8d")
 
         fig.suptitle(f"Panel Consolidado de Convergencia del Optimizador — {model_name}", fontsize=13, y=0.99)
@@ -1732,7 +1758,8 @@ def _render_model_suite(df_m: pd.DataFrame, model_name: str, model_fig_dir: Path
         tags_to_extract = [
             "train/loss", "train/policy_gradient_loss", "train/actor_loss",
             "train/value_loss", "train/critic_loss", "train/entropy_loss",
-            "train/ent_coef", "train/ent_coef_loss", "train/approx_kl", "train/explained_variance"
+            "train/ent_coef", "train/ent_coef_loss", "train/approx_kl", "train/explained_variance",
+            "train/final_distance_mean", "train/final_joint_speed_mean"
         ]
         tb_scalars = extract_tensorboard_scalars(log_dirs, tags_to_extract)
         if tb_scalars:
