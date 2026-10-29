@@ -1,0 +1,55 @@
+# ==============================================================================
+# CONFIGURACIÓN DEL AGENTE: PPO_13 (Fase D) - CONFIGURACIÓN ÓPTIMA
+# ==============================================================================
+# Diseñada específicamente para cumplir los tres requisitos simultáneos:
+#
+# 1. Cobertura global y cuadrantes opuestos:
+#    - gamma: 0.995                (horizonte extendido 200 pasos: prioriza llegar al otro lado)
+#    - learning_rate: 0.00025       (tracción suficiente para vencer la inercia sin sobrepaso)
+#    - layers: [256, 256, 128]     (alta capacidad no lineal para cinemática en todos los cuadrantes)
+#
+# 2. Precisión milimétrica (eliminación del error estacionario):
+#    - norm_reward: true           (amplifica dinámicamente los retornos con e_pos < 2 mm)
+#    - norm_obs: true              (equilibra la percepción entre posición y velocidad)
+#
+# 3. Estabilidad y reposo estático en el objetivo (sin vibración/chatter):
+#    - ent_coef: 0.0               (varianza nula sigma -> 0; elimina el temblor estocástico)
+#    - hidden_activation: tanh     (campo continuo C^inf: genera amortiguación suave tipo viscosa)
+#    - max_grad_norm: 0.5          (suprime sacudidas bruscas en las correcciones de peso)
+#    - total_timesteps: 500000     (presupuesto para consolidar estabilización asintótica)
+# ==============================================================================
+experiment:
+  description: PPO_13 - Optimo integral (norm_reward=true, gamma=0.995, ent_coef=0.0, Tanh, [256,256,128], lr=0.00025, 500k timesteps)
+
+# Referencia al entorno físico común
+env_config: configs/environment.yaml
+
+# Preprocesamiento y normalización
+normalization:
+  norm_obs: true               # Estandariza escalas de entrada (radianes, velocidades, distancias)
+  norm_reward: true            # Normalización dinámica de retornos: gradiente vivo en distancias milimétricas
+  clip_obs: 10.0
+
+# Hiperparámetros del algoritmo PPO
+ppo:
+  learning_rate: 0.00025       # Calibrada para aceleración ágil sin inducir sobrepasos violentos
+  n_steps: 2048                # Muestreo amplio (8192 transiciones por iteración con 4 envs)
+  batch_size: 128              # Minilotes equilibrados (64 minilotes por época)
+  n_epochs: 10                 # Épocas de optimización por cada rollout
+  gamma: 0.995                 # Horizonte profundo (horizonte efectivo ~200 pasos)
+  gae_lambda: 0.95             # Factor GAE estándar de compromiso sesgo-varianza
+  clip_range: 0.2              # Rango de recorte canónico conservador
+  ent_coef: 0.0                # Entropía nula: permite varianza cero (sigma -> 0) y suprime el jitter
+  max_grad_norm: 0.5           # Amortigua gradientes para evitar impulsos bruscos de torque
+  num_envs: 4                  # Entornos concurrentes
+
+  net_arch:
+    layers: [256, 256, 128]    # Arquitectura profunda de alta expresividad cinemática
+    hidden_activation: tanh    # Curvatura C^inf continua: campo de torque suave sin escalones cerca de e=0
+
+# Parámetros del proceso de entrenamiento
+training:
+  total_timesteps: 500000      # Presupuesto para converger tanto en la maniobra global como en el reposo fino
+  checkpoint_freq: 50000
+  eval_freq: 5000
+  n_eval_episodes: 15

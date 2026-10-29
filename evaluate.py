@@ -60,6 +60,29 @@ def load_rl_agent(model_path: Path) -> Tuple[Any, Optional[Path]]:
     raise ValueError(f"No fue posible instanciar el modelo como PPO ni como SAC: {model_path}")
 
 
+def infer_model_section(agent_label: str, model_path: Optional[Path] = None, agent_type: str = "rl") -> str:
+    """Infiere la sección o subcarpeta del modelo conforme a SSOT (configs/ o experiments/)."""
+    if agent_type.lower() == "c0" or agent_label.upper() == "C0":
+        cfg_matches = list((REPO_ROOT / "configs").glob("**/C0.yaml"))
+        if cfg_matches:
+            return cfg_matches[0].parent.name
+        return "entorno"
+
+    if model_path:
+        p_res = Path(model_path).resolve()
+        parts = p_res.parts
+        if "experiments" in parts:
+            idx = parts.index("experiments")
+            if len(parts) > idx + 2 and not parts[idx + 1].startswith("seed_"):
+                return parts[idx + 1]
+
+    cfg_matches = list((REPO_ROOT / "configs").glob(f"**/{agent_label}.yaml"))
+    if cfg_matches:
+        return cfg_matches[0].parent.name
+
+    return "misc"
+
+
 def run_evaluation(agent_type: str,
                    model_path: Optional[str] = None,
                    vec_norm_path: Optional[str] = None,
@@ -70,6 +93,7 @@ def run_evaluation(agent_type: str,
                    dataset_path: Optional[str] = None,
                    env_config_path: Optional[str] = None,
                    output_dir: str = "reports/data/evaluation",
+                   section: Optional[str] = None,
                    eval_mode: str = "deterministic",
                    generate_plots: bool = False) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """Ejecuta la evaluación agnóstica para un agente o controlador sobre el dataset de prueba."""
@@ -135,40 +159,29 @@ def run_evaluation(agent_type: str,
     else:
         dataset_tag = f"eval_{ds_len}"
 
+    model_section = section or infer_model_section(agent_label, Path(model_path) if model_path else None, agent_type)
     out_dir_path = REPO_ROOT / output_dir
-    model_data_dir = out_dir_path / dataset_tag / agent_label
+    model_data_dir = out_dir_path / dataset_tag / model_section / agent_label
     model_data_dir.mkdir(parents=True, exist_ok=True)
-
-    # Directorio de compatibilidad directa
-    legacy_model_dir = out_dir_path / agent_label
-    legacy_model_dir.mkdir(parents=True, exist_ok=True)
 
     csv_path = model_data_dir / "episodes.csv"
     json_path = model_data_dir / "summary.json"
-    legacy_csv = out_dir_path / f"{agent_label}_episodes.csv"
-    legacy_json = out_dir_path / f"{agent_label}_summary.json"
 
     episodes_df.insert(0, "agent", agent_label)
     episodes_df.to_csv(csv_path, index=False)
-    episodes_df.to_csv(legacy_model_dir / "episodes.csv", index=False)
-    episodes_df.to_csv(legacy_csv, index=False)
 
     if trajectories_df is not None and not trajectories_df.empty:
         trajectories_df.insert(0, "agent", agent_label)
         trajectories_df.to_csv(model_data_dir / "sample_trajectories.csv", index=False)
-        trajectories_df.to_csv(legacy_model_dir / "sample_trajectories.csv", index=False)
 
     summary_out = {
         "agent": agent_label,
+        "section": model_section,
         "eval_set": ds_name,
         "eval_mode": eval_mode,
         "metrics": summary
     }
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(summary_out, f, indent=2)
-    with open(legacy_model_dir / "summary.json", "w", encoding="utf-8") as f:
-        json.dump(summary_out, f, indent=2)
-    with open(legacy_json, "w", encoding="utf-8") as f:
         json.dump(summary_out, f, indent=2)
 
     # 5. Salida por consola
@@ -211,6 +224,8 @@ def main() -> None:
                         help="Tipo de agente: 'ppo', 'sac', 'c0' o ruta al modelo .zip.")
     parser.add_argument("--model-path", type=str, default=None,
                         help="Ruta directa al archivo de pesos model.zip.")
+    parser.add_argument("--section", "--phase", type=str, default=None,
+                        help="Sección o subcarpeta que contiene el modelo (ej. PPO_eval_500k, SAC_eval_300k, entorno).")
     parser.add_argument("--label", type=str, default=None,
                         help="Etiqueta identificatoria del modelo para reportes y gráficas (ej. PPO_2).")
     parser.add_argument("--c0", action="store_true", default=False,
@@ -264,6 +279,7 @@ def main() -> None:
             kd=args.kd,
             lambda_damping=args.lambda_damping,
             dataset_path=ds_path,
+            section=args.section,
             env_config_path=args.env_config,
             output_dir=args.output_dir,
             eval_mode=args.mode,

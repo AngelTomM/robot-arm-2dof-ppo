@@ -28,25 +28,23 @@ def load_yaml(path: Path) -> dict:
             print(f"Error cargando {path}: {e}")
             return {}
 
-def load_summary(model_name: str) -> dict:
-    # Prioridad: carpeta del modelo reports/data/evaluation/<model>/summary.json
-    path_folder = EVAL_DATA_DIR / model_name / "summary.json"
-    if path_folder.is_file():
-        with open(path_folder, "r", encoding="utf-8") as f:
-            try:
-                return json.load(f) or {}
-            except Exception:
-                pass
-    
-    # Alternativa: archivo plano reports/data/evaluation/<model>_summary.json
-    path_flat = EVAL_DATA_DIR / f"{model_name}_summary.json"
-    if path_flat.is_file():
-        with open(path_flat, "r", encoding="utf-8") as f:
-            try:
-                return json.load(f) or {}
-            except Exception:
-                pass
+def load_summary(model_name: str, subfolder: str = None) -> dict:
+    """Busca summary.json jerárquicamente priorizando eval_300 y luego eval_200 bajo su sección."""
+    candidates = []
+    if subfolder:
+        candidates.append(EVAL_DATA_DIR / "eval_300" / subfolder / model_name / "summary.json")
+        candidates.append(EVAL_DATA_DIR / "eval_200" / subfolder / model_name / "summary.json")
+    candidates.extend(list(EVAL_DATA_DIR.glob(f"eval_300/**/{model_name}/summary.json")))
+    candidates.extend(list(EVAL_DATA_DIR.glob(f"eval_200/**/{model_name}/summary.json")))
+    candidates.extend(list(EVAL_DATA_DIR.glob(f"**/{model_name}/summary.json")))
 
+    for p in candidates:
+        if p.is_file():
+            with open(p, "r", encoding="utf-8") as f:
+                try:
+                    return json.load(f) or {}
+                except Exception:
+                    pass
     return {}
 
 def main():
@@ -114,7 +112,7 @@ def main():
         dt_eff = (dt * frame_skip) if (dt is not None and frame_skip is not None) else None
 
         # Métricas de evaluación
-        summary = load_summary(model_name)
+        summary = load_summary(model_name, subfolder=subfolder)
         metrics = summary.get("metrics", {})
         eval_set = summary.get("eval_set", None)
         total_eps = metrics.get("total_episodes", None)

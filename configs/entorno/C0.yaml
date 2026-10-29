@@ -3,7 +3,6 @@
 # ==============================================================================
 experiment:
   description: Controlador cartesiano PD con transposición del Jacobiano para torque (C0)
-  phase: phase_D
 
 # Referencia al entorno físico común
 env_config: configs/environment.yaml

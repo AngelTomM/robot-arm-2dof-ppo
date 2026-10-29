@@ -3,7 +3,6 @@
 # ==============================================================================
 experiment:
   description: PPO optimizado para alcanzar el target sin congelamiento ni oscilaciones (Tanh, GAE, gamma=0.99, ent_coef>0)
-  phase: phase_D
 
 # Referencia al entorno físico común
 env_config: configs/environment.yaml

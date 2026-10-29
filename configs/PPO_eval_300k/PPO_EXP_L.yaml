@@ -1,0 +1,40 @@
+# ==============================================================================
+# CONFIGURACIÓN DEL AGENTE: PPO_17 (Fase D)
+# ==============================================================================
+
+# ==============================================================================
+experiment:
+  description: PPO sin exploracion para seccion 2.3.3
+
+# Referencia al entorno físico común
+env_config: configs/environment.yaml
+
+# Preprocesamiento y normalización
+normalization:
+  norm_obs: true               # Estandariza escalas de entrada (radianes, velocidades, distancias)
+  norm_reward: false            # Normalización dinámica de retornos
+  clip_obs: 10.0
+
+# Hiperparámetros del algoritmo PPO
+ppo:
+  learning_rate: 0.0001       # Tasa suave (5e-5) para evitar el congelamiento de la junta 2
+  n_steps: 1024                # Tamaño de rollout por entorno (4096 pasos totales con 4 envs)
+  batch_size: 128              # Tamaño de minilote equilibrado (32 minilotes por época)
+  n_epochs: 10                 # Épocas de optimización por cada rollout
+  gamma: 0.99                  # Factor de descuento alineado al horizonte de 100 pasos: 1 / (1 - 0.99) = 100
+  gae_lambda: 0.95             # Factor GAE estándar de compromiso sesgo-varianza
+  clip_range: 0.2              # Rango de recorte canónico conservador
+  ent_coef: 0              # Coeficiente de entropía reducido para disminuir la dispersión en reposo
+  max_grad_norm: 0.5           # Amortigua gradientes para evitar impulsos bruscos de torque
+  num_envs: 4                  # Entornos concurrentes
+
+  net_arch:
+    layers: [256, 256, 128]    # Arquitectura profunda de alta expresividad cinemática
+    hidden_activation: relu    # No saturante: evita el desvanecimiento de gradiente en posturas distantes
+
+# Parámetros del proceso de entrenamiento
+training:
+  total_timesteps: 300000      # Presupuesto amplio para consolidar la política
+  checkpoint_freq: 50000
+  eval_freq: 5000
+  n_eval_episodes: 15

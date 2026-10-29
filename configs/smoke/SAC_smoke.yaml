@@ -3,7 +3,6 @@
 # ==============================================================================
 experiment:
   description: Smoke test SAC con recompensa Lyapunov / LQR continua (Fase D)
-  phase: phase_D
 
 # Referencia al entorno físico común
 env_config: configs/environment.yaml

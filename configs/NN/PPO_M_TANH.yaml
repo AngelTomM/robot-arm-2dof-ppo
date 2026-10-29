@@ -3,7 +3,6 @@
 # ==============================================================================
 experiment:
   description: PPO con recompensa LQR. net_arch tanh.
-  phase: phase_D
 
 # Referencia al entorno físico común
 env_config: configs/environment.yaml

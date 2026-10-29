@@ -73,6 +73,25 @@ def apply_plot_style() -> None:
     })
 
 
+def get_model_section(model_name: str, data_dir: Optional[Path] = None) -> str:
+    """Infiere la sección (subcarpeta) del modelo conforme a SSOT buscando en configs/, evaluation o experiments/."""
+    cfg_matches = list((REPO_ROOT / "configs").glob(f"**/{model_name}.yaml"))
+    if cfg_matches:
+        return cfg_matches[0].parent.name
+
+    if data_dir and data_dir.exists():
+        ep_matches = list(data_dir.glob(f"**/{model_name}/episodes.csv"))
+        for ep in ep_matches:
+            if not ep.parent.parent.name.startswith("eval_") and ep.parent.parent.name != data_dir.name:
+                return ep.parent.parent.name
+
+    exp_matches = list((REPO_ROOT / "experiments").glob(f"**/{model_name}/seed_*"))
+    if exp_matches:
+        return exp_matches[0].parent.parent.name
+
+    return ""
+
+
 def discover_evaluation_datasets(data_dir: Path, files: Optional[List[str]] = None) -> Dict[str, Dict[str, pd.DataFrame]]:
     """
     Descubre y particiona las evaluaciones según el tamaño del conjunto de datos (eval_200, eval_300, etc.).
@@ -98,20 +117,16 @@ def discover_evaluation_datasets(data_dir: Path, files: Optional[List[str]] = No
         csv_paths = [(Path(f), None) for f in files]
     else:
         csv_paths = []
-        # 1. Explorar subdirectorios particionados (eval_200, eval_300, etc.)
+        # 1. Explorar subdirectorios particionados (eval_200, eval_300, etc.) recursivamente
         for part_dir in sorted(data_dir.glob("eval_*")):
             if part_dir.is_dir():
-                for sub in sorted(part_dir.glob("*/episodes.csv")):
+                for sub in sorted(part_dir.glob("**/episodes.csv")):
                     csv_paths.append((sub, part_dir.name))
 
-        # 2. Explorar subdirectorios planos directos
-        for sub in sorted(data_dir.glob("*/episodes.csv")):
-            if not sub.parent.parent.name.startswith("eval_"):
-                csv_paths.append((sub, None))
-
-        # 3. Explorar archivos planos en la raíz (*_episodes.csv)
-        for flat in sorted(data_dir.glob("*_episodes.csv")):
-            csv_paths.append((flat, None))
+        # 2. Si data_dir apunta directamente a una partición o raíz
+        if not csv_paths:
+            for sub in sorted(data_dir.glob("**/episodes.csv")):
+                csv_paths.append((sub, data_dir.name if data_dir.name.startswith("eval_") else None))
 
     for p, known_tag in csv_paths:
         if not p.exists() or p.is_dir():
@@ -192,22 +207,103 @@ def load_evaluation_data(data_dir: Path, files: Optional[List[str]] = None,
 
 
 def load_sample_trajectories(data_dir: Path, model_name: str, dataset_tag: Optional[str] = None) -> Optional[pd.DataFrame]:
-    """Carga sample_trajectories.csv buscando en la partición o en la raíz."""
+    """Carga sample_trajectories.csv buscando en la partición jerárquica o en la raíz."""
     candidates = []
     if dataset_tag:
-        candidates.append(data_dir / dataset_tag / model_name / "sample_trajectories.csv")
-    candidates.extend([
-        data_dir / "eval_300" / model_name / "sample_trajectories.csv",
-        data_dir / "eval_200" / model_name / "sample_trajectories.csv",
-        data_dir / model_name / "sample_trajectories.csv"
-    ])
+        candidates.extend(list((data_dir / dataset_tag).glob(f"**/{model_name}/sample_trajectories.csv")))
+    candidates.extend(list(data_dir.glob(f"eval_*/**/{model_name}/sample_trajectories.csv")))
+    candidates.extend(list(data_dir.glob(f"**/{model_name}/sample_trajectories.csv")))
     for p in candidates:
-        if p.exists():
+        if p.exists() and p.is_file():
             try:
                 return pd.read_csv(p)
             except Exception:
                 pass
     return None
+
+
+def resolve_seed_event_files(ld: Path) -> List[Path]:
+    """
+    Filtra y retorna exclusivamente los archivos de eventos de TensorBoard correspondientes
+    a la sesión canónica de la semilla. Si existen múltiples subcarpetas de ejecución
+    (ej. corridas incompletas, abortadas o reiniciadas vs corrida íntegra), selecciona la
+    sesión válida que corresponde al modelo evaluado y con mayor progreso temporal,
+    descartando sesiones duplicadas o fallidas.
+    """
+    all_events = sorted(list(ld.glob("**/events.out.tfevents*")), key=lambda p: p.stat().st_mtime)
+    if not all_events:
+        return []
+
+    by_folder: Dict[Path, List[Path]] = {}
+    for ef in all_events:
+        by_folder.setdefault(ef.parent, []).append(ef)
+
+    if len(by_folder) == 1:
+        return all_events
+
+    try:
+        from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
+    except ImportError:
+        return all_events
+
+    eval_npz = ld / "evaluations.npz"
+    eval_mtime = eval_npz.stat().st_mtime if eval_npz.exists() else None
+    eval_max_ts = None
+    if eval_npz.exists():
+        try:
+            d = np.load(eval_npz)
+            ts = d["timesteps"]
+            if len(ts) > 0:
+                eval_max_ts = int(ts[-1])
+        except Exception:
+            pass
+
+    sessions = []
+    for folder, efs in by_folder.items():
+        latest_ef = efs[-1]
+        mtime = latest_ef.stat().st_mtime
+        min_step, max_step = 0, 0
+        try:
+            ea = EventAccumulator(str(latest_ef))
+            ea.Reload()
+            tags = ea.Tags().get("scalars", [])
+            for cand in ["train/loss", "train/policy_gradient_loss", "train/actor_loss", "rollout/ep_rew_mean"]:
+                if cand in tags:
+                    sc = ea.Scalars(cand)
+                    if sc:
+                        min_step = int(sc[0].step)
+                        max_step = int(sc[-1].step)
+                        break
+        except Exception:
+            pass
+
+        sessions.append({
+            "folder": folder,
+            "files": efs,
+            "mtime": mtime,
+            "min_step": min_step,
+            "max_step": max_step
+        })
+
+    if eval_mtime is not None:
+        valid_candidates = sessions
+        if eval_max_ts:
+            filtered = [s for s in sessions if s["max_step"] >= eval_max_ts * 0.5]
+            if filtered:
+                valid_candidates = filtered
+        best_sess = min(valid_candidates, key=lambda s: abs(s["mtime"] - eval_mtime))
+    else:
+        best_sess = max(sessions, key=lambda s: (s["max_step"], s["mtime"]))
+
+    selected_files = list(best_sess["files"])
+
+    if best_sess["min_step"] > 20000:
+        predecessors = [s for s in sessions if s != best_sess and s["max_step"] <= best_sess["min_step"]]
+        if predecessors:
+            best_pred = max(predecessors, key=lambda s: s["max_step"])
+            selected_files = list(best_pred["files"]) + selected_files
+
+    return selected_files
 
 
 def extract_tensorboard_scalars(log_dirs: List[Path], tags: List[str]) -> Dict[str, List[Tuple[np.ndarray, np.ndarray]]]:
@@ -224,7 +320,7 @@ def extract_tensorboard_scalars(log_dirs: List[Path], tags: List[str]) -> Dict[s
     results: Dict[str, List[Tuple[np.ndarray, np.ndarray]]] = {t: [] for t in tags}
 
     for ld in log_dirs:
-        event_files = sorted(list(ld.glob("**/events.out.tfevents*")), key=lambda p: p.stat().st_mtime)
+        event_files = resolve_seed_event_files(ld)
         if not event_files:
             continue
 
@@ -571,7 +667,19 @@ def resolve_requested_metrics(metric_arg: Optional[str]) -> List[str]:
 
 def load_model_training_telemetry(model_name: str, eval_log: Optional[Path] = None) -> Tuple[List[Path], List[Tuple[int, np.ndarray, np.ndarray, Optional[np.ndarray]]]]:
     """Recupera los directorios de logs de TensorBoard y las curvas de evaluación (evaluations.npz) para un modelo."""
-    seed_dirs = sorted(list((REPO_ROOT / "experiments").glob(f"**/{model_name}/seed_*")))
+    all_seed_dirs = sorted(list((REPO_ROOT / "experiments").glob(f"**/{model_name}/seed_*")))
+    deduped_seeds: Dict[int, Path] = {}
+    for s_idx, s_dir in enumerate(all_seed_dirs):
+        try:
+            seed_num = int(s_dir.name.replace("seed_", ""))
+        except ValueError:
+            seed_num = s_idx + 1
+        if seed_num not in deduped_seeds:
+            deduped_seeds[seed_num] = s_dir
+        else:
+            if s_dir.stat().st_mtime > deduped_seeds[seed_num].stat().st_mtime:
+                deduped_seeds[seed_num] = s_dir
+    seed_dirs = [deduped_seeds[k] for k in sorted(deduped_seeds.keys())]
     log_dirs: List[Path] = []
     eval_data_list: List[Tuple[int, np.ndarray, np.ndarray, Optional[np.ndarray]]] = []
 
@@ -588,7 +696,7 @@ def load_model_training_telemetry(model_name: str, eval_log: Optional[Path] = No
             seed_num = int(s_dir.name.replace("seed_", ""))
         except ValueError:
             seed_num = s_idx + 1
-        npz_candidates = list(s_dir.glob("**/evaluations.npz"))
+        npz_candidates = sorted(list(s_dir.glob("**/evaluations.npz")), key=lambda p: p.stat().st_mtime, reverse=True)
         if npz_candidates and not eval_log:
             try:
                 d = np.load(npz_candidates[0])
@@ -604,7 +712,7 @@ def load_model_training_telemetry(model_name: str, eval_log: Optional[Path] = No
                         try:
                             from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
                             tb_r, tb_s = {}, {}
-                            for ef in sorted(list(l_dir.glob("**/events.out.tfevents*")), key=lambda p: p.stat().st_mtime):
+                            for ef in resolve_seed_event_files(l_dir):
                                 ea = EventAccumulator(str(ef))
                                 ea.Reload()
                                 avail = ea.Tags().get("scalars", [])
@@ -1918,7 +2026,12 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
                     chosen_partition = "eval_300"
 
         part_fig_dir = resolve_figures_dir(out_dir, chosen_partition)
-        target_comparative_dir = part_fig_dir / "_".join(compare_models)
+        sections = {m: get_model_section(m, data_dir) for m in compare_models}
+        valid_secs = set(filter(None, sections.values()))
+        if len(valid_secs) == 1:
+            target_comparative_dir = part_fig_dir / list(valid_secs)[0] / "_".join(compare_models)
+        else:
+            target_comparative_dir = part_fig_dir / "comparisons" / "_".join(compare_models)
         target_comparative_dir.mkdir(parents=True, exist_ok=True)
 
         row_counts = {m: len(df) for m, df in chosen_dfs.items()} if chosen_dfs else {}
@@ -1937,7 +2050,9 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
         if metrics is None:
             for m in compare_models:
                 if m in chosen_dfs:
-                    _render_model_suite(chosen_dfs[m], m, part_fig_dir / m, trajs_by_model, eval_log)
+                    sec = get_model_section(m, data_dir)
+                    m_dir = part_fig_dir / sec / m if sec else part_fig_dir / m
+                    _render_model_suite(chosen_dfs[m], m, m_dir, trajs_by_model, eval_log)
 
         # Preparar DataFrames para las figuras comparativas de evaluación
         plot_dfs = {}
@@ -2056,7 +2171,9 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
         trajs_by_model = {m: load_sample_trajectories(data_dir, m, part) for m in models_to_run}
 
         for m in models_to_run:
-            _render_model_suite(part_models_dict[m], m, part_fig_dir / m, trajs_by_model, eval_log, metrics=requested_metrics if metrics else None)
+            sec = get_model_section(m, data_dir)
+            m_dir = part_fig_dir / sec / m if sec else part_fig_dir / m
+            _render_model_suite(part_models_dict[m], m, m_dir, trajs_by_model, eval_log, metrics=requested_metrics if metrics else None)
 
     print(f"\n>>> [PLOT OK] Proceso completado exitosamente.")
 

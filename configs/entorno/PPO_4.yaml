@@ -3,7 +3,6 @@
 # ==============================================================================
 experiment:
   description: PPO optimizado para alcance de targets interiores y aproximacion fina (ent_coef=0.01, norm_reward=true, Tanh)
-  phase: phase_D
 
 # Referencia al entorno físico común
 env_config: configs/environment.yaml
