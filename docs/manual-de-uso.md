@@ -37,6 +37,7 @@ reports/<fig_partition>/<seccion>/<modelo>/
 ```
 
 ### 2.1 Secciones Canónicas
+
 * `entorno/`: Modelos de calibración base de física y baseline cinemático C0 (`C0`, `PPO_1` a `PPO_7`, `SAC_1`, `SAC_2`).
 * `entorno_V2/`: Variaciones paramétricas de recompensa y dinámicas del entorno (`PPO_7.2` a `PPO_7.12`, `PPO_7.11_500`).
 * `NN/`: Ablación de arquitecturas de red neuronal y funciones de activación (`PPO_S`, `PPO_L`, `PPO_M_RELU`, `PPO_M_TANH`, `PPO_M_LEAKYRELU`).
@@ -95,6 +96,9 @@ python train.py --config configs/PPO_eval_500k/PPO_NOM.yaml --seed "42, 100, 202
 
 # Entrenamiento SAC (seed 42)
 python train.py --config configs/SAC_eval_300k/SAC_NOM.yaml --seed 42
+
+# Ejecución secuencial de múltiples entrenamientos encadenados en una sola línea mediante el operador ';'
+python train.py --config configs/SAC_eval_300k/SAC_NOM.yaml --seed 42; python train.py --config configs/SAC_eval_300k/SAC_BUF_S.yaml --seed 42
 
 # Pruebas de integración rápida (Smoke tests, 256 timesteps)
 python train.py --config configs/smoke/PPO_smoke.yaml --total_timesteps 256
@@ -168,6 +172,9 @@ python evaluate.py --c0 --dataset 300
 
 # 5. Evaluación secuencial completa sobre 200 y 300 episodios con generación inmediata de figuras
 python evaluate.py --model-path experiments/PPO_eval_500k/PPO_NOM/seed_42/models/best_model/best_model.zip --dataset all --plot
+
+# 6. Evaluación encadenada de múltiples modelos independientes en una sola línea mediante ';'
+python evaluate.py --model-path experiments/SAC_eval_300k/SAC_NOM/seed_42/models/best_model/best_model.zip --dataset 300 ; python evaluate.py --model-path experiments/SAC_eval_300k/SAC_BUF_S/seed_42/models/best_model/best_model.zip --dataset 300
 ```
 
 ### 4.4 Estructura de Salida Unificada (SSOT)
@@ -182,6 +189,7 @@ reports/data/evaluation/<eval_set>/<seccion>/<modelo_o_semilla>/
 ```
 
 Por ejemplo, la evaluación de tres semillas para `PPO_NOM` genera independientemente:
+
 * `reports/data/evaluation/eval_300/PPO_eval_500k/PPO_NOM_seed_42/`
 * `reports/data/evaluation/eval_300/PPO_eval_500k/PPO_NOM_seed_100/`
 * `reports/data/evaluation/eval_300/PPO_eval_500k/PPO_NOM_seed_2026/`
@@ -256,6 +264,9 @@ python plot.py --dataset 300 --compare PPO_17,PPO_15 --metric optimizer_summary
 
 # 7. Comparativa entre evaluaciones de semillas individuales de un mismo modelo
 python plot.py --dataset 300 --compare PPO_eval_500k/PPO_NOM_seed_42,PPO_eval_500k/PPO_NOM_seed_100 --metric steady_state_error
+
+# 8. Flujo integrado continuo (Evaluación -> Generación gráfica) encadenado mediante ';'
+python evaluate.py --model-path experiments/PPO_eval_500k/PPO_NOM/seed_42/models/best_model/best_model.zip --dataset 300 ; python plot.py --dataset 300 --model PPO_eval_500k/PPO_NOM_seed_42 --metric eval
 ```
 
 ---

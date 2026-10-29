@@ -1,0 +1,27 @@
+{
+  "agent": "PPO_M_LEAKYRELU_seed_2026",
+  "section": "NN",
+  "eval_set": "final_eval_set_300",
+  "eval_mode": "deterministic",
+  "metrics": {
+    "total_episodes": 300,
+    "successful_episodes": 16,
+    "success_rate": 0.05333333333333334,
+    "success_rate_ci": "5.3% [3.3%, 8.5%] (16/300)",
+    "ci_low": 0.03309194428620835,
+    "ci_high": 0.08486906466614534,
+    "e_ss_mean": 0.07748687827461676,
+    "e_ss_median": 0.0608478163131491,
+    "e_ss_p90": 0.16265720867043107,
+    "final_dist_mean": 0.07452320770358374,
+    "v_ss_mean": 0.6015012826677281,
+    "v_ss_median": 0.39760758036833665,
+    "t_s_mean": 1.8756666666666668,
+    "t_s_median": 2.0,
+    "j_u_mean": 0.11839475053945264,
+    "j_lqr_mean": -11.771164787601045,
+    "j_lqr_median": -8.570109194366289,
+    "j_lqr_std": 10.510164217664915,
+    "mean_action_delta": 0.12933498284506714
+  }
+}

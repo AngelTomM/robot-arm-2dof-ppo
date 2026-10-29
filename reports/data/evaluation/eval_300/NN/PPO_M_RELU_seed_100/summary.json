@@ -1,0 +1,27 @@
+{
+  "agent": "PPO_M_RELU_seed_100",
+  "section": "NN",
+  "eval_set": "final_eval_set_300",
+  "eval_mode": "deterministic",
+  "metrics": {
+    "total_episodes": 300,
+    "successful_episodes": 8,
+    "success_rate": 0.02666666666666667,
+    "success_rate_ci": "2.7% [1.4%, 5.2%] (8/300)",
+    "ci_low": 0.013573087846763737,
+    "ci_high": 0.05172887686393943,
+    "e_ss_mean": 0.08864244474946908,
+    "e_ss_median": 0.07427491257377607,
+    "e_ss_p90": 0.17559104649034815,
+    "final_dist_mean": 0.08742057665039876,
+    "v_ss_mean": 0.4150909230645454,
+    "v_ss_median": 0.208171171847716,
+    "t_s_mean": 1.9456000000000002,
+    "t_s_median": 2.0,
+    "j_u_mean": 0.422164863559529,
+    "j_lqr_mean": -18.22454302306658,
+    "j_lqr_median": -14.342540444921994,
+    "j_lqr_std": 15.417477562583159,
+    "mean_action_delta": 0.047569280811424426
+  }
+}
