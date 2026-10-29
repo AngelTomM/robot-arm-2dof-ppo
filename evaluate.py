@@ -60,6 +60,32 @@ def load_rl_agent(model_path: Path) -> Tuple[Any, Optional[Path]]:
     raise ValueError(f"No fue posible instanciar el modelo como PPO ni como SAC: {model_path}")
 
 
+def extract_model_and_seed_from_path(model_path: Path) -> Tuple[str, Optional[str]]:
+    """
+    Extrae el nombre base del modelo y la semilla a partir de la estructura de directorios.
+    Ejemplo: experiments/PPO_eval_500k/PPO_NOM/seed_42/models/best_model/best_model.zip -> ('PPO_NOM', '42').
+    """
+    p_res = model_path.resolve()
+    parts = list(p_res.parts)
+
+    seed_idx = None
+    seed_val = None
+    for idx, part in enumerate(parts):
+        if part.startswith("seed_"):
+            seed_idx = idx
+            seed_val = part.replace("seed_", "").strip()
+            break
+
+    if seed_idx is not None and seed_idx > 0:
+        model_name = parts[seed_idx - 1]
+        return model_name, seed_val
+
+    if model_path.stem in ["best_model", "model"] and len(p_res.parents) >= 4:
+        return p_res.parents[3].name, None
+
+    return model_path.stem, None
+
+
 def infer_model_section(agent_label: str, model_path: Optional[Path] = None, agent_type: str = "rl") -> str:
     """Infiere la sección o subcarpeta del modelo conforme a SSOT (configs/ o experiments/)."""
     if agent_type.lower() == "c0" or agent_label.upper() == "C0":
@@ -76,7 +102,8 @@ def infer_model_section(agent_label: str, model_path: Optional[Path] = None, age
             if len(parts) > idx + 2 and not parts[idx + 1].startswith("seed_"):
                 return parts[idx + 1]
 
-    cfg_matches = list((REPO_ROOT / "configs").glob(f"**/{agent_label}.yaml"))
+    base_name = agent_label.split("_seed")[0] if "_seed" in agent_label else agent_label
+    cfg_matches = list((REPO_ROOT / "configs").glob(f"**/{base_name}.yaml"))
     if cfg_matches:
         return cfg_matches[0].parent.name
 
@@ -120,10 +147,12 @@ def run_evaluation(agent_type: str,
         m_path = Path(model_path)
         if label:
             agent_label = label
-        elif m_path.stem in ["best_model", "model"] and len(m_path.resolve().parents) >= 4:
-            agent_label = m_path.resolve().parents[3].name
         else:
-            agent_label = m_path.stem
+            base_model, seed_num = extract_model_and_seed_from_path(m_path)
+            if seed_num is not None:
+                agent_label = f"{base_model}_seed_{seed_num}"
+            else:
+                agent_label = base_model
         agent, auto_norm = load_rl_agent(m_path)
         norm_file = Path(vec_norm_path) if vec_norm_path else auto_norm
 

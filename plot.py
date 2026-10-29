@@ -73,19 +73,41 @@ def apply_plot_style() -> None:
     })
 
 
-def get_model_section(model_name: str, data_dir: Optional[Path] = None) -> str:
-    """Infiere la sección (subcarpeta) del modelo conforme a SSOT buscando en configs/, evaluation o experiments/."""
-    cfg_matches = list((REPO_ROOT / "configs").glob(f"**/{model_name}.yaml"))
+def parse_model_identifier(model_id: str, default_section: Optional[str] = None) -> Tuple[str, Optional[str]]:
+    """
+    Parsea un identificador de modelo compuesto ('seccion/modelo') o simple ('modelo').
+    Retorna una tupla (nombre_modelo, seccion).
+    """
+    norm = model_id.replace("\\", "/").strip().strip("/")
+    if "/" in norm:
+        parts = norm.split("/")
+        sec = parts[0].strip()
+        name = parts[-1].strip()
+        return name, sec
+    return norm, default_section
+
+
+def get_model_section(model_name: str, data_dir: Optional[Path] = None, explicit_section: Optional[str] = None) -> str:
+    """Infiere o retorna la sección (subcarpeta) del modelo conforme a SSOT buscando en configs/, evaluation o experiments/."""
+    m_name, sec_from_id = parse_model_identifier(model_name)
+    if explicit_section:
+        return explicit_section
+    if sec_from_id:
+        return sec_from_id
+
+    base_name = m_name.split("_seed")[0] if "_seed" in m_name else m_name
+
+    cfg_matches = list((REPO_ROOT / "configs").glob(f"**/{base_name}.yaml"))
     if cfg_matches:
         return cfg_matches[0].parent.name
 
     if data_dir and data_dir.exists():
-        ep_matches = list(data_dir.glob(f"**/{model_name}/episodes.csv"))
+        ep_matches = list(data_dir.glob(f"**/{m_name}/episodes.csv"))
         for ep in ep_matches:
             if not ep.parent.parent.name.startswith("eval_") and ep.parent.parent.name != data_dir.name:
                 return ep.parent.parent.name
 
-    exp_matches = list((REPO_ROOT / "experiments").glob(f"**/{model_name}/seed_*"))
+    exp_matches = list((REPO_ROOT / "experiments").glob(f"**/{base_name}/seed_*"))
     if exp_matches:
         return exp_matches[0].parent.parent.name
 
@@ -114,21 +136,23 @@ def discover_evaluation_datasets(data_dir: Path, files: Optional[List[str]] = No
     datasets_map: Dict[str, Dict[str, pd.DataFrame]] = {}
 
     if files:
-        csv_paths = [(Path(f), None) for f in files]
+        csv_paths = [(Path(f), None, None) for f in files]
     else:
         csv_paths = []
         # 1. Explorar subdirectorios particionados (eval_200, eval_300, etc.) recursivamente
         for part_dir in sorted(data_dir.glob("eval_*")):
             if part_dir.is_dir():
                 for sub in sorted(part_dir.glob("**/episodes.csv")):
-                    csv_paths.append((sub, part_dir.name))
+                    sec = sub.parent.parent.name if sub.parent.parent != part_dir and not sub.parent.parent.name.startswith("eval_") else None
+                    csv_paths.append((sub, part_dir.name, sec))
 
         # 2. Si data_dir apunta directamente a una partición o raíz
         if not csv_paths:
             for sub in sorted(data_dir.glob("**/episodes.csv")):
-                csv_paths.append((sub, data_dir.name if data_dir.name.startswith("eval_") else None))
+                sec = sub.parent.parent.name if not sub.parent.parent.name.startswith("eval_") and sub.parent.parent != data_dir else None
+                csv_paths.append((sub, data_dir.name if data_dir.name.startswith("eval_") else None, sec))
 
-    for p, known_tag in csv_paths:
+    for p, known_tag, known_sec in csv_paths:
         if not p.exists() or p.is_dir():
             continue
         try:
@@ -147,6 +171,11 @@ def discover_evaluation_datasets(data_dir: Path, files: Optional[List[str]] = No
             model_name = p.stem.replace("_episodes", "")
             df["agent"] = model_name
 
+        # Determinar sección
+        sec = known_sec
+        if not sec and p.parent.parent.name != data_dir.name and not p.parent.parent.name.startswith("eval_"):
+            sec = p.parent.parent.name
+
         # Asegurar coordenadas si no existieran
         if "target_x" not in df.columns and ref_coords:
             df["target_x"] = df["episode_id"].map(lambda ep: ref_coords.get(int(ep), (0.0, 0.0))[0])
@@ -162,7 +191,12 @@ def discover_evaluation_datasets(data_dir: Path, files: Optional[List[str]] = No
         if d_tag not in datasets_map:
             datasets_map[d_tag] = {}
 
-        # Priorizar no sobreescribir si ya existe en esa partición
+        # 1. Indexar con clave calificada si existe sección
+        if sec:
+            qualified_key = f"{sec}/{model_name}"
+            datasets_map[d_tag][qualified_key] = df
+
+        # 2. Indexar con clave simple (alias directo)
         if model_name not in datasets_map[d_tag]:
             datasets_map[d_tag][model_name] = df
 
@@ -206,13 +240,66 @@ def load_evaluation_data(data_dir: Path, files: Optional[List[str]] = None,
     return dfs_by_model, all_concat
 
 
-def load_sample_trajectories(data_dir: Path, model_name: str, dataset_tag: Optional[str] = None) -> Optional[pd.DataFrame]:
+def resolve_model_in_partition(
+    part_models_dict: Dict[str, pd.DataFrame],
+    model_spec: str,
+    default_section: Optional[str] = None,
+    data_dir: Optional[Path] = None
+) -> Tuple[str, str, pd.DataFrame]:
+    """
+    Resuelve un identificador de modelo (simple 'PPO_7' o calificado 'PPO_eval_500k/PPO_7')
+    dentro del diccionario de modelos de una partición evaluada.
+    Retorna (nombre_modelo, seccion, dataframe).
+    Lanza ValueError ante ambigüedad entre homónimos o KeyError si no existe.
+    """
+    m_name, sec = parse_model_identifier(model_spec, default_section)
+
+    # 1. Búsqueda con sección calificada o explícita
+    if sec:
+        qual_key = f"{sec}/{m_name}"
+        if qual_key in part_models_dict:
+            return m_name, sec, part_models_dict[qual_key]
+        if m_name in part_models_dict:
+            cand_sec = get_model_section(m_name, data_dir, explicit_section=sec)
+            if cand_sec == sec:
+                return m_name, sec, part_models_dict[m_name]
+        raise KeyError(f"No se encontró el modelo calificado '{qual_key}' en la partición evaluada.")
+
+    # 2. Búsqueda sin sección: detectar coincidencias calificadas exactas
+    qual_matches = [k for k in part_models_dict.keys() if k.endswith(f"/{m_name}")]
+
+    if len(qual_matches) > 1:
+        secs_found = [k.split("/")[0] for k in qual_matches]
+        raise ValueError(
+            f"Ambigüedad detectada para el modelo '{m_name}'. Existen múltiples instancias en las secciones: {secs_found}.\n"
+            f"Especifique la ruta calificada (ej. '--model {secs_found[0]}/{m_name}') o utilice el flag '--section {secs_found[0]}'."
+        )
+
+    if len(qual_matches) == 1:
+        matched_sec = qual_matches[0].split("/")[0]
+        return m_name, matched_sec, part_models_dict[qual_matches[0]]
+
+    if m_name in part_models_dict:
+        inferred_sec = get_model_section(m_name, data_dir)
+        return m_name, inferred_sec, part_models_dict[m_name]
+
+    raise KeyError(f"El modelo '{m_name}' no existe en la partición evaluada. Disponibles: {list(part_models_dict.keys())}")
+
+
+def load_sample_trajectories(data_dir: Path, model_name: str, dataset_tag: Optional[str] = None, section: Optional[str] = None) -> Optional[pd.DataFrame]:
     """Carga sample_trajectories.csv buscando en la partición jerárquica o en la raíz."""
+    m_name, sec_from_id = parse_model_identifier(model_name, section)
     candidates = []
+    if sec_from_id:
+        if dataset_tag:
+            candidates.append(data_dir / dataset_tag / sec_from_id / m_name / "sample_trajectories.csv")
+        candidates.extend(list(data_dir.glob(f"eval_*/{sec_from_id}/{m_name}/sample_trajectories.csv")))
+        candidates.append(data_dir / sec_from_id / m_name / "sample_trajectories.csv")
+
     if dataset_tag:
-        candidates.extend(list((data_dir / dataset_tag).glob(f"**/{model_name}/sample_trajectories.csv")))
-    candidates.extend(list(data_dir.glob(f"eval_*/**/{model_name}/sample_trajectories.csv")))
-    candidates.extend(list(data_dir.glob(f"**/{model_name}/sample_trajectories.csv")))
+        candidates.extend(list((data_dir / dataset_tag).glob(f"**/{m_name}/sample_trajectories.csv")))
+    candidates.extend(list(data_dir.glob(f"eval_*/**/{m_name}/sample_trajectories.csv")))
+    candidates.extend(list(data_dir.glob(f"**/{m_name}/sample_trajectories.csv")))
     for p in candidates:
         if p.exists() and p.is_file():
             try:
@@ -665,9 +752,30 @@ def resolve_requested_metrics(metric_arg: Optional[str]) -> List[str]:
     return resolved
 
 
-def load_model_training_telemetry(model_name: str, eval_log: Optional[Path] = None) -> Tuple[List[Path], List[Tuple[int, np.ndarray, np.ndarray, Optional[np.ndarray]]]]:
+def load_model_training_telemetry(model_name: str, eval_log: Optional[Path] = None, section: Optional[str] = None) -> Tuple[List[Path], List[Tuple[int, np.ndarray, np.ndarray, Optional[np.ndarray]]]]:
     """Recupera los directorios de logs de TensorBoard y las curvas de evaluación (evaluations.npz) para un modelo."""
-    all_seed_dirs = sorted(list((REPO_ROOT / "experiments").glob(f"**/{model_name}/seed_*")))
+    m_name, sec = parse_model_identifier(model_name, section)
+    target_seed = None
+    if "_seed" in m_name:
+        base_name, seed_part = m_name.split("_seed", 1)
+        seed_part = seed_part.lstrip("_")
+        target_seed = f"seed_{seed_part}"
+    else:
+        base_name = m_name
+
+    if sec:
+        if target_seed:
+            s_cand = REPO_ROOT / "experiments" / sec / base_name / target_seed
+            all_seed_dirs = [s_cand] if s_cand.exists() else sorted(list((REPO_ROOT / "experiments").glob(f"**/{sec}/{base_name}/{target_seed}")))
+        else:
+            all_seed_dirs = sorted(list((REPO_ROOT / "experiments" / sec / base_name).glob("seed_*")))
+            if not all_seed_dirs:
+                all_seed_dirs = sorted(list((REPO_ROOT / "experiments").glob(f"**/{sec}/{base_name}/seed_*")))
+    else:
+        if target_seed:
+            all_seed_dirs = sorted(list((REPO_ROOT / "experiments").glob(f"**/{base_name}/{target_seed}")))
+        else:
+            all_seed_dirs = sorted(list((REPO_ROOT / "experiments").glob(f"**/{base_name}/seed_*")))
     deduped_seeds: Dict[int, Path] = {}
     for s_idx, s_dir in enumerate(all_seed_dirs):
         try:
@@ -1824,37 +1932,39 @@ def plot_comparative_learning_curves_metric(
 def _render_model_suite(df_m: pd.DataFrame, model_name: str, model_fig_dir: Path,
                         trajs_by_model: Dict[str, Optional[pd.DataFrame]],
                         eval_log: Optional[Path] = None,
-                        metrics: Optional[List[str]] = None) -> None:
+                        metrics: Optional[List[str]] = None,
+                        section: Optional[str] = None) -> None:
     """Genera el conjunto de figuras individuales para un modelo específico (filtrable por métrica)."""
+    m_name, sec = parse_model_identifier(model_name, section)
     model_fig_dir.mkdir(parents=True, exist_ok=True)
-    print(f"\n--- Generando figuras individuales para: {model_name} en {model_fig_dir} ---")
+    print(f"\n--- Generando figuras individuales para: {m_name} (sección: {sec or 'N/A'}) en {model_fig_dir} ---")
 
     def want(key: str) -> bool:
         return metrics is None or key in metrics
 
     if want("success_rate"):
-        plot_model_success_rate(df_m, model_name, model_fig_dir / "success_rate.png")
+        plot_model_success_rate(df_m, m_name, model_fig_dir / "success_rate.png")
     if want("steady_state_error"):
-        plot_model_steady_state_error(df_m, model_name, model_fig_dir / "steady_state_error.png")
+        plot_model_steady_state_error(df_m, m_name, model_fig_dir / "steady_state_error.png")
     if want("residual_velocity"):
-        plot_model_residual_velocity(df_m, model_name, model_fig_dir / "residual_velocity.png")
+        plot_model_residual_velocity(df_m, m_name, model_fig_dir / "residual_velocity.png")
     if want("settling_time"):
-        plot_model_settling_time(df_m, model_name, model_fig_dir / "settling_time.png")
+        plot_model_settling_time(df_m, m_name, model_fig_dir / "settling_time.png")
     if want("control_effort"):
-        plot_model_control_effort(df_m, model_name, model_fig_dir / "control_effort.png")
+        plot_model_control_effort(df_m, m_name, model_fig_dir / "control_effort.png")
     if want("reward_components"):
-        plot_model_reward_components(df_m, model_name, model_fig_dir / "reward_components.png")
+        plot_model_reward_components(df_m, m_name, model_fig_dir / "reward_components.png")
     if want("pareto_tradeoff"):
-        plot_model_pareto_tradeoff(df_m, model_name, model_fig_dir / "pareto_tradeoff.png")
+        plot_model_pareto_tradeoff(df_m, m_name, model_fig_dir / "pareto_tradeoff.png")
     if want("spatial_error"):
-        plot_model_workspace_spatial_error(df_m, model_name, model_fig_dir / "workspace_spatial_error.png")
+        plot_model_workspace_spatial_error(df_m, m_name, model_fig_dir / "workspace_spatial_error.png")
 
     if want("temporal_trajectories") and trajs_by_model.get(model_name) is not None:
-        plot_model_temporal_trajectory(trajs_by_model[model_name], model_name,
+        plot_model_temporal_trajectory(trajs_by_model[model_name], m_name,
                                       model_fig_dir / "temporal_trajectory_episode.png", episode_id=0)
 
     # Curvas de entrenamiento
-    log_dirs, eval_data_list = load_model_training_telemetry(model_name, eval_log)
+    log_dirs, eval_data_list = load_model_training_telemetry(m_name, eval_log, section=sec)
 
     needs_learning = want("learning_return") or want("learning_success_rate")
     if eval_data_list and (metrics is None or needs_learning):
@@ -1911,7 +2021,8 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
                        files: Optional[List[str]] = None,
                        dataset_filter: Optional[str] = None,
                        strict: bool = False,
-                       metrics: Optional[str] = None) -> None:
+                       metrics: Optional[str] = None,
+                       section: Optional[str] = None) -> None:
     """Ejecuta el protocolo completo de generación modular de gráficas independientes particionadas por dataset."""
     datasets_map = discover_evaluation_datasets(data_dir, files)
     if not datasets_map and not compare_models:
@@ -1940,32 +2051,58 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
         is_mixed = False
         chosen_partition = target_partition or "eval_300"
         chosen_dfs = {}
+        model_sec_map = {}
+        model_disp_names = {}
 
         # 1.1 Si se especificó explícitamente el dataset
         if target_partition:
             chosen_partition = target_partition
             if target_partition in datasets_map:
-                avail_models = datasets_map[target_partition]
-                missing = [m for m in compare_models if m not in avail_models]
-                if missing and has_eval_metrics:
-                    raise ValueError(f"[ERROR] Los siguientes modelos no cuentan con evaluación en {target_partition}: {missing}. Disponibles: {list(avail_models.keys())}")
-                chosen_dfs = {m: avail_models[m].copy() for m in compare_models if m in avail_models}
+                avail_dict = datasets_map[target_partition]
+                for m_spec in compare_models:
+                    try:
+                        m_name, m_sec, df_found = resolve_model_in_partition(avail_dict, m_spec, default_section=section, data_dir=data_dir)
+                        chosen_dfs[m_spec] = df_found.copy()
+                        model_sec_map[m_spec] = m_sec
+                        model_disp_names[m_spec] = m_name
+                    except (KeyError, ValueError) as err:
+                        if has_eval_metrics:
+                            raise ValueError(f"[ERROR] No se pudo resolver '{m_spec}' en {target_partition}: {err}")
             elif has_eval_metrics:
                 raise ValueError(f"No existe la partición {target_partition} en {data_dir}. Disponibles: {list(datasets_map.keys())}")
         else:
-            # 1.2 Detectar automáticamente en qué partición coinciden todos los modelos
-            matching_partitions = [
-                d_tag for d_tag, m_dict in datasets_map.items()
-                if all(m in m_dict for m in compare_models)
-            ]
+            # 1.2 Detectar automáticamente partición coincidente
+            matching_partitions = []
+            for d_tag, m_dict in datasets_map.items():
+                all_found = True
+                for m_spec in compare_models:
+                    try:
+                        resolve_model_in_partition(m_dict, m_spec, default_section=section, data_dir=data_dir)
+                    except Exception:
+                        all_found = False
+                        break
+                if all_found:
+                    matching_partitions.append(d_tag)
 
             if matching_partitions:
                 chosen_partition = "eval_300" if "eval_300" in matching_partitions else matching_partitions[0]
-                chosen_dfs = {m: datasets_map[chosen_partition][m].copy() for m in compare_models}
+                avail_dict = datasets_map[chosen_partition]
+                for m_spec in compare_models:
+                    m_name, m_sec, df_found = resolve_model_in_partition(avail_dict, m_spec, default_section=section, data_dir=data_dir)
+                    chosen_dfs[m_spec] = df_found.copy()
+                    model_sec_map[m_spec] = m_sec
+                    model_disp_names[m_spec] = m_name
             else:
                 where_models = {}
-                for m in compare_models:
-                    where_models[m] = [d_tag for d_tag, m_dict in datasets_map.items() if m in m_dict]
+                for m_spec in compare_models:
+                    parts = []
+                    for d_tag, m_dict in datasets_map.items():
+                        try:
+                            resolve_model_in_partition(m_dict, m_spec, default_section=section, data_dir=data_dir)
+                            parts.append(d_tag)
+                        except Exception:
+                            pass
+                    where_models[m_spec] = parts
 
                 missing_models = [m for m, parts in where_models.items() if not parts]
                 if missing_models and has_eval_metrics:
@@ -1995,14 +2132,16 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
                         ])
                         raise ValueError("\n".join(err_lines))
 
-                    # Modo no bloqueante: emitir advertencia metodológica y generar figuras anotando el tamaño muestral
+                    # Modo no bloqueante: emitir advertencia metodológica
                     is_mixed = True
                     chosen_partition = "eval_mixed"
-                    chosen_dfs = {}
-                    for m in compare_models:
-                        parts = where_models[m]
+                    for m_spec in compare_models:
+                        parts = where_models[m_spec]
                         pref_part = "eval_300" if "eval_300" in parts else ("eval_200" if "eval_200" in parts else parts[0])
-                        chosen_dfs[m] = datasets_map[pref_part][m].copy()
+                        m_name, m_sec, df_found = resolve_model_in_partition(datasets_map[pref_part], m_spec, default_section=section, data_dir=data_dir)
+                        chosen_dfs[m_spec] = df_found.copy()
+                        model_sec_map[m_spec] = m_sec
+                        model_disp_names[m_spec] = m_name
 
                     warn_lines = [
                         "\n" + "=" * 78,
@@ -2014,8 +2153,8 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
                         "",
                         " Detalle de particiones asignadas por modelo:"
                     ]
-                    for m, df in chosen_dfs.items():
-                        warn_lines.append(f"   • {m:10s} -> N = {len(df)} episodios")
+                    for m_spec, df in chosen_dfs.items():
+                        warn_lines.append(f"   • {m_spec:15s} -> N = {len(df)} episodios")
                     warn_lines.extend([
                         "",
                         " Nota: Para forzar consistencia homogénea estricta en el informe final use --strict.",
@@ -2026,12 +2165,14 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
                     chosen_partition = "eval_300"
 
         part_fig_dir = resolve_figures_dir(out_dir, chosen_partition)
-        sections = {m: get_model_section(m, data_dir) for m in compare_models}
-        valid_secs = set(filter(None, sections.values()))
+        all_secs = [model_sec_map.get(m, get_model_section(m, data_dir, section)) for m in compare_models]
+        valid_secs = set(filter(None, all_secs))
+        comp_slug = "_".join(m.replace("/", "_") for m in compare_models)
+
         if len(valid_secs) == 1:
-            target_comparative_dir = part_fig_dir / list(valid_secs)[0] / "_".join(compare_models)
+            target_comparative_dir = part_fig_dir / list(valid_secs)[0] / comp_slug
         else:
-            target_comparative_dir = part_fig_dir / "comparisons" / "_".join(compare_models)
+            target_comparative_dir = part_fig_dir / "comparisons" / comp_slug
         target_comparative_dir.mkdir(parents=True, exist_ok=True)
 
         row_counts = {m: len(df) for m, df in chosen_dfs.items()} if chosen_dfs else {}
@@ -2044,23 +2185,33 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
 
         trajs_by_model = {}
         if metrics is None or "temporal_trajectories" in requested_metrics:
-            trajs_by_model = {m: load_sample_trajectories(data_dir, m, None) for m in compare_models}
+            for m_spec in compare_models:
+                m_name, m_sec = parse_model_identifier(m_spec, section)
+                trajs_by_model[m_spec] = load_sample_trajectories(data_dir, m_name, None, section=m_sec)
 
-        # Generar figuras individuales SOLO si no se especificó un filtro de métricas (suite completa)
+        # Generar figuras individuales si no se filtraron métricas específicas
         if metrics is None:
-            for m in compare_models:
-                if m in chosen_dfs:
-                    sec = get_model_section(m, data_dir)
-                    m_dir = part_fig_dir / sec / m if sec else part_fig_dir / m
-                    _render_model_suite(chosen_dfs[m], m, m_dir, trajs_by_model, eval_log)
+            for m_spec in compare_models:
+                if m_spec in chosen_dfs:
+                    m_name, m_sec = parse_model_identifier(m_spec, section)
+                    m_sec = m_sec or model_sec_map.get(m_spec, "")
+                    m_dir = part_fig_dir / m_sec / m_name if m_sec else part_fig_dir / m_name
+                    _render_model_suite(chosen_dfs[m_spec], m_name, m_dir, trajs_by_model, eval_log, section=m_sec)
 
         # Preparar DataFrames para las figuras comparativas de evaluación
         plot_dfs = {}
         sub_all_df = pd.DataFrame()
+        # Verificar si hay homónimos o secciones cruzadas para desambiguar etiquetas en gráficos
+        disp_names_list = [model_disp_names.get(m, parse_model_identifier(m)[0]) for m in compare_models]
+        has_duplicate_names = len(disp_names_list) != len(set(disp_names_list))
+
         if has_eval_metrics and chosen_dfs:
-            for m, df in chosen_dfs.items():
+            for m_spec, df in chosen_dfs.items():
                 df_plot = df.copy()
-                label_with_n = f"{m} (N={len(df_plot)})" if is_mixed else m
+                m_name = model_disp_names.get(m_spec, parse_model_identifier(m_spec)[0])
+                m_sec = model_sec_map.get(m_spec, "")
+                label_base = f"{m_sec}/{m_name}" if (has_duplicate_names or len(valid_secs) > 1) and m_sec else m_name
+                label_with_n = f"{label_base} (N={len(df_plot)})" if is_mixed else label_base
                 df_plot["agent"] = label_with_n
                 plot_dfs[label_with_n] = df_plot
             sub_all_df = pd.concat(list(plot_dfs.values()), ignore_index=True)
@@ -2105,21 +2256,25 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
                             needed_tags.append(t)
 
             models_tb_dict = {}
-            for m in compare_models:
-                l_dirs, _ = load_model_training_telemetry(m, eval_log)
-                models_tb_dict[m] = extract_tensorboard_scalars(l_dirs, needed_tags)
+            for m_spec in compare_models:
+                m_name, m_sec = parse_model_identifier(m_spec, section)
+                m_sec = m_sec or model_sec_map.get(m_spec)
+                label_base = f"{m_sec}/{m_name}" if (has_duplicate_names or len(valid_secs) > 1) and m_sec else m_name
+                l_dirs, _ = load_model_training_telemetry(m_name, eval_log, section=m_sec)
+                models_tb_dict[label_base] = extract_tensorboard_scalars(l_dirs, needed_tags)
 
+            comp_labels = list(models_tb_dict.keys())
             for m_key in requested_metrics:
                 if CANONICAL_METRICS[m_key]["category"] == "optimizer":
                     cand_tags = CANONICAL_METRICS[m_key].get("tags", [CANONICAL_METRICS[m_key].get("tag")])
                     scalar_data = {}
-                    for m in compare_models:
+                    for lbl in comp_labels:
                         found_series = []
                         for ct in cand_tags:
-                            if ct in models_tb_dict[m] and models_tb_dict[m][ct]:
-                                found_series = models_tb_dict[m][ct]
+                            if ct in models_tb_dict[lbl] and models_tb_dict[lbl][ct]:
+                                found_series = models_tb_dict[lbl][ct]
                                 break
-                        scalar_data[m] = found_series
+                        scalar_data[lbl] = found_series
                     out_f = target_comparative_dir / CANONICAL_METRICS[m_key]["filename"]
                     plot_comparative_optimizer_metric(scalar_data, m_key, out_f)
 
@@ -2129,9 +2284,12 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
         # 3. Métricas de Curvas de Aprendizaje (Evaluations.npz)
         if has_learn_metrics:
             models_eval_data = {}
-            for m in compare_models:
-                _, e_list = load_model_training_telemetry(m, eval_log)
-                models_eval_data[m] = e_list
+            for m_spec in compare_models:
+                m_name, m_sec = parse_model_identifier(m_spec, section)
+                m_sec = m_sec or model_sec_map.get(m_spec)
+                label_base = f"{m_sec}/{m_name}" if (has_duplicate_names or len(valid_secs) > 1) and m_sec else m_name
+                _, e_list = load_model_training_telemetry(m_name, eval_log, section=m_sec)
+                models_eval_data[label_base] = e_list
 
             for m_key in requested_metrics:
                 if CANONICAL_METRICS[m_key]["category"] == "learning_curve":
@@ -2148,32 +2306,44 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
 
     for part in active_partitions:
         part_models_dict = datasets_map[part]
+        part_fig_dir = resolve_figures_dir(out_dir, part)
+        part_fig_dir.mkdir(parents=True, exist_ok=True)
+
         if specific_model:
-            if specific_model not in part_models_dict:
+            try:
+                m_name, sec_resolved, df_m = resolve_model_in_partition(part_models_dict, specific_model, default_section=section, data_dir=data_dir)
+            except (KeyError, ValueError) as e:
                 if target_partition:
-                    raise ValueError(f"El modelo {specific_model} no existe en {part}. Disponibles: {list(part_models_dict.keys())}")
+                    raise ValueError(f"Error resolviendo modelo {specific_model} en {part}: {e}")
                 continue
-            models_to_run = [specific_model]
+
+            models_to_run = [(m_name, sec_resolved, df_m)]
         else:
-            models_to_run = sorted(list(part_models_dict.keys()))
+            # En lote completo, evitar duplicados: recorrer únicamente claves canónicas
+            # Si una clave no contiene '/' pero tiene su versión calificada, se omite la simple
+            canonical_keys = [k for k in part_models_dict.keys() if "/" in k]
+            if not canonical_keys:
+                canonical_keys = list(part_models_dict.keys())
+            
+            models_to_run = []
+            for k in sorted(canonical_keys):
+                m_name, sec_k = parse_model_identifier(k, section)
+                sec_k = sec_k or get_model_section(m_name, data_dir)
+                models_to_run.append((m_name, sec_k, part_models_dict[k]))
 
         if not models_to_run:
             continue
-
-        part_fig_dir = resolve_figures_dir(out_dir, part)
-        part_fig_dir.mkdir(parents=True, exist_ok=True)
 
         print(f"\n{'='*75}")
         print(f" PROCESANDO PARTICIÓN: {part} ({len(models_to_run)} modelos)")
         print(f" Directorio de salida: {part_fig_dir}")
         print(f"{'='*75}")
 
-        trajs_by_model = {m: load_sample_trajectories(data_dir, m, part) for m in models_to_run}
+        trajs_by_model = {m: load_sample_trajectories(data_dir, m, part, section=s) for m, s, _ in models_to_run}
 
-        for m in models_to_run:
-            sec = get_model_section(m, data_dir)
-            m_dir = part_fig_dir / sec / m if sec else part_fig_dir / m
-            _render_model_suite(part_models_dict[m], m, m_dir, trajs_by_model, eval_log, metrics=requested_metrics if metrics else None)
+        for m_name, sec, df_m in models_to_run:
+            m_dir = part_fig_dir / sec / m_name if sec else part_fig_dir / m_name
+            _render_model_suite(df_m, m_name, m_dir, trajs_by_model, eval_log, metrics=requested_metrics if metrics else None, section=sec)
 
     print(f"\n>>> [PLOT OK] Proceso completado exitosamente.")
 
@@ -2187,9 +2357,11 @@ def main() -> None:
     parser.add_argument("--data-dir", type=str, default="reports/data/evaluation",
                         help="Directorio base que contiene las evaluaciones (subcarpetas o archivos CSV).")
     parser.add_argument("--model", type=str, default=None,
-                        help="Nombre del modelo específico para graficar únicamente sus figuras (ej. PPO_2).")
+                        help="Nombre o ruta calificada del modelo para graficar únicamente sus figuras (ej. PPO_2 o PPO_eval_500k/PPO_7).")
+    parser.add_argument("--section", type=str, default=None,
+                        help="Sección o fase a la que pertenece el modelo (ej. PPO_eval_500k, entorno, SAC_eval_300k).")
     parser.add_argument("--compare", type=str, default=None,
-                        help="Lista de modelos separados por comas para generar comparativa combinada exclusiva (ej. PPO_1,PPO_2,SAC_1).")
+                        help="Lista de modelos (simples o calificados) separados por comas para generar comparativa combinada exclusiva (ej. entorno/PPO_7,PPO_eval_500k/PPO_7).")
     parser.add_argument("--dataset", type=str, default=None,
                         help="Filtrar por tamaño de dataset de evaluación: 200, 300, eval_200, eval_300 o all.")
     parser.add_argument("--metric", "--metrics", dest="metrics", type=str, default=None,
@@ -2220,6 +2392,7 @@ def main() -> None:
         dataset_filter=args.dataset,
         strict=args.strict,
         metrics=args.metrics,
+        section=args.section,
     )
 
 
