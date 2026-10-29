@@ -1,0 +1,51 @@
+# ==============================================================================
+# CONFIGURACIÓN DEL AGENTE: PPO_16 (Fase D)
+# ==============================================================================
+# Ajuste ultra-conservador combinando el horizonte de PPO_7 con ultra-baja tasa:
+#
+# 1. learning_rate: 0.00002 (2e-5) -> Tasa ultra-suave (5x menor que PPO_7 y 17x
+#                                     menor que PPO_14). Garantiza que el optimizador
+#                                     no penalice abruptamente la junta 2, permitiendo
+#                                     una articulación armónica sin rigidez.
+# 2. gamma: 0.98                    -> Factor de descuento canónico de PPO_7:
+#                                     horizonte efectivo de 50 pasos (1 / (1 - 0.98) = 50),
+#                                     reduciendo la varianza del estimador de ventajas GAE.
+# 3. norm_reward: true              -> Normalización dinámica de retornos activa.
+# 4. hidden_activation: relu        -> Arquitectura profunda [256, 256, 128] no saturante.
+# 5. ent_coef: 0.004                -> Mantiene la búsqueda motora para posturas dobladas.
+# ==============================================================================
+experiment:
+  description: PPO_16 - Ultra-baja tasa (lr=2e-5, gamma=0.98, norm_reward=true, ReLU, 500k timesteps)
+
+# Referencia al entorno físico común
+env_config: configs/environment.yaml
+
+# Preprocesamiento y normalización
+normalization:
+  norm_obs: true               # Estandariza escalas de entrada (radianes, velocidades, distancias)
+  norm_reward: true            # Normalización dinámica de retornos
+  clip_obs: 10.0
+
+# Hiperparámetros del algoritmo PPO
+ppo:
+  learning_rate: 0.00002       # Tasa ultra-baja para máxima estabilidad en la articulación del codo
+  n_steps: 1024                # Tamaño de rollout por entorno (4096 pasos totales con 4 envs)
+  batch_size: 128              # Tamaño de minilote equilibrado (32 minilotes por época)
+  n_epochs: 10                 # Épocas de optimización por cada rollout
+  gamma: 0.98                  # Factor de descuento de baja varianza: 1 / (1 - 0.98) = 50 pasos
+  gae_lambda: 0.95             # Factor GAE estándar de compromiso sesgo-varianza
+  clip_range: 0.2              # Rango de recorte canónico conservador
+  ent_coef: 0.004              # Exploración activa para evitar colapso prematuro de varianza motora
+  max_grad_norm: 0.5           # Amortigua gradientes para evitar impulsos bruscos de torque
+  num_envs: 4                  # Entornos concurrentes
+
+  net_arch:
+    layers: [256, 256, 128]    # Arquitectura profunda de alta expresividad cinemática
+    hidden_activation: relu    # No saturante: evita el desvanecimiento de gradiente en posturas distantes
+
+# Parámetros del proceso de entrenamiento
+training:
+  total_timesteps: 500000      # Presupuesto amplio para permitir convergencia con tasa ultra-baja
+  checkpoint_freq: 50000
+  eval_freq: 5000
+  n_eval_episodes: 15

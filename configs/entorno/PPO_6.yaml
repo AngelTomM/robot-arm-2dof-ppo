@@ -3,7 +3,6 @@
 # ==============================================================================
 experiment:
   description: PPO con recompensa continua cuadratica (Lyapunov/LQR) y horizonte fijo sin hold (MDP)
-  phase: phase_D
 
 # Referencia al entorno físico común
 env_config: configs/environment.yaml

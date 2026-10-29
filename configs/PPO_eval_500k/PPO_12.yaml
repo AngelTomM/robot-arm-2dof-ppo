@@ -1,0 +1,54 @@
+# ==============================================================================
+# CONFIGURACIÓN DEL AGENTE: PPO_12 (Fase D) - PEOR CONFIGURACIÓN
+# ==============================================================================
+# Esta configuración acumula de forma deliberada todas las patologías
+# que destruyen el rendimiento para el objetivo requerido:
+#
+# 1. norm_reward: false -> Desvanece el gradiente cerca del blanco, creando
+#                          una gran zona muerta con error estacionario (e_ss >> 0).
+# 2. norm_obs: false    -> Desbalancea las escalas entre radianes, m/s y metros.
+# 3. gamma: 0.85        -> Agente extremadamente miope; rehúsa viajar a cuadrantes
+#                          opuestos porque el costo transitorio supera el horizonte.
+# 4. ent_coef: 0.05     -> Varianza residual masiva (sigma >> 0); produce un
+#                          temblor/jitter violento que impide quedarse quieto en el blanco.
+# 5. learning_rate: 0.002 y max_grad_norm: 5.0 -> Ganancia motora desmedida y
+#                          saltos bruscos que inducen sobreimpulsos severos y chatter.
+# 6. net_arch: [32, 32] -> Capacidad insuficiente para aproximar la cinemática
+#                          no lineal en 360° y posturas de flexión profunda.
+# 7. total_timesteps: 50000 -> Presupuesto insuficiente para consolidar control fino.
+# ==============================================================================
+experiment:
+  description: PPO_12 - Peor configuracion (miope gamma=0.85, jitter masivo ent=0.05, zona muerta norm_rew=false, red diminuta [32,32], lr agresivo)
+
+# Referencia al entorno físico común
+env_config: configs/environment.yaml
+
+# Preprocesamiento y normalización
+normalization:
+  norm_obs: false              # Desactiva normalización: distorsión de escalas en las entradas
+  norm_reward: false           # Sin normalización: anula gradientes finos cerca del target (e_ss grande)
+  clip_obs: 10.0
+
+# Hiperparámetros del algoritmo PPO
+ppo:
+  learning_rate: 0.002         # Tasa excesiva: genera sobrepasos violentos, saturación e inestabilidad
+  n_steps: 128                 # Buffer diminuto (512 pasos con 4 envs): alta varianza y visión sesgada
+  batch_size: 32               # Minilotes pequeños y ruidosos
+  n_epochs: 4                  # Pocas pasadas de optimización
+  gamma: 0.85                  # Horizonte miope: el agente no invierte energía en ir al cuadrante opuesto
+  gae_lambda: 0.80             # Estimación de ventaja con alto sesgo
+  clip_range: 0.4              # Recorte demasiado permisivo: permite desestabilizar la política
+  ent_coef: 0.05               # Entropía excesiva: induce vibración y temblor motor constante
+  max_grad_norm: 5.0           # Recorte de gradiente laxo: permite sacudidas bruscas de torque
+  num_envs: 4
+
+  net_arch:
+    layers: [32, 32]           # Red minúscula: incapaz de resolver cinemática acoplada en varios cuadrantes
+    hidden_activation: relu    # Derivada con esquina dura en cero, sin suavizado cerca del reposo
+
+# Parámetros del proceso de entrenamiento
+training:
+  total_timesteps: 50000       # Presupuesto minúsculo: se interrumpe antes de aprender estabilización
+  checkpoint_freq: 10000
+  eval_freq: 5000
+  n_eval_episodes: 15

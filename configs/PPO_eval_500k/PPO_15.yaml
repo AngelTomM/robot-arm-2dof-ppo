@@ -1,0 +1,49 @@
+# ==============================================================================
+# CONFIGURACIÓN DEL AGENTE: PPO_15 (Fase D)
+# ==============================================================================
+# Basado en la arquitectura de PPO_14 con tasa de aprendizaje conservadora:
+#
+# 1. learning_rate: 0.00005 -> Tasa reducida a la mitad respecto a PPO_7 (5e-5).
+#                              Permite que las correcciones de peso sobre la junta 2
+#                              (baja inercia I_2 << I_1) sean extremadamente suaves,
+#                              evitando el bloqueo del codo por picos de penalización.
+# 2. norm_reward: true       -> Normalización dinámica de retornos activa.
+# 3. hidden_activation: relu -> Función no saturante en las 3 capas densas [256, 256, 128].
+# 4. ent_coef: 0.004         -> Mantiene la búsqueda motora para posturas de flexión.
+# 5. gamma: 0.99             -> Factor de descuento alineado al horizonte de 100 pasos.
+# ==============================================================================
+experiment:
+  description: PPO_15 - PPO_14 con lr=5e-5 y norm_reward=true (suavidad articular en junta 2)
+
+# Referencia al entorno físico común
+env_config: configs/environment.yaml
+
+# Preprocesamiento y normalización
+normalization:
+  norm_obs: true               # Estandariza escalas de entrada (radianes, velocidades, distancias)
+  norm_reward: true            # Normalización dinámica de retornos solicitada
+  clip_obs: 10.0
+
+# Hiperparámetros del algoritmo PPO
+ppo:
+  learning_rate: 0.00005       # Tasa conservadora para evitar el congelamiento de la junta 2
+  n_steps: 1024                # Tamaño de rollout por entorno (4096 pasos totales con 4 envs)
+  batch_size: 128              # Tamaño de minilote equilibrado (32 minilotes por época)
+  n_epochs: 10                 # Épocas de optimización por cada rollout
+  gamma: 0.99                  # Factor de descuento alineado al horizonte de 100 pasos: 1 / (1 - 0.99) = 100
+  gae_lambda: 0.95             # Factor GAE estándar de compromiso sesgo-varianza
+  clip_range: 0.2              # Rango de recorte canónico conservador
+  ent_coef: 0.004              # Exploración activa para evitar colapso prematuro de varianza motora
+  max_grad_norm: 0.5           # Amortigua gradientes para evitar impulsos bruscos de torque
+  num_envs: 4                  # Entornos concurrentes
+
+  net_arch:
+    layers: [256, 256, 128]    # Arquitectura profunda de alta expresividad cinemática
+    hidden_activation: relu    # No saturante: evita el desvanecimiento de gradiente en posturas distantes
+
+# Parámetros del proceso de entrenamiento
+training:
+  total_timesteps: 500000      # Presupuesto para consolidar maniobra global y estabilización en el blanco
+  checkpoint_freq: 50000
+  eval_freq: 5000
+  n_eval_episodes: 15
