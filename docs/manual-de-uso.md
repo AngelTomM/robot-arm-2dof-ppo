@@ -188,7 +188,7 @@ El script [plot.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V
 ### 5.1 Sintaxis del Comando y Parámetros
 
 ```powershell
-python plot.py [--model <nombre_modelo>] [--compare <m1,m2,...>] [--dataset <200|300|all>] [--metric <metrica1,metrica2,...>] [--data-dir <directorio_datos>] [--out-dir <directorio_salida>] [--strict]
+python plot.py [--model <[seccion/]nombre_modelo>] [--section <seccion>] [--compare <m1,m2,...>] [--dataset <200|300|all>] [--metric <metrica1,metrica2,...>] [--data-dir <directorio_datos>] [--out-dir <directorio_salida>] [--strict]
 ```
 
 Comportamiento de los argumentos principales:
@@ -196,8 +196,9 @@ Comportamiento de los argumentos principales:
 * `--data-dir` (por defecto: `"reports/data/evaluation"`): Directorio base que contiene los datos tabulares. Explora recursivamente subdirectorios jerárquicos (`eval_*/<seccion>/<modelo>/`).
 * `--out-dir` (por defecto: `"reports"`): Directorio base para la salida gráfica. Se enruta automáticamente a `reports/figures_valid_200/` y `reports/figures_final_300/`.
 * `--dataset` (por defecto: `None`): Filtro de partición (`200`, `300`, `eval_200` o `eval_300`). Si se omite, procesa las particiones disponibles.
-* `--model` (por defecto: `None`): Genera figuras para el modelo indicado.
-* `--compare` (por defecto: `None`): Lista de modelos separados por comas para generar figuras comparativas consolidadas.
+* `--model` (por defecto: `None`): Genera figuras para el modelo indicado. Admite rutas calificadas por sección (`--model <seccion>/<modelo>`, ej. `--model PPO_eval_500k/PPO_7`) o nombres simples (`--model PPO_7`).
+* `--section` (por defecto: `None`): Especifica explícitamente la sección o fase del modelo para desambiguar homónimos entre distintas carpetas (ej. `--section PPO_eval_500k`).
+* `--compare` (por defecto: `None`): Lista de modelos separados por comas para generar figuras comparativas consolidadas. Admite modelos simples o calificados por sección (ej. `--compare entorno/PPO_7,PPO_eval_500k/PPO_7`).
 * `--metric`, `--metrics` (por defecto: `None`): Selecciona métricas específicas o macros:
   * **Optimizador (TensorBoard):** `explained_variance` (`ev`), `approx_kl` (`kl`), `value_loss` (`vl`), `policy_loss` (`pl`), `entropy`, `loss`, `optimizer_summary`.
   * **Curvas de Aprendizaje:** `learning_return` (`return`), `learning_success_rate` (`learning_sr`), `learning_curves`.
@@ -217,26 +218,30 @@ Las figuras se organizan en correspondencia con el árbol de secciones:
    `reports/<particion_figuras>/<seccion>/<modelo1>_<modelo2>/`
    *(Ejemplo: `reports/figures_final_300/PPO_eval_500k/PPO_17_PPO_15/`)*
 
-3. **Figuras comparativas inter-sección (modelos de categorías distintas):**
+3. **Figuras comparativas inter-sección (modelos de categorías distintas o calificados):**
    `reports/<particion_figuras>/comparisons/<modelo1>_<modelo2>/`
-   *(Ejemplo: `reports/figures_final_300/comparisons/PPO_NOM_SAC_NOM/`)*
+   *(Ejemplo: `reports/figures_final_300/comparisons/entorno_PPO_7_PPO_eval_500k_PPO_17/`)*
 
 ### 5.3 Ejemplos de Ejecución Gráfica
 
 ```powershell
-# 1. Generación de figuras individuales para un modelo
+# 1. Generación de figuras individuales para un modelo único
 python plot.py --dataset 300 --model PPO_17
 
-# 2. Generación rápida de una métrica específica de evaluación (error estacionario)
-python plot.py --dataset 300 --model PPO_17 --metric steady_state_error
+# 2. Generación con calificación por sección ante posibles homónimos
+python plot.py --dataset 300 --model PPO_eval_500k/PPO_7 --metric explained_variance
+python plot.py --dataset 300 --model PPO_7 --section entorno --metric steady_state_error
 
 # 3. Comparativa intra-sección (salida en reports/figures_final_300/PPO_eval_500k/PPO_17_PPO_15/)
 python plot.py --dataset 300 --compare PPO_17,PPO_15 --metric steady_state_error,pareto_tradeoff
 
-# 4. Comparativa inter-sección (salida en reports/figures_final_300/comparisons/PPO_NOM_SAC_NOM/)
-python plot.py --dataset 300 --compare PPO_NOM,SAC_NOM --metric e_ss,control_effort
+# 4. Comparativa inter-sección con desambiguación calificada
+python plot.py --dataset 300 --compare entorno/PPO_7,PPO_eval_500k/PPO_17 --metric steady_state_error
 
-# 5. Comparativa de curvas del optimizador (panel 2x3)
+# 5. Comparativa de homónimos entre distintas secciones
+python plot.py --dataset 300 --compare entorno/PPO_7,PPO_eval_500k/PPO_7 --metric e_ss,control_effort
+
+# 6. Comparativa de curvas del optimizador (panel 2x3)
 python plot.py --dataset 300 --compare PPO_17,PPO_15 --metric optimizer_summary
 ```
 

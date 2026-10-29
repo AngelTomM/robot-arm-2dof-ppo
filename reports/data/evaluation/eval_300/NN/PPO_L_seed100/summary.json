@@ -1,0 +1,27 @@
+{
+  "agent": "PPO_L_seed100",
+  "section": "NN",
+  "eval_set": "final_eval_set_300",
+  "eval_mode": "deterministic",
+  "metrics": {
+    "total_episodes": 300,
+    "successful_episodes": 18,
+    "success_rate": 0.06,
+    "success_rate_ci": "6.0% [3.8%, 9.3%] (18/300)",
+    "ci_low": 0.038286404220753745,
+    "ci_high": 0.09283936579201257,
+    "e_ss_mean": 0.08004573542724697,
+    "e_ss_median": 0.06711625262446638,
+    "e_ss_p90": 0.16749740174842456,
+    "final_dist_mean": 0.07548592232082238,
+    "v_ss_mean": 0.7367704703984417,
+    "v_ss_median": 0.4728023232225974,
+    "t_s_mean": 1.8582,
+    "t_s_median": 2.0,
+    "j_u_mean": 0.31103025930650685,
+    "j_lqr_mean": -13.969895367042291,
+    "j_lqr_median": -10.863552456175508,
+    "j_lqr_std": 11.604640410562457,
+    "mean_action_delta": 0.24307823191031716
+  }
+}
