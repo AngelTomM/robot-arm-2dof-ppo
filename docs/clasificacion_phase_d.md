@@ -2,7 +2,7 @@
 
 > **Contexto:** Consolidación de Fase D — Proceso de Decisión de Markov (MDP) Continuo Puro  
 > **Planta Física:** MuJoCo `Reacher-v5` (Gymnasium) con accionamiento por torque  
-> **Estado:** Completado y Verificado (14 pruebas unitarias superadas, pipeline consolidado)  
+> **Estado:** Completado y Verificado (26 pruebas unitarias superadas, pipeline consolidado)  
 
 ---
 
@@ -22,8 +22,7 @@ El proyecto migró formalmente desde una arquitectura experimental heterogénea 
 | Directorio / Archivo | Estado en Fase D | Función Operativa y Justificación Técnica |
 | :--- | :---: | :--- |
 | `configs/environment.yaml` | **SSOT (Activo)** | Fuente única de verdad física: dimensiones $L_1=0.10\text{ m}, L_2=0.11\text{ m}$, topes articulares, $\Delta t=0.01\text{ s}, \text{frame\_skip}=2$ y pesos de recompensa LQR. |
-| `configs/phase_D/prueba/` | **Activo** | Configuraciones independientes de agentes: `PPO_1.yaml`, `SAC_1.yaml` y `C0.yaml`. |
-| `configs/phase_D/smoke/` | **Activo** | Configuraciones reducidas de integración rápida (`PPO_smoke.yaml`, `SAC_smoke.yaml`). |
+| `configs/<seccion>/` | **Activo** | Configuraciones modulares de agentes según horizonte y objetivo: `entorno/`, `entorno_V2/`, `NN/`, `PPO_eval_*/`, `SAC_eval_*/` y `smoke/`. |
 | `src/arm2d_env.py` | **Activo** | Adaptador canónico de Gymnasium sobre MuJoCo `Reacher-v5` con recompensa cuadrática continua. |
 | `src/jacobian_controller.py`| **Activo** | Baseline analítico C0 reformulado a lazo cartesiano PD con transposición del Jacobiano para torque. |
 | `src/callbacks.py` | **Activo** | Callbacks de telemetría LQR para TensorBoard y sincronización estricta de `VecNormalize`. |
@@ -35,7 +34,7 @@ El proyecto migró formalmente desde una arquitectura experimental heterogénea 
 | `evaluate.py` | **Punto de Entrada** | Script de evaluación determinista de políticas entrenadas y del controlador C0. |
 | `plot.py` | **Punto de Entrada** | Procesamiento desacoplado de archivos CSV y generación de figuras de análisis mecatrónico. |
 | `interactive_render.py` | **Punto de Entrada** | Visualizador en tiempo real conectado al motor de renderizado OpenGL nativo de MuJoCo. |
-| `tests/` | **Activo** | Suite de 14 pruebas unitarias en pytest/unittest que validan parámetros, cinemática y normalización. |
+| `tests/` | **Activo** | Suite de 26 pruebas unitarias en pytest que validan parámetros, cinemática, normalización, métricas y resolución jerárquica. |
 | `scripts/` | **Eliminado** | Directorio redundante purgado; toda la funcionalidad fue consolidada en los scripts de la raíz. |
 | `src/visualization/` | **Eliminado** | Módulos obsoletos retirados en favor del procesamiento autónomo en `plot.py`. |
 | Subcarpetas en `src/` | **Eliminadas** | Carpetas que contenían un único archivo fueron aplanadas directamente dentro del paquete `src/`. |

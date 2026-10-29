@@ -5,7 +5,7 @@
 [![Gymnasium](https://img.shields.io/badge/Gymnasium-1.0%2B-informational.svg)](https://gymnasium.farama.org/)
 [![Stable-Baselines3](https://img.shields.io/badge/SB3-2.9%2B-green.svg)](https://stable-baselines3.readthedocs.io/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.14%2B-red.svg)](https://pytorch.org/)
-[![Tests](https://img.shields.io/badge/tests-14%20passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-26%20passed-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Entorno de simulación física, entrenamiento por refuerzo y evaluación comparativa de un manipulador robótico planar de 2 grados de libertad (2-DOF) accionado por torque. El sistema implementa algoritmos de aprendizaje por refuerzo profundo (**PPO** y **SAC** mediante Stable-Baselines3) y un controlador analítico operacional de referencia (**Controlador Cartesiano PD con Transposición del Jacobiano `C0`**).
@@ -64,10 +64,13 @@ La organización del proyecto respeta estrictamente el principio de Fuente Únic
 Fase_D_V3/
 ├── configs/
 │   ├── environment.yaml                     # SSOT física, cinemática y función base MDP
-│   ├── entorno/                             # Baseline y modelos de entorno (C0, PPO_1 a PPO_7, SAC_1, SAC_2)
-│   ├── PPO_eval/                            # Modelos y ablaciones PPO (PPO_10 a PPO_17)
-│   ├── SAC_eval/                            # Modelos de evaluación SAC
-│   ├── NN/                                  # Variaciones de arquitectura de red (PPO_S, PPO_L)
+│   ├── entorno/                             # Baseline y modelos de calibración (C0, PPO_1 a PPO_7, SAC_1, SAC_2)
+│   ├── entorno_V2/                          # Variaciones de dinámica y recompensa (PPO_7.2 a PPO_7.12)
+│   ├── NN/                                  # Variaciones de red y activaciones (PPO_S, PPO_M_*, PPO_L)
+│   ├── PPO_eval_300k/                       # Modelos PPO a 300k timesteps (PPO_NOM300, PPO_AGR, PPO_FAR, etc.)
+│   ├── PPO_eval_500k/                       # Modelos PPO a 500k timesteps (PPO_NOM, PPO_15, PPO_17, PPO_17_E)
+│   ├── PPO_eval_1M/                         # Modelos PPO a 1M timesteps (PPO_NOM_1M, PPO_17_1M, PPO_17_2M)
+│   ├── SAC_eval_300k/                       # Modelos SAC a 300k timesteps (SAC_NOM, SAC_4, SAC_BUF_*, etc.)
 │   └── smoke/                               # Configuraciones de pruebas rápidas (PPO_smoke, SAC_smoke)
 ├── data/
 │   └── datasets/                            # Conjuntos congelados de validación (200 ep) y final (300 ep)
@@ -87,7 +90,9 @@ Fase_D_V3/
 ├── tests/
 │   ├── test_config.py                       # Verificación de desacoplamiento y parámetros SSOT
 │   ├── test_kinematics.py                   # Validación analítica contrastada con MuJoCo
-│   └── test_normalization.py                # Wrapper VecNormalize y cálculo de recompensas
+│   ├── test_normalization.py                # Wrapper VecNormalize y cálculo de recompensas
+│   ├── test_plot_metrics.py                 # Resolución de métricas modulares e independientes
+│   └── test_plot_section.py                 # Resolución jerárquica de secciones y consolidación multisemilla
 ├── evaluate.py                              # Punto de entrada para evaluación de políticas y baseline
 ├── generate_benchmark_matrix.py             # Generador de la matriz consolidada de hiperparámetros y métricas
 ├── interactive_render.py                    # Visualizador interactivo 3D OpenGL en MuJoCo
@@ -108,13 +113,14 @@ Fase_D_V3/
 # 2. Ejecutar entrenamiento continuo
 python train.py --config configs/entorno/PPO_1.yaml --seed 42
 
-# 3. Evaluar el baseline analítico C0 sobre el dataset de validación
-python evaluate.py --c0 --dataset datasets/validation_set_200.json
+# 3. Evaluar modelo entrenado o baseline analítico C0 sobre 300 episodios
+python evaluate.py --model-path experiments/entorno/PPO_1/seed_42/models/best_model/best_model.zip --dataset 300
+python evaluate.py --c0 --dataset 300
 
-# 4. Generar curvas y figuras comparativas
-python plot.py
+# 4. Generar figuras individuales y consolidadas multisemilla
+python plot.py --dataset 300 --model entorno/PPO_1 --metric all
 
-# 5. Ejecutar la suite completa de pruebas unitarias
+# 5. Ejecutar la suite completa de pruebas unitarias (26 superadas)
 python -m pytest tests/
 ```
 

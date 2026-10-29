@@ -9,7 +9,7 @@ Este informe detalla las decisiones de diseño, la reestructuración física del
 Previo a la intervención, el repositorio presentaba deficiencias arquitectónicas y metodológicas que obstaculizaban la reproducibilidad, el mantenimiento y la validez formal del benchmarking:
 
 1. **Parcial Observabilidad en la Función de Éxito (POMDP):** En versiones previas, la tarea de posicionamiento utilizaba un contador de permanencia (*hold counter*) de 20 pasos consecutivos dentro de una tolerancia para gatillar un bono terminal positivo y truncar el episodio. Dicho contador no formaba parte del vector de observación suministrado al agente, violando la propiedad markoviana y provocando oscilaciones e inestabilidades de convergencia en el crítico de las redes neuronales.
-2. **Duplicidad de Archivos y Ruptura del Principio SSOT:** Existían archivos redundantes y desincronizados entre la raíz y los subdirectorios (por ejemplo, `arm2d_env.py` en la raíz como módulo puente y en `src/environment/arm2d_env.py`), así como réplicas inconsistentes de archivos de configuración (`configs/phase_D/environment.yaml` frente a `configs/environment.yaml`).
+2. **Duplicidad de Archivos y Ruptura del Principio SSOT:** Existían archivos redundantes y desincronizados entre la raíz y los subdirectorios (por ejemplo, `arm2d_env.py` en la raíz como módulo puente y en `src/environment/arm2d_env.py`), así como réplicas inconsistentes de archivos de configuración (`configs/environment.yaml (legado purgado)` frente a `configs/environment.yaml`).
 3. **Sobrecarga de Jerarquía de Carpetas:** Existían múltiples subdirectorios unitarios dentro de `src/` que contenían un único archivo (`controllers/`, `environment/`, `training/`, `utils/`, `visualization/`), así como directorios auxiliares como `scripts/` con responsabilidades superpuestas.
 4. **Simulación Cinemática Simplificada:** El entorno se basaba en integración cinemática simplificada en Pygame con control por velocidad angular directa en lugar de simular la dinámica física del manipulador accionado por torque.
 
@@ -20,7 +20,7 @@ Previo a la intervención, el repositorio presentaba deficiencias arquitectónic
 Se implementó una estricta separación de responsabilidades a nivel paramétrico:
 
 * **Planta Física y Formulación MDP Común:** El archivo [configs/environment.yaml](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/configs/environment.yaml) es la Fuente Única de Verdad (SSOT). Define de manera centralizada la geometría de los eslabones, las masas inerciales, los límites de giro de las juntas, el paso de integración temporal, la escala del actuador de torque y los pesos del funcional cuadrático de recompensa. Ningún parámetro físico se encuentra codificado de forma estática en el código fuente.
-* **Hiperparámetros de Agentes y Controladores:** Las configuraciones específicas de algoritmos ([configs/phase_D/prueba/](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/configs/phase_D/prueba/)) declaran exclusivamente la tasa de aprendizaje, arquitectura de redes neuronales, tamaño de lote, coeficientes de entropía o ganancias del controlador analítico.
+* **Hiperparámetros de Agentes y Controladores:** Las configuraciones específicas de algoritmos ([configs/<seccion>/](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/configs/<seccion>/)) declaran exclusivamente la tasa de aprendizaje, arquitectura de redes neuronales, tamaño de lote, coeficientes de entropía o ganancias del controlador analítico.
 * **Cargador Jerárquico Desacoplado:** El módulo [src/config.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/src/config.py) resuelve automáticamente las referencias relativas y fusiona la sección `env` en tiempo de carga, asegurando que cualquier cambio en la física del sistema se propague de manera instantánea y transparente a todos los experimentos.
 
 ---
@@ -95,25 +95,24 @@ Todos los scripts de flujo de trabajo se operan desde la raíz del proyecto:
 ```powershell
 # 1. Asegurar activación del entorno virtual
 ..\.venv\Scripts\Activate.ps1
-.\.venv\Scripts\Activate.ps1
 
 # 2. Entrenamiento de Agentes (PPO y SAC)
-python train.py --config configs/phase_D/prueba/PPO_1.yaml --seed 42
-python train.py --config configs/phase_D/prueba/SAC_1.yaml --seed 42
+python train.py --config configs/entorno/PPO_1.yaml --seed 42
+python train.py --config configs/SAC_eval_300k/SAC_NOM.yaml --seed 42
 
 # 3. Evaluación de Políticas Entrenadas y Baseline Analítico C0
-python evaluate.py --c0 --dataset datasets/validation_set_200.json
-python evaluate.py --agent ppo --model-path experiments/phase_D_prueba/PPO_1/seed_42/models/ppo_arm2d_final.zip --dataset datasets/final_eval_set_300.json
+python evaluate.py --c0 --dataset 300
+python evaluate.py --model-path experiments/entorno/PPO_1/seed_42/models/best_model/best_model.zip --dataset 300
 
-# 4. Generación de Figuras Comparativas
-python plot.py --data-dir reports/data/evaluation --out-dir reports/figures
+# 4. Generación de Figuras Comparativas y Consolidadas Multisemilla
+python plot.py --dataset 300 --model entorno/PPO_1 --metric all
 
 # 5. Visualizador Interactivo OpenGL 3D
 python interactive_render.py --c0 --episodes 5
-python interactive_render.py experiments/phase_D_prueba/PPO_1/seed_42/models/best_model/best_model.zip
+python interactive_render.py experiments/entorno/PPO_1/seed_42/models/best_model/best_model.zip
 
-# 6. Ejecución de la Suite de Pruebas Unitarias
+# 6. Ejecución de la Suite de Pruebas Unitarias (26 superadas)
 python -m pytest tests/
 ```
 
-Todas las 14 pruebas unitarias en `tests/` se encuentran operativas y superadas, asegurando la consistencia dimensional, paramétrica y algorítmica del proyecto.
+Todas las 26 pruebas unitarias en `tests/` se encuentran operativas y superadas, asegurando la consistencia dimensional, paramétrica y algorítmica del proyecto.

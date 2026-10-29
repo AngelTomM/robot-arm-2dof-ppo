@@ -82,6 +82,9 @@ $$\hat{p} = \frac{S}{N}, \qquad \text{IC}_{95\%} = \frac{\hat{p} + \frac{z^2}{2N
 Permite comparar agentes de aprendizaje y controladores analíticos bajo una métrica escalar independiente del algoritmo:
 $$J_{\text{LQR}} = - \sum_{t=1}^T \left(1.0 \cdot \|\mathbf{x}_{ee}(t) - \mathbf{x}_{\text{tgt}}\|^2 + 0.01 \cdot \|\mathbf{a}(t)\|^2 + 0.05 \cdot \|\dot{\boldsymbol{\theta}}(t)\|^2\right)$$
 
+### 4.4 Protocolo Multisemilla y Muestra Consolidada
+Para cuantificar la variabilidad intrínseca inducida por la estocasticidad en la inicialización de los pesos de la red neuronal y en el proceso de optimización por gradientes de política, se implementa una evaluación estándar sobre tres réplicas pseudoaleatorias independientes (semillas 42, 100 y 2026). Al evaluarse cada réplica sobre el banco congelado de referencia de 300 episodios, los datos se consolidan bajo el identificador canónico del modelo conformando una muestra total de $N = 900$ episodios ($N = 600$ para configuraciones con dos réplicas). Dicha muestra acumulada se emplea directamente para calcular las proporciones binomiales de estabilización, los intervalos de Wilson al 95%, los cuartiles en los diagramas de caja de error y esfuerzo, y la frontera empírica de compromiso de Pareto.
+
 ### 4.3 Métricas Dinámicas y Temporales Complementarias
 * **Tiempo de Establecimiento ($t_s$):** Instante continuo a partir del cual $\|\mathbf{x}_{ee}(t) - \mathbf{x}_{\text{tgt}}\| \le 0.02\text{ m}$ y permanece confinado dentro de dicha cota hasta el término del horizonte.
 * **Esfuerzo Acumulado de Control ($J_u$):** Integral discreta del torque aplicado $J_u = \sum_{t=1}^T \|\mathbf{a}(t)\|^2 \Delta t_{\text{eff}}$.

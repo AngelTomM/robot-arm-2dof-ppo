@@ -201,7 +201,9 @@ Por ejemplo, la evaluación de tres semillas para `PPO_NOM` genera independiente
 El script [plot.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/plot.py) procesa de forma desacoplada los datos tabulares evaluados en `reports/data/evaluation/` y los registros de telemetría de TensorBoard.
 
 * **Filtrado Automático de Sesiones:** Detecta si existen múltiples subcarpetas de eventos para una misma semilla (ej. ejecuciones abortadas o reiniciadas) y selecciona la sesión canónica correspondiente a la corrida completa y evaluada.
-* **Agregación Multisemilla:** Si un modelo cuenta con múltiples semillas, grafica la media muestral $\mu$ con una banda sombreada de dispersión a una desviación estándar ($\pm 1\sigma$).
+* **Consolidación Multisemilla de Evaluación:** Al solicitar un modelo base (ej. `--model NN/PPO_M_RELU` o `--model entorno/SAC_2`), el sistema localiza y concatena automáticamente todas las réplicas de evaluación (`<modelo>_seed_*`), generando muestras consolidadas de $N = 900$ episodios (para 3 semillas) o $N = 600$ (para 2 semillas) sobre todas las métricas de dispersión en diagramas de caja y mapas de Pareto, reportando explícitamente el tamaño muestral $N$ en el cuadro estadístico.
+* **Agregación Multisemilla en Entrenamiento:** En curvas de aprendizaje y telemetría de TensorBoard, integra las réplicas graficando la media muestral $\mu$ con una banda sombreada de dispersión a una desviación estándar ($\pm 1\sigma$).
+* **Compatibilidad Dual PPO y SAC:** Resuelve automáticamente los registros de optimización de ambos algoritmos, incluyendo las métricas intrínsecas de SAC (`train/actor_loss`, `train/critic_loss`, `train/ent_coef` y `train/ent_coef_loss`).
 
 ### 5.1 Sintaxis del Comando y Parámetros
 
@@ -299,6 +301,7 @@ Módulos de prueba verificados:
 * [tests/test_kinematics.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_kinematics.py): Validación de cinemática directa y matriz Jacobiana contrastada contra las librerías cinemáticas de MuJoCo.
 * [tests/test_normalization.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_normalization.py): Normalización vectorial `VecNormalize`, cálculo de recompensa continua LQR y truncamiento del horizonte de simulación.
 * [tests/test_plot_metrics.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_plot_metrics.py): Resolución canónica y alias de métricas modulares para graficación.
+* [tests/test_plot_section.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_plot_section.py): Resolución jerárquica de secciones, calificación de modelos canónicos y agregación multisemilla.
 
 ---
 
