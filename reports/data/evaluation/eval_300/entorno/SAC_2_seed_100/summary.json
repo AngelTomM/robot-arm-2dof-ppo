@@ -1,0 +1,27 @@
+{
+  "agent": "SAC_2_seed_100",
+  "section": "entorno",
+  "eval_set": "final_eval_set_300",
+  "eval_mode": "deterministic",
+  "metrics": {
+    "total_episodes": 300,
+    "successful_episodes": 52,
+    "success_rate": 0.17333333333333334,
+    "success_rate_ci": "17.3% [13.5%, 22.0%] (52/300)",
+    "ci_low": 0.13470067055413348,
+    "ci_high": 0.22022603748564756,
+    "e_ss_mean": 0.04530200121792518,
+    "e_ss_median": 0.03544796597618301,
+    "e_ss_p90": 0.09606011283523373,
+    "final_dist_mean": 0.04457942951646894,
+    "v_ss_mean": 0.2947016102113055,
+    "v_ss_median": 0.11338581889406775,
+    "t_s_mean": 1.7012666666666667,
+    "t_s_median": 2.0,
+    "j_u_mean": 0.13977818482081367,
+    "j_lqr_mean": -14.641858022451572,
+    "j_lqr_median": -13.34018349916823,
+    "j_lqr_std": 11.003303661876613,
+    "mean_action_delta": 0.021138808562100563
+  }
+}

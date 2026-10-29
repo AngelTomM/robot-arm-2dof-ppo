@@ -1,5 +1,6 @@
 {
-  "agent": "SAC_NOM_NREWARD",
+  "agent": "SAC_NOM_NREWARD_seed_42",
+  "section": "SAC_eval_300k",
   "eval_set": "final_eval_set_300",
   "eval_mode": "deterministic",
   "metrics": {

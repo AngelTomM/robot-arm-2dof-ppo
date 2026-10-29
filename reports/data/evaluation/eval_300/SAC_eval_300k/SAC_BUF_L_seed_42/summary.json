@@ -1,5 +1,6 @@
 {
-  "agent": "SAC_BUF_L",
+  "agent": "SAC_BUF_L_seed_42",
+  "section": "SAC_eval_300k",
   "eval_set": "final_eval_set_300",
   "eval_mode": "deterministic",
   "metrics": {
