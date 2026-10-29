@@ -37,8 +37,8 @@ def test_get_model_section_resolution():
     # Inferencia vía configs
     assert get_model_section("PPO_17") == "PPO_eval_500k"
     # Inferencia con sufijo de semilla (con o sin guion)
-    assert get_model_section("PPO_NOM_seed_42") == "PPO_eval_500k"
-    assert get_model_section("PPO_NOM_seed42") == "PPO_eval_500k"
+    assert get_model_section("PPO_17_seed_42") == "PPO_eval_500k"
+    assert get_model_section("PPO_17_seed42") == "PPO_eval_500k"
 
 
 def test_resolve_model_in_partition():
@@ -86,6 +86,29 @@ def test_resolve_model_in_partition():
     with pytest.raises(KeyError):
         resolve_model_in_partition(part_dict, "MODELO_INEXISTENTE")
 
+
+def test_resolve_base_model_from_seed_replicas():
+    """Verifica que un modelo base sin carpeta directa se resuelva agregando sus réplicas de semilla."""
+    df_s42 = pd.DataFrame({"agent": ["PPO_2_seed_42"], "e_ss": [0.01]})
+    df_s100 = pd.DataFrame({"agent": ["PPO_2_seed_100"], "e_ss": [0.02]})
+
+    part_dict = {
+        "entorno/PPO_2_seed_42": df_s42,
+        "entorno/PPO_2_seed_100": df_s100,
+    }
+
+    # Búsqueda calificada del modelo base (entorno/PPO_2)
+    name, sec, df = resolve_model_in_partition(part_dict, "entorno/PPO_2")
+    assert name == "PPO_2"
+    assert sec == "entorno"
+    assert len(df) == 2
+    assert df["agent"].iloc[0] == "PPO_2"
+
+    # Búsqueda simple (PPO_2)
+    name, sec, df = resolve_model_in_partition(part_dict, "PPO_2")
+    assert name == "PPO_2"
+    assert sec == "entorno"
+    assert len(df) == 2
 
 
 def test_extract_model_and_seed_from_path():

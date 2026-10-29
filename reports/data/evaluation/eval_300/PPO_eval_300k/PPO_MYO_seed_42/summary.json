@@ -1,0 +1,26 @@
+{
+  "agent": "PPO_MYO_seed_42",
+  "eval_set": "final_eval_set_300",
+  "eval_mode": "deterministic",
+  "metrics": {
+    "total_episodes": 300,
+    "successful_episodes": 1,
+    "success_rate": 0.0033333333333333335,
+    "success_rate_ci": "0.3% [0.1%, 1.9%] (1/300)",
+    "ci_low": 0.000588659397516381,
+    "ci_high": 0.01863664160174256,
+    "e_ss_mean": 0.11390783498020796,
+    "e_ss_median": 0.10462826847846737,
+    "e_ss_p90": 0.1991025236021557,
+    "final_dist_mean": 0.11230375057089302,
+    "v_ss_mean": 0.5778703253584264,
+    "v_ss_median": 0.4681945638395387,
+    "t_s_mean": 1.9758,
+    "t_s_median": 2.0,
+    "j_u_mean": 0.022794554623204608,
+    "j_lqr_mean": -6.32792639331382,
+    "j_lqr_median": -6.007366846960323,
+    "j_lqr_std": 4.323365316394285,
+    "mean_action_delta": 0.0035471656646586425
+  }
+}

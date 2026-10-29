@@ -1,0 +1,27 @@
+{
+  "agent": "PPO_NOM_seed_2026",
+  "section": "PPO_eval_300k",
+  "eval_set": "final_eval_set_300",
+  "eval_mode": "deterministic",
+  "metrics": {
+    "total_episodes": 300,
+    "successful_episodes": 7,
+    "success_rate": 0.023333333333333334,
+    "success_rate_ci": "2.3% [1.1%, 4.7%] (7/300)",
+    "ci_low": 0.011347676308111725,
+    "ci_high": 0.04737190787238511,
+    "e_ss_mean": 0.09561409733472741,
+    "e_ss_median": 0.0746556951144907,
+    "e_ss_p90": 0.18577628621323988,
+    "final_dist_mean": 0.09375105919273505,
+    "v_ss_mean": 0.6677906527866208,
+    "v_ss_median": 0.3737776537557317,
+    "t_s_mean": 1.9546000000000003,
+    "t_s_median": 2.0,
+    "j_u_mean": 0.4474534441504908,
+    "j_lqr_mean": -13.444255165350743,
+    "j_lqr_median": -11.012955060145998,
+    "j_lqr_std": 9.569958535010159,
+    "mean_action_delta": 0.24929067492535387
+  }
+}

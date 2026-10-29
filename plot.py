@@ -134,6 +134,7 @@ def discover_evaluation_datasets(data_dir: Path, files: Optional[List[str]] = No
                 pass
 
     datasets_map: Dict[str, Dict[str, pd.DataFrame]] = {}
+    seeds_by_base: Dict[Tuple[str, Optional[str], str], List[pd.DataFrame]] = {}
 
     if files:
         csv_paths = [(Path(f), None, None) for f in files]
@@ -162,11 +163,11 @@ def discover_evaluation_datasets(data_dir: Path, files: Optional[List[str]] = No
         if df.empty:
             continue
 
-        if "agent" in df.columns and len(df["agent"].dropna().unique()) > 0:
-            model_name = str(df["agent"].iloc[0])
-        elif p.name == "episodes.csv":
+        if p.name == "episodes.csv":
             model_name = p.parent.name
             df["agent"] = model_name
+        elif "agent" in df.columns and len(df["agent"].dropna().unique()) > 0:
+            model_name = str(df["agent"].iloc[0])
         else:
             model_name = p.stem.replace("_episodes", "")
             df["agent"] = model_name
@@ -199,6 +200,19 @@ def discover_evaluation_datasets(data_dir: Path, files: Optional[List[str]] = No
         # 2. Indexar con clave simple (alias directo)
         if model_name not in datasets_map[d_tag]:
             datasets_map[d_tag][model_name] = df
+
+        # 3. Registrar réplica para consolidación bajo el modelo base
+        if "_seed" in model_name:
+            base_model = model_name.split("_seed")[0]
+            seeds_by_base.setdefault((d_tag, sec, base_model), []).append(df)
+
+    # Consolidar réplicas multisemilla para habilitar la consulta directa del modelo base (ej. 'entorno/PPO_2' o 'PPO_2')
+    for (d_tag, sec, base_model), s_dfs in seeds_by_base.items():
+        base_qual_key = f"{sec}/{base_model}" if sec else base_model
+        comb_df = pd.concat(s_dfs, ignore_index=True)
+        comb_df["agent"] = base_model
+        datasets_map[d_tag][base_qual_key] = comb_df
+        datasets_map[d_tag][base_model] = comb_df
 
     return datasets_map
 
@@ -263,6 +277,14 @@ def resolve_model_in_partition(
             cand_sec = get_model_section(m_name, data_dir, explicit_section=sec)
             if cand_sec == sec:
                 return m_name, sec, part_models_dict[m_name]
+
+        # Búsqueda fallback: verificar si existen réplicas con prefijo seed (ej. 'sec/PPO_2_seed*')
+        seed_matches = [k for k in part_models_dict.keys() if k.startswith(f"{qual_key}_seed")]
+        if seed_matches:
+            comb_df = pd.concat([part_models_dict[k] for k in seed_matches], ignore_index=True)
+            comb_df["agent"] = m_name
+            return m_name, sec, comb_df
+
         raise KeyError(f"No se encontró el modelo calificado '{qual_key}' en la partición evaluada.")
 
     # 2. Búsqueda sin sección: detectar coincidencias calificadas exactas
@@ -283,6 +305,20 @@ def resolve_model_in_partition(
         inferred_sec = get_model_section(m_name, data_dir)
         return m_name, inferred_sec, part_models_dict[m_name]
 
+    # Búsqueda fallback sin sección: verificar réplicas con prefijo seed
+    seed_matches = [k for k in part_models_dict.keys() if "/" in k and k.split("/")[-1].startswith(f"{m_name}_seed")]
+    if seed_matches:
+        secs_found = list(set([k.split("/")[0] for k in seed_matches]))
+        if len(secs_found) > 1:
+            raise ValueError(
+                f"Ambigüedad detectada para el modelo '{m_name}'. Existen réplicas en múltiples secciones: {secs_found}.\n"
+                f"Especifique la ruta calificada (ej. '--model {secs_found[0]}/{m_name}') o utilice el flag '--section {secs_found[0]}'."
+            )
+        matched_sec = secs_found[0]
+        comb_df = pd.concat([part_models_dict[k] for k in seed_matches], ignore_index=True)
+        comb_df["agent"] = m_name
+        return m_name, matched_sec, comb_df
+
     raise KeyError(f"El modelo '{m_name}' no existe en la partición evaluada. Disponibles: {list(part_models_dict.keys())}")
 
 
@@ -293,13 +329,19 @@ def load_sample_trajectories(data_dir: Path, model_name: str, dataset_tag: Optio
     if sec_from_id:
         if dataset_tag:
             candidates.append(data_dir / dataset_tag / sec_from_id / m_name / "sample_trajectories.csv")
-        candidates.extend(list(data_dir.glob(f"eval_*/{sec_from_id}/{m_name}/sample_trajectories.csv")))
+            candidates.extend(sorted(list((data_dir / dataset_tag / sec_from_id).glob(f"{m_name}_seed*/sample_trajectories.csv"))))
+        candidates.extend(sorted(list(data_dir.glob(f"eval_*/{sec_from_id}/{m_name}/sample_trajectories.csv"))))
+        candidates.extend(sorted(list(data_dir.glob(f"eval_*/{sec_from_id}/{m_name}_seed*/sample_trajectories.csv"))))
         candidates.append(data_dir / sec_from_id / m_name / "sample_trajectories.csv")
+        candidates.extend(sorted(list((data_dir / sec_from_id).glob(f"{m_name}_seed*/sample_trajectories.csv"))))
 
     if dataset_tag:
-        candidates.extend(list((data_dir / dataset_tag).glob(f"**/{m_name}/sample_trajectories.csv")))
-    candidates.extend(list(data_dir.glob(f"eval_*/**/{m_name}/sample_trajectories.csv")))
-    candidates.extend(list(data_dir.glob(f"**/{m_name}/sample_trajectories.csv")))
+        candidates.extend(sorted(list((data_dir / dataset_tag).glob(f"**/{m_name}/sample_trajectories.csv"))))
+        candidates.extend(sorted(list((data_dir / dataset_tag).glob(f"**/{m_name}_seed*/sample_trajectories.csv"))))
+    candidates.extend(sorted(list(data_dir.glob(f"eval_*/**/{m_name}/sample_trajectories.csv"))))
+    candidates.extend(sorted(list(data_dir.glob(f"eval_*/**/{m_name}_seed*/sample_trajectories.csv"))))
+    candidates.extend(sorted(list(data_dir.glob(f"**/{m_name}/sample_trajectories.csv"))))
+    candidates.extend(sorted(list(data_dir.glob(f"**/{m_name}_seed*/sample_trajectories.csv"))))
     for p in candidates:
         if p.exists() and p.is_file():
             try:
@@ -911,7 +953,7 @@ def plot_model_steady_state_error(df: pd.DataFrame, model_name: str, out_path: P
 
     mean_val = float(np.mean(e_ss))
     median_val = float(np.median(e_ss))
-    ax.text(0.98, 0.95, f"Media: {mean_val:.2f} mm\nMediana: {median_val:.2f} mm",
+    ax.text(0.98, 0.95, f"N: {len(e_ss)}\nMedia: {mean_val:.2f} mm\nMediana: {median_val:.2f} mm",
             transform=ax.transAxes, ha="right", va="top",
             bbox=dict(boxstyle="round,pad=0.3", fc="#f4f6f7", ec="#bdc3c7"))
 
@@ -942,7 +984,7 @@ def plot_model_residual_velocity(df: pd.DataFrame, model_name: str, out_path: Pa
 
     mean_val = float(np.mean(v_ss))
     median_val = float(np.median(v_ss))
-    ax.text(0.98, 0.95, f"Media: {mean_val:.4f} rad/s\nMediana: {median_val:.4f} rad/s",
+    ax.text(0.98, 0.95, f"N: {len(v_ss)}\nMedia: {mean_val:.4f} rad/s\nMediana: {median_val:.4f} rad/s",
             transform=ax.transAxes, ha="right", va="top",
             bbox=dict(boxstyle="round,pad=0.3", fc="#f4f6f7", ec="#bdc3c7"))
 
@@ -971,7 +1013,7 @@ def plot_model_settling_time(df: pd.DataFrame, model_name: str, out_path: Path) 
 
     mean_val = float(np.mean(ts))
     median_val = float(np.median(ts))
-    ax.text(0.98, 0.95, f"Media: {mean_val:.3f} s\nMediana: {median_val:.3f} s",
+    ax.text(0.98, 0.95, f"N: {len(ts)}\nMedia: {mean_val:.3f} s\nMediana: {median_val:.3f} s",
             transform=ax.transAxes, ha="right", va="top",
             bbox=dict(boxstyle="round,pad=0.3", fc="#f4f6f7", ec="#bdc3c7"))
 
@@ -999,7 +1041,7 @@ def plot_model_control_effort(df: pd.DataFrame, model_name: str, out_path: Path)
 
     mean_val = float(np.mean(ju))
     median_val = float(np.median(ju))
-    ax.text(0.98, 0.95, f"Media: {mean_val:.4f}\nMediana: {median_val:.4f}",
+    ax.text(0.98, 0.95, f"N: {len(ju)}\nMedia: {mean_val:.4f}\nMediana: {median_val:.4f}",
             transform=ax.transAxes, ha="right", va="top",
             bbox=dict(boxstyle="round,pad=0.3", fc="#f4f6f7", ec="#bdc3c7"))
 
@@ -2320,8 +2362,10 @@ def generate_all_plots(data_dir: Path, out_dir: Path,
             models_to_run = [(m_name, sec_resolved, df_m)]
         else:
             # En lote completo, evitar duplicados: recorrer únicamente claves canónicas
-            # Si una clave no contiene '/' pero tiene su versión calificada, se omite la simple
-            canonical_keys = [k for k in part_models_dict.keys() if "/" in k]
+            # Priorizar modelos base consolidados sobre sus réplicas individuales
+            canonical_keys = [k for k in part_models_dict.keys() if "/" in k and not any("_seed" in part for part in k.split("/"))]
+            if not canonical_keys:
+                canonical_keys = [k for k in part_models_dict.keys() if "/" in k]
             if not canonical_keys:
                 canonical_keys = list(part_models_dict.keys())
             
