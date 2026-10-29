@@ -141,7 +141,7 @@ Comportamiento de los argumentos y valores por defecto:
 
 * `--model-path` (por defecto: `None`): Ruta al archivo `.zip` del modelo entrenado.
 * `--section`, `--phase` (opcional, por defecto: `None`): Subcarpeta que clasifica al modelo (ej. `PPO_eval_500k`, `entorno`). Si se omite, se deduce automáticamente a partir de la ruta del modelo o de su definición en `configs/`.
-* `--label` (por defecto: `None`): Nombre identificatorio del modelo. Si se omite, se deduce del nombre del archivo `.zip` o de su directorio contenedor.
+* `--label` (por defecto: automático): Nombre identificatorio del modelo. Si se omite, se deduce automáticamente analizando la ruta del modelo: al detectar la carpeta `seed_<semilla>`, asigna por defecto el formato estandarizado `<modelo>_seed_<semilla>` (por ejemplo, `PPO_NOM_seed_42`), manteniendo concordancia con la carpeta de experimentos y evitando sobreescrituras en las evaluaciones. Solo es necesario especificar `--label` cuando se desee forzar un identificador personalizado.
 * `--c0` (por defecto: `False`): Bandera para evaluar el controlador cinemático analítico con transpuesta de Jacobiano amortiguada. Admite modificar ganancias mediante `--kp` (por defecto: `50.0`), `--kd` (por defecto: `0.05`) y `--lambda-damping` (por defecto: `0.01`).
 * `--dataset` (por defecto: `"datasets/validation_set_200.json"`): Especificación del conjunto de prueba. Admite `"all"` (ejecuta consecutivamente 200 y 300), `"200"` o `"300"`.
 * `--vecnormalize` (por defecto: `None`): Ruta a `vecnormalize_stats.pkl`. Si se omite, se localiza automáticamente en el directorio del modelo.
@@ -152,29 +152,39 @@ Comportamiento de los argumentos y valores por defecto:
 ### 4.3 Ejemplos de Evaluación
 
 ```powershell
-# 1. Evaluación sobre benchmark definitivo de 300 episodios
+# 1. Evaluación sobre benchmark definitivo de 300 episodios (etiqueta automática: PPO_17_seed_42)
 python evaluate.py --model-path experiments/PPO_eval_500k/PPO_17/seed_42/models/best_model/best_model.zip --dataset 300
 
-# 2. Evaluación del controlador analítico C0 sobre 300 episodios
+# 2. Evaluación encadenada de múltiples semillas en PowerShell (asigna automáticamente PPO_NOM_seed_42, PPO_NOM_seed_100, etc.)
+42, 100, 2026 | ForEach-Object {
+    python evaluate.py --model-path "experiments/PPO_eval_500k/PPO_NOM/seed_$_/models/best_model/best_model.zip" --dataset 300
+}
+
+# 3. Forzar explícitamente un identificador personalizado con --label
+python evaluate.py --model-path experiments/PPO_eval_500k/PPO_NOM/seed_42/models/best_model/best_model.zip --label PPO_NOM_nominal --dataset 300
+
+# 4. Evaluación del controlador analítico C0 sobre 300 episodios (etiqueta automática: C0)
 python evaluate.py --c0 --dataset 300
 
-# 3. Evaluación secuencial completa sobre 200 y 300 episodios con generación inmediata de figuras
+# 5. Evaluación secuencial completa sobre 200 y 300 episodios con generación inmediata de figuras
 python evaluate.py --model-path experiments/PPO_eval_500k/PPO_NOM/seed_42/models/best_model/best_model.zip --dataset all --plot
-
-# 4. Evaluación encadenada de múltiples semillas en PowerShell en una sola instrucción
-123, 999 | ForEach-Object { python evaluate.py --model-path "experiments/PPO_eval_500k/PPO_NOM/seed_$_/models/best_model/best_model.zip" --dataset 300 }
 ```
 
 ### 4.4 Estructura de Salida Unificada (SSOT)
 
-Cada evaluación almacena sus resultados en un destino único, eliminando redundancias en la raíz:
+Cada evaluación almacena sus resultados en un destino único correspondiente a la sección y al identificador provisto en `--label` o deducido, eliminando redundancias en la raíz:
 
 ```text
-reports/data/evaluation/<eval_set>/<seccion>/<modelo>/
+reports/data/evaluation/<eval_set>/<seccion>/<modelo_o_semilla>/
 ├── episodes.csv              # Métricas de estabilización cartesiana por episodio
 ├── summary.json              # Consolidado estadístico e intervalos de Wilson
 └── sample_trajectories.csv   # Trayectorias temporales paso a paso (si aplica)
 ```
+
+Por ejemplo, la evaluación de tres semillas para `PPO_NOM` genera independientemente:
+* `reports/data/evaluation/eval_300/PPO_eval_500k/PPO_NOM_seed_42/`
+* `reports/data/evaluation/eval_300/PPO_eval_500k/PPO_NOM_seed_100/`
+* `reports/data/evaluation/eval_300/PPO_eval_500k/PPO_NOM_seed_2026/`
 
 ---
 
@@ -243,6 +253,9 @@ python plot.py --dataset 300 --compare entorno/PPO_7,PPO_eval_500k/PPO_7 --metri
 
 # 6. Comparativa de curvas del optimizador (panel 2x3)
 python plot.py --dataset 300 --compare PPO_17,PPO_15 --metric optimizer_summary
+
+# 7. Comparativa entre evaluaciones de semillas individuales de un mismo modelo
+python plot.py --dataset 300 --compare PPO_eval_500k/PPO_NOM_seed_42,PPO_eval_500k/PPO_NOM_seed_100 --metric steady_state_error
 ```
 
 ---

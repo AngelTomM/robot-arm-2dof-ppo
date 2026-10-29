@@ -95,7 +95,9 @@ def get_model_section(model_name: str, data_dir: Optional[Path] = None, explicit
     if sec_from_id:
         return sec_from_id
 
-    cfg_matches = list((REPO_ROOT / "configs").glob(f"**/{m_name}.yaml"))
+    base_name = m_name.split("_seed")[0] if "_seed" in m_name else m_name
+
+    cfg_matches = list((REPO_ROOT / "configs").glob(f"**/{base_name}.yaml"))
     if cfg_matches:
         return cfg_matches[0].parent.name
 
@@ -105,7 +107,7 @@ def get_model_section(model_name: str, data_dir: Optional[Path] = None, explicit
             if not ep.parent.parent.name.startswith("eval_") and ep.parent.parent.name != data_dir.name:
                 return ep.parent.parent.name
 
-    exp_matches = list((REPO_ROOT / "experiments").glob(f"**/{m_name}/seed_*"))
+    exp_matches = list((REPO_ROOT / "experiments").glob(f"**/{base_name}/seed_*"))
     if exp_matches:
         return exp_matches[0].parent.parent.name
 
@@ -753,12 +755,27 @@ def resolve_requested_metrics(metric_arg: Optional[str]) -> List[str]:
 def load_model_training_telemetry(model_name: str, eval_log: Optional[Path] = None, section: Optional[str] = None) -> Tuple[List[Path], List[Tuple[int, np.ndarray, np.ndarray, Optional[np.ndarray]]]]:
     """Recupera los directorios de logs de TensorBoard y las curvas de evaluación (evaluations.npz) para un modelo."""
     m_name, sec = parse_model_identifier(model_name, section)
-    if sec:
-        all_seed_dirs = sorted(list((REPO_ROOT / "experiments" / sec / m_name).glob("seed_*")))
-        if not all_seed_dirs:
-            all_seed_dirs = sorted(list((REPO_ROOT / "experiments").glob(f"**/{sec}/{m_name}/seed_*")))
+    target_seed = None
+    if "_seed" in m_name:
+        base_name, seed_part = m_name.split("_seed", 1)
+        seed_part = seed_part.lstrip("_")
+        target_seed = f"seed_{seed_part}"
     else:
-        all_seed_dirs = sorted(list((REPO_ROOT / "experiments").glob(f"**/{m_name}/seed_*")))
+        base_name = m_name
+
+    if sec:
+        if target_seed:
+            s_cand = REPO_ROOT / "experiments" / sec / base_name / target_seed
+            all_seed_dirs = [s_cand] if s_cand.exists() else sorted(list((REPO_ROOT / "experiments").glob(f"**/{sec}/{base_name}/{target_seed}")))
+        else:
+            all_seed_dirs = sorted(list((REPO_ROOT / "experiments" / sec / base_name).glob("seed_*")))
+            if not all_seed_dirs:
+                all_seed_dirs = sorted(list((REPO_ROOT / "experiments").glob(f"**/{sec}/{base_name}/seed_*")))
+    else:
+        if target_seed:
+            all_seed_dirs = sorted(list((REPO_ROOT / "experiments").glob(f"**/{base_name}/{target_seed}")))
+        else:
+            all_seed_dirs = sorted(list((REPO_ROOT / "experiments").glob(f"**/{base_name}/seed_*")))
     deduped_seeds: Dict[int, Path] = {}
     for s_idx, s_dir in enumerate(all_seed_dirs):
         try:

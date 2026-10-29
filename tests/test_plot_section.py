@@ -36,6 +36,9 @@ def test_get_model_section_resolution():
     assert get_model_section("PPO_7", explicit_section="SAC_eval_300k") == "SAC_eval_300k"
     # Inferencia vía configs
     assert get_model_section("PPO_17") == "PPO_eval_500k"
+    # Inferencia con sufijo de semilla (con o sin guion)
+    assert get_model_section("PPO_NOM_seed_42") == "PPO_eval_500k"
+    assert get_model_section("PPO_NOM_seed42") == "PPO_eval_500k"
 
 
 def test_resolve_model_in_partition():
@@ -83,3 +86,26 @@ def test_resolve_model_in_partition():
     with pytest.raises(KeyError):
         resolve_model_in_partition(part_dict, "MODELO_INEXISTENTE")
 
+
+
+def test_extract_model_and_seed_from_path():
+    """Verifica la deducción automática del nombre del modelo y su semilla a partir de la ruta."""
+    from pathlib import Path
+    from evaluate import extract_model_and_seed_from_path
+
+    # Estructura canónica con carpeta seed_*
+    p1 = Path("experiments/PPO_eval_500k/PPO_NOM/seed_42/models/best_model/best_model.zip")
+    name1, seed1 = extract_model_and_seed_from_path(p1)
+    assert name1 == "PPO_NOM"
+    assert seed1 == "42"
+
+    p2 = Path("experiments/entorno/PPO_1/seed_100/best_model.zip")
+    name2, seed2 = extract_model_and_seed_from_path(p2)
+    assert name2 == "PPO_1"
+    assert seed2 == "100"
+
+    # Ruta sin seed_*
+    p3 = Path("models/custom_policy.zip")
+    name3, seed3 = extract_model_and_seed_from_path(p3)
+    assert name3 == "custom_policy"
+    assert seed3 is None
