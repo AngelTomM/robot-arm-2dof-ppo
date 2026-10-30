@@ -1,0 +1,27 @@
+{
+  "agent": "PPO_M_TANH_seed_100",
+  "section": "NN",
+  "eval_set": "final_eval_set_300",
+  "eval_mode": "deterministic",
+  "metrics": {
+    "total_episodes": 300,
+    "successful_episodes": 13,
+    "success_rate": 0.043333333333333335,
+    "success_rate_ci": "4.3% [2.5%, 7.3%] (13/300)",
+    "ci_low": 0.02549647513253911,
+    "ci_high": 0.07271739222919563,
+    "e_ss_mean": 0.08352832069084412,
+    "e_ss_median": 0.060159476814083596,
+    "e_ss_p90": 0.18022708775519666,
+    "final_dist_mean": 0.08090371703543478,
+    "v_ss_mean": 1.2783116591695611,
+    "v_ss_median": 0.7191977470446249,
+    "t_s_mean": 1.8674000000000002,
+    "t_s_median": 2.0,
+    "j_u_mean": 0.3716445793367464,
+    "j_lqr_mean": -32.530268694818346,
+    "j_lqr_median": -23.124288662355028,
+    "j_lqr_std": 33.25992134136024,
+    "mean_action_delta": 0.2220724800392093
+  }
+}

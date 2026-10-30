@@ -1,31 +1,25 @@
 """
-Paso 5: Renderizado Interactivo en Tiempo Real para Brazo Robótico 2 DOF.
-Permite ver al agente de RL en acción y controlar el objetivo de forma interactiva con el mouse o con la barra espaciadora.
-Soporta la carga automática de la configuración con la que se entrenó el modelo (experiment_meta.json o --config).
+Visualizador y Renderizado Interactivo en Tiempo Real para Manipulador 2-DOF (MuJoCo Reacher-v5).
+Permite evaluar visualmente políticas de RL (PPO, SAC) o controladores analíticos (C0) en 3D.
 """
-
 import os
 import sys
 import json
+import time
 import argparse
-import math
 import zipfile
+from pathlib import Path
+from typing import Optional, Dict, Any
 import numpy as np
-import pygame
 import yaml
-from stable_baselines3 import PPO, SAC
-from arm2d_env import Arm2DEnv
+
+from src import Arm2DEnv, JacobianDampedController, load_env_config
 
 
-def load_trained_model(model_path):
-    """Carga el modelo SB3 detectando el algoritmo desde su propio .zip.
+def load_trained_model(model_path: str):
+    """Carga un modelo serializado de Stable-Baselines3 detectando el algoritmo del .zip."""
+    from stable_baselines3 import PPO, SAC
 
-    Un zip de SB3 guarda en 'data' la clase de política serializada; el
-    campo '__module__' ('stable_baselines3.sac.policies' frente a
-    'stable_baselines3.common.policies') permite distinguir un SAC de un
-    PPO sin depender del nombre del fichero. Con retén: si los metadatos
-    no se pueden leer, se prueba PPO y después SAC.
-    """
     algo = None
     try:
         with zipfile.ZipFile(model_path) as zf:
@@ -33,7 +27,7 @@ def load_trained_model(model_path):
         policy_module = str(data.get("policy_class", {}).get("__module__", ""))
         algo = "SAC" if "sac" in policy_module else "PPO"
     except Exception as e:
-        print(f">>> [AVISO] No se pudo leer el algoritmo del zip ({e}); probando ambos.")
+        print(f">>> [AVISO] Metadatos no legibles ({e}); probando PPO y luego SAC.")
 
     if algo == "SAC":
         print(">>> [MODELO] Algoritmo detectado: SAC")
@@ -44,152 +38,106 @@ def load_trained_model(model_path):
             return PPO.load(str(model_path))
         except Exception:
             pass
-    # Retén: metadatos ilegibles o PPO fallido -> probar SAC (y viceversa)
+
     for loader, nombre in ((PPO.load, "PPO"), (SAC.load, "SAC")):
         try:
             model = loader(str(model_path))
-            print(f">>> [MODELO] Algoritmo detectado (por retén): {nombre}")
+            print(f">>> [MODELO] Algoritmo detectado: {nombre}")
             return model
         except Exception:
             continue
-    raise ValueError(f"No se pudo cargar el modelo como PPO ni como SAC: {model_path}")
+    raise ValueError(f"No se pudo cargar el modelo desde: {model_path}")
 
 
-def find_model_config(model_path, config_path=None):
-    """Carga la configuración asociada al modelo o usa valores por defecto."""
-    if config_path and os.path.exists(config_path):
-        with open(config_path, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f)
+def interactive_render(model_path: Optional[str] = None, config_path: Optional[str] = None,
+                       c0: bool = False, episodes: int = 10):
+    """Bucle de renderizado interactivo en MuJoCo."""
+    env_cfg = load_env_config(config_path) if config_path else load_env_config()
+    print(">>> Inicializando entorno de simulación dinámica MuJoCo Reacher-v5 (render_mode='human')...")
 
-    # Intentar buscar experiment_meta.json en la carpeta del modelo
-    if model_path:
-        # Si model_path es 'models/exp2_smooth_precision/best_model/best_model.zip',
-        # buscamos el experiment_meta.json en la carpeta del experimento
-        model_dir = os.path.dirname(os.path.abspath(model_path))
-        
-        # Buscar en la carpeta actual y en carpetas superiores (útil para checkpoints)
-        candidates = [
-            os.path.join(model_dir, "experiment_meta.json"),
-            os.path.join(os.path.dirname(model_dir), "experiment_meta.json"),
-            os.path.join(os.path.dirname(os.path.dirname(model_dir)), "experiment_meta.json"),
-            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(model_dir))), "experiment_meta.json")
-        ]
-        
-        for meta_file in candidates:
-            if os.path.exists(meta_file):
-                try:
-                    with open(meta_file, "r", encoding="utf-8") as f:
-                        meta = json.load(f)
-                        print(f">>> [CONFIG] Ajustando entorno a los parámetros del modelo ({meta_file})...")
-                        return meta.get("parameters", {})
-                except Exception as e:
-                    print(f">>> [AVISO] No se pudo leer {meta_file}: {e}")
+    env = Arm2DEnv(render_mode="human", config=env_cfg)
 
-    return None
-
-
-def interactive_render(model_path=None, config_path=None):
-    print("=" * 60)
-    print(" SIMULADOR INTERACTIVO DE BRAZO ROBÓTICO 2D (PPO/SAC)")
-    print("=" * 60)
-    print("Controles:")
-    print(" - Click Izquierdo en la ventana : Mover el objetivo (Target) a esa posición")
-    print(" - Barra Espaciadora            : Generar nuevo objetivo aleatorio")
-    print(" - Tecla 'R'                     : Reiniciar posición del brazo")
-    print(" - Tecla 'ESC' o cerrar ventana  : Salir")
-    print("=" * 60)
-
-    # Resolver ruta de modelo por defecto si no se proporcionó
-    if not model_path:
-        default_paths = [
-            "models/exp2_smooth_precision/best_model/best_model.zip",
-            "models/exp1_baseline/best_model/best_model.zip",
-            "models/PPO/best_model/best_model.zip"
-        ]
-        for p in default_paths:
-            if os.path.exists(p):
-                model_path = p
-                break
-
-    # Cargar la configuración exacta del modelo para que coincidan los observation spaces
-    cfg = find_model_config(model_path, config_path)
-
-    # Crear entorno con la configuración adecuada
-    env = Arm2DEnv(render_mode="human", config=cfg)
-    obs, info = env.reset()
-
-    # Buscar estadísticas de normalización si existen (Fase A)
+    # Buscar estadísticas VecNormalize si aplica
     norm_wrapper = None
-    if model_path:
+    if model_path and not c0:
         model_dir = os.path.dirname(os.path.abspath(model_path))
-        norm_candidates = [
+        for cand in [
             os.path.join(model_dir, "vecnormalize_stats.pkl"),
             os.path.join(os.path.dirname(model_dir), "vecnormalize_stats.pkl"),
-            os.path.join(os.path.dirname(model_dir), "models", "vecnormalize_stats.pkl")
-        ]
-        for norm_file in norm_candidates:
-            if os.path.exists(norm_file):
+            os.path.join(os.path.dirname(model_dir), "models", "vecnormalize_stats.pkl"),
+        ]:
+            if os.path.exists(cand):
                 try:
                     from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
-                    dummy = DummyVecEnv([lambda: Arm2DEnv(config=cfg)])
-                    norm_wrapper = VecNormalize.load(norm_file, dummy)
+                    dummy = DummyVecEnv([lambda: Arm2DEnv(config=env_cfg)])
+                    norm_wrapper = VecNormalize.load(cand, dummy)
                     norm_wrapper.training = False
                     norm_wrapper.norm_reward = False
-                    print(f">>> [NORM] Estadísticas de normalización cargadas desde: {norm_file}")
+                    print(f">>> [NORM] Estadísticas de normalización cargadas: {cand}")
                     break
                 except Exception as e:
-                    print(f">>> [AVISO] No se pudo cargar VecNormalize ({norm_file}): {e}")
+                    print(f">>> [AVISO] No se pudo cargar VecNormalize ({cand}): {e}")
 
-    # Cargar modelo entrenado si existe
-    model = None
-    if model_path and os.path.exists(model_path):
-        print(f">>> Cargando modelo entrenado desde: {model_path}")
-        model = load_trained_model(model_path)
+    # Cargar agente
+    if c0:
+        print(">>> [CONTROLADOR] Ejecutando baseline cartesiano PD con transposición del Jacobiano (C0).")
+        agent = JacobianDampedController.from_config(env_cfg)
+    elif model_path and os.path.exists(model_path):
+        agent = load_trained_model(model_path)
     else:
-        print(">>> [AVISO] No se encontró modelo. Ejecutando con acciones aleatorias.")
+        print(">>> [AVISO] Sin modelo ni C0 especificado; ejecutando controlador analítico C0 por defecto.")
+        agent = JacobianDampedController.from_config(env_cfg)
 
-    running = True
-    manual_target = False
+    print("=" * 70)
+    print(" Presione Ctrl+C en la consola para interrumpir la simulación.")
+    print("=" * 70)
 
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    running = False
-                elif event.key == pygame.K_SPACE:
-                    manual_target = False
-                    obs, _ = env.reset()
-                elif event.key == pygame.K_r:
-                    obs, _ = env.reset()
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:
-                    mx, my = pygame.mouse.get_pos()
-                    world_x = (mx - env.origin[0]) / env.scale
-                    world_y = -(my - env.origin[1]) / env.scale
-                    env.set_target(world_x, world_y)
-                    manual_target = True
-                    obs = env._get_obs()
-
-        if model is not None:
-            policy_obs = norm_wrapper.normalize_obs(obs) if norm_wrapper else obs
-            action, _ = model.predict(policy_obs, deterministic=True)
-        else:
-            action = env.action_space.sample()
-
-        obs, reward, terminated, truncated, info = env.step(action)
-
-        if (terminated or truncated) and not manual_target:
+    try:
+        for ep in range(episodes):
             obs, info = env.reset()
+            ep_return = 0.0
+            step_count = 0
 
-    env.close()
+            print(f"\n--- Episodio {ep + 1}/{episodes} ---")
+            print(f"Objetivo: ({info['target_x']:.3f}, {info['target_y']:.3f}) | Distancia inicial: {info['distance']:.4f} m")
+
+            while True:
+                policy_obs = norm_wrapper.normalize_obs(obs) if norm_wrapper else obs
+                if hasattr(agent, "predict"):
+                    pred_out = agent.predict(policy_obs, deterministic=True)
+                    action = pred_out[0] if isinstance(pred_out, tuple) else pred_out
+                else:
+                    action = agent.get_action(policy_obs)
+
+                obs, reward, terminated, truncated, info = env.step(action)
+                ep_return += reward
+                step_count += 1
+
+                # Renderizar fotograma en la ventana de MuJoCo
+                env.render()
+                time.sleep(0.01)
+
+                if step_count % 20 == 0 or terminated or truncated:
+                    print(f"Paso {step_count:3d}: Dist = {info['distance']:.4f} m | Vel = {info['joint_speed']:.3f} rad/s | Torque = [{action[0]:.2f}, {action[1]:.2f}] | Rew = {reward:.3f}")
+
+                if terminated or truncated:
+                    print(f"Episodio {ep + 1} finalizado. Retorno acumulado: {ep_return:.2f} | Distancia final: {info['distance']:.4f} m")
+                    time.sleep(0.5)
+                    break
+
+    except KeyboardInterrupt:
+        print("\n>>> Simulación interrumpida por el usuario.")
+    finally:
+        env.close()
+        print(">>> Entorno MuJoCo cerrado correctamente.")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Simulador interactivo para Brazo 2D")
-    parser.add_argument("model_path", nargs="?", default=None, help="Ruta al modelo .zip")
-    parser.add_argument("--config", "-c", type=str, default=None, help="Ruta opcional al YAML de configuración")
+    parser = argparse.ArgumentParser(description="Visualizador MuJoCo en tiempo real para manipulador planar 2-DOF")
+    parser.add_argument("model_path", nargs="?", default=None, help="Ruta al modelo entrenado (.zip)")
+    parser.add_argument("--config", "-c", type=str, default=None, help="Ruta al YAML de configuración del entorno")
+    parser.add_argument("--c0", action="store_true", help="Ejecutar el controlador cinemático C0")
+    parser.add_argument("--episodes", "-e", type=int, default=10, help="Número de episodios a simular")
     args = parser.parse_args()
 
-    interactive_render(args.model_path, args.config)
+    interactive_render(args.model_path, args.config, c0=args.c0, episodes=args.episodes)

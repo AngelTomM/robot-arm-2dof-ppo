@@ -1,0 +1,27 @@
+{
+  "agent": "PPO_7_seed_100",
+  "section": "entorno",
+  "eval_set": "final_eval_set_300",
+  "eval_mode": "deterministic",
+  "metrics": {
+    "total_episodes": 300,
+    "successful_episodes": 23,
+    "success_rate": 0.07666666666666666,
+    "success_rate_ci": "7.7% [5.2%, 11.2%] (23/300)",
+    "ci_low": 0.05162765319533354,
+    "ci_high": 0.11241001946846436,
+    "e_ss_mean": 0.0739641763264865,
+    "e_ss_median": 0.05600158507325964,
+    "e_ss_p90": 0.16565458733551827,
+    "final_dist_mean": 0.07179768901407163,
+    "v_ss_mean": 0.4612551163678528,
+    "v_ss_median": 0.2380593052417811,
+    "t_s_mean": 1.8816000000000002,
+    "t_s_median": 2.0,
+    "j_u_mean": 0.13092532371441876,
+    "j_lqr_mean": -11.60414985406311,
+    "j_lqr_median": -9.03260870445893,
+    "j_lqr_std": 9.497815458494811,
+    "mean_action_delta": 0.018625176521260514
+  }
+}

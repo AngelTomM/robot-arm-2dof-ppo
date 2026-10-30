@@ -1,408 +1,316 @@
-# 📘 Manual de Uso — Brazo Robótico 2 DOF
+# Manual de Operación y Uso — Manipulador Planar 2-DOF (Fase D: MuJoCo Reacher-v5)
 
-Manual operativo del proyecto: instalación, entrenamiento unificado, simulación interactiva, evaluación formal y ejecución de la suite de validación.
-Para el fundamento técnico (cinemática, criterio de éxito y diseño de recompensas), consulte [`docs/metodologia.md`](metodologia.md).
+Guía operativa para la instalación, entrenamiento, evaluación mecatrónica, generación de gráficos y simulación interactiva 3D sobre el manipulador planar 2-DOF accionado por torque. Para el fundamento teórico y la formulación matemática de los costos cuadráticos y la cinemática, remítase a [docs/metodologia.md](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/docs/metodologia.md).
 
 ---
 
-## 1. Instalación y Configuración
+## 1. Configuración del Entorno de Ejecución
 
-### 1.1 Clonar el repositorio
-```bash
-git clone https://github.com/AngelTomM/robot-arm-2dof-ppo.git
-cd robot-arm-2dof-ppo
-```
+### 1.1 Requisitos del Sistema
 
-### 1.2 Entorno virtual (Python 3.11)
-- **Windows (PowerShell):**
-  ```powershell
-  py -3.11 -m venv .venv
-  .\.venv\Scripts\Activate.ps1
-  ```
-- **Linux / macOS:**
-  ```bash
-  python3.11 -m venv .venv
-  source .venv/bin/activate
-  ```
+* Python 3.11 o versión superior compatible con librerías de MuJoCo.
+* Entorno virtual activo con acceso a controladores de aceleración gráfica OpenGL.
 
+### 1.2 Activación del Entorno Virtual e Instalación de Dependencias
 
-### 1.3 Dependencias
-```bash
+```powershell
+# 1. Activación del entorno virtual (Windows PowerShell)
+..\.venv\Scripts\Activate.ps1
+
+# 2. Instalación de paquetes requeridos
 pip install -r requirements.txt
 ```
 
----
-
-## 2. Entrenamiento de Agentes (`train.py`)
-
-Todo el entrenamiento se ejecuta desde el **punto de entrada único** en la raíz. Dos principios de diseño:
-
-1. **Configuración como fuente única de verdad (SSOT):** la fase y el identificador del experimento se derivan de la **ruta** del archivo YAML de configuración, no de su contenido.
-2. **Soporte dual de algoritmos:** si el YAML contiene la sección `sac:` se instancia SAC; si contiene `ppo:`, PPO. La presencia de ambas secciones, o de ninguna, produce un error de configuración.
-
-### 2.1 Sintaxis general
-```powershell
-python train.py --config <ruta_del_yaml> [--seed <n>] [--device <s>] [--total_timesteps <n>] [--checkpoint_freq <n>]
-```
-
-### 2.2 Argumentos
-
-| Argumento | Valor por defecto | Descripción |
-| :--- | :---: | :--- |
-| `--config` | *(requerido)* | Ruta al YAML del experimento bajo `configs/`. Define fase, experimento y algoritmo. |
-| `--seed` | `42` | Semilla aleatoria (global: Python, NumPy, torch, CUDA). |
-| `--device` | `auto` | Dispositivo de cómputo: `auto` (CUDA si está disponible; si no, CPU), `cpu` o `cuda`. |
-| `--total_timesteps` | del YAML | Sustituye el presupuesto de pasos de `training.total_timesteps`. |
-| `--checkpoint_freq` | del YAML | Sustituye la frecuencia de guardado de `training.checkpoint_freq`. |
-
-### 2.3 Configuración de la Red Neuronal (`net_arch`)
-
-Bajo la sección del algoritmo (`ppo:` o `sac:`), la arquitectura de la red puede definirse de dos formas:
-
-1. **Estructura detallada (recomendada):**
-   ```yaml
-   net_arch:
-     layers: [256, 256, 128]      # Lista de neuronas por capa oculta
-     hidden_activation: relu       # Función de activación de capas ocultas
-   ```
-   Funciones de activación soportadas: `relu`, `tanh`, `elu`, `leaky_relu`, `gelu`, `selu`, `sigmoid`, `silu` (o `swish`), `identity` (o `linear`).
-
-   *Nota sobre la activación de salida:* No se parametriza en el YAML porque está determinada por la formulación de cada algoritmo en Stable-Baselines3. En PPO, la salida es lineal (`Identity`) para parametrizar la media de la distribución gaussiana no acotada; en SAC, se aplica una transformación `tanh` integrada (`TanhSquashedDistribution`) para acotar la acción continua al rango $[-1, 1]$. Modificar estas capas finales resulta contraproducente.
-
-2. **Formato resumido (heredado):**
-   ```yaml
-   net_arch: 256x256_relu   # o 64x64_tanh
-   ```
-
-### 2.4 Derivación de la fase (SSOT)
-
-| Ruta del config | Fase derivada | Directorio de salida |
-| :--- | :---: | :--- |
-| `configs/phase_a/X3.yaml` | `phase_a` | `experiments/phase_a/X3/seed_<n>/` |
-| `configs/phase_b/X3.yaml` | `phase_b` | `experiments/phase_b/X3/seed_<n>/` |
-| `configs/phase_b/extension/X4.yaml` | `phase_b_ext` | `experiments/phase_b_ext/X4/seed_<n>/` |
-| `configs/phase_c/S1.yaml` | `phase_c` | `experiments/phase_c/S1/seed_<n>/` |
-
-De forma genérica: la fase es la ruta del config relativa a `configs/` aplanada con `_`, y la salida se escribe en `experiments/<fase>/<exp_id>/seed_<n>/`.
-
-### 2.5 Ejemplos por fase
-
-```powershell
-# Fase A — diagnóstico (PPO, 300.000 pasos)
-python train.py --config configs/phase_a/X3.yaml --seed 42
-
-# Fase B — presupuesto de 1.000.000 de pasos (PPO)
-python train.py --config configs/phase_b/X3.yaml --seed 42
-
-# Extensión de Fase B — fase_b_ext (PPO, 655.360 pasos)
-python train.py --config configs/phase_b/extension/X4.yaml --seed 42
-
-# Fase C — agentes SAC (655.360 pasos)
-python train.py --config configs/phase_c/S1.yaml --seed 42
-```
-
-### 2.6 Artefactos de salida
-
-Cada ejecución escribe exclusivamente en `experiments/<fase>/<exp_id>/seed_<n>/`:
-
-| Ruta | Contenido |
-| :--- | :--- |
-| `models/<algoritmo>_arm2d_final.zip` | Pesos del modelo final. |
-| `models/best_model/` | Mejor modelo según la evaluación periódica (`best_model.zip` + `vecnormalize_stats.pkl`). |
-| `models/vecnormalize_stats.pkl` | Estadísticas de `VecNormalize` del entorno de entrenamiento, guardadas de forma acoplada al modelo final. |
-| `checkpoints/ckpt_<paso>/` | Checkpoint periódico: `model.zip` **y** `vecnormalize_stats.pkl` correspondientes al mismo paso (deben cargarse siempre juntos). |
-| `logs/` | Registros de TensorBoard (`tensorboard --logdir experiments/<fase>/<exp_id>/seed_<n>/logs`). |
-| `experiment_meta.json` | Metadatos: config fuente, fase, algoritmo, semilla, dispositivo, y parámetros completos. |
-| `train_metrics.json` | Tiempo de entrenamiento, rendimiento medio (FPS) y pasos de los checkpoints guardados. |
-
-### 2.7 Callbacks y telemetría
-
-- `PhaseATrainingCallback`: registra en TensorBoard la tasa de éxito y la longitud de permanencia (*hold*) en ventanas de 100 episodios.
-- `PhaseAEvalCallback`: evaluación periódica en línea (activa únicamente si el YAML define `training.eval_freq > 0`), con sincronización de las estadísticas de `VecNormalize` al entorno de evaluación en modo inferencia.
-- `PhaseBCheckpointCallback`: guardado periódico del par modelo + estadísticas de normalización en el mismo paso.
-
-Una ejecución de referencia rápida para verificar la instalación:
-```powershell
-python train.py --config configs/phase_c/S1_smooth_200.yaml --seed 42 --total_timesteps 4000
-```
+Las dependencias principales contemplan `gymnasium[mujoco]>=1.0.0`, `mujoco>=2.3.3`, `imageio>=2.14.1`, `stable-baselines3>=2.0.0`, `torch>=2.0.0`, `matplotlib>=3.8.0`, `pandas>=2.1.0` y `pytest>=8.0.0`.
 
 ---
 
-## 3. Simulación Interactiva en Tiempo Real
+## 2. Taxonomía Modular y Fuente Única de Verdad (SSOT)
 
-Vista del agente entrenado a 60 FPS. Acepta modelos **PPO y SAC** (detecta el
-algoritmo leyendo el propio `.zip`, sin depender del nombre del fichero). Carga
-automáticamente el vector de normalización acoplado `vecnormalize_stats.pkl`
-asociado al checkpoint (los artefactos `model.zip` y `vecnormalize_stats.pkl`
-son locales y no se versionan; reproduzca primero el entrenamiento con
-`train.py` si es necesario):
-
-```powershell
-# Agente X4 (checkpoint de la carpeta ckpt_<paso>/: model.zip + vecnormalize_stats.pkl)
-python interactive_render.py experiments/phase_b/extension/X4/seed_42/checkpoints/ckpt_450560/model.zip --config configs/phase_b/extension/X4.yaml
-
-# Ejemplo con un checkpoint recién entrenado por train.py (nuevo layout phase_b_ext)
-python interactive_render.py experiments/phase_b_ext/X4/seed_42/checkpoints/ckpt_<paso>/model.zip --config configs/phase_b/extension/X4.yaml
-
-# Modelos SAC (p. ej. los propios de configs/phase_X/<autor>)
-python interactive_render.py experiments/phase_X_tomi/sac_smooth/seed_42/models/best_model/best_model.zip
-```
-
-| Control | Función |
-| :--- | :--- |
-| 🖱️ Clic izquierdo (mantener y arrastrar) | Reubica el objetivo hacia la posición del cursor. |
-| ⌨️ Barra espaciadora | Genera un objetivo aleatorio dentro del espacio de trabajo alcanzable. |
-| ⌨️ Tecla `R` | Reinicia la configuración articular del robot. |
-| ⌨️ Tecla `ESC` | Cierra la ventana del simulador. |
-
----
-
-## 4. Evaluación y Benchmarking Formal
-
-Replicación de la evaluación multi-semilla confirmada ($n=500$ episodios por semilla, dataset congelado criptográficamente, intervalos de Wilson al 95%):
-
-```powershell
-python scripts/phase_b_ext_run_b12_final_eval.py
-```
-
-El resultado se registra de forma reproducible en `reports/data/phase_b/extension/final_b2_selection_verdict.json`.
-
-Otros recursos de análisis en `scripts/`:
-- Evaluación de checkpoints: punto único `evaluate_checkpoints.py` sobre el módulo `src/evaluation/checkpoints.py` (docstring como fuente de parámetros):
-
-```powershell
-python scripts/evaluate_checkpoints.py --help
-
-# Fase B: todos los checkpoints de una corrida sobre 'validation' (200 episodios)
-python scripts/evaluate_checkpoints.py --phase b --exp_dir experiments/<fase>/<exp>/seed_<seed> --config configs/<fase>/<exp>.yaml [--output_csv <ruta>]
-
-# Fase C: S1 (SAC) + X3 (PPO) + referencia C0 sobre 'validation_c' (500 episodios)
-python scripts/evaluate_checkpoints.py --phase c [--dataset <json>] [--output-dir <dir>] [--mode deterministic|stochastic]
-```
-
-La extensión de Fase B se orquesta con `phase_b_ext_batch_eval_validation.py` (barrido de todos los checkpoints sobre `validation_b2`) y `phase_b_ext_run_b12_final_eval.py` (evaluación terminal de la selección de la Regla 4.1).
-
-- `phase_b_ext_apply_selection.py`: regla formal de selección (suavizado y desempate) con cálculo del intervalo de indistinguibilidad $U_{equiv}$.
-- Generación de figuras: punto único `generate_figures.py` sobre el paquete `src/visualization/` (sección 5).
-- Prueba de humo con entrenamiento real corto (no toca datos históricos): los configs de `configs/smoke/` derivan la fase desde su ruta hacia `experiments/smoke/`:
-
-```powershell
-python train.py --config configs/smoke/x3_smoke.yaml --total_timesteps 8192 --checkpoint_freq 4096   # PPO
-python train.py --config configs/smoke/s1_smoke.yaml --total_timesteps 8192 --checkpoint_freq 4096   # SAC
-python scripts/evaluate_checkpoints.py --phase b --exp_dir experiments/smoke/X3/seed_42 --config configs/smoke/x3_smoke.yaml --output_csv <ruta>
-```
-
----
-
-## 5. Generación de Figuras
-
-Todos los generadores se invocan a través de un único punto de entrada:
-
-```powershell
-python scripts/generate_figures.py --help              # referencia completa
-python scripts/generate_figures.py --phase <fase> [--out-dir <ruta>]
-```
-
-Las fases `b` y `c` admiten además **banderas de selección** para dibujar modelos
-nuevos sin tocar código: `--experiments` (lista de modelos, p. ej. `X3,S7`),
-`--seeds`, `--exps-dir` (raíz alternativa de corridas para el TensorBoard),
-`--data-dir` (CSVs de evaluación alternativos, mismo esquema histórico de
-columnas) y `--figures` (subconjunto, p. ej. `1,3`). Sin banderas, la salida es
-idéntica al estudio histórico. Las fases monográficas (`a`, `a_agg`,
-`trajectories`, `b_ext`, `c_s3`) no las aceptan.
-
-Receta para un modelo recién entrenado (ejemplo con la config Fase C
-`S1_smooth_200` y presupuesto corto):
-
-```powershell
-# 1) Entrenar (la fase y el experimento se derivan de la ruta del config)
-python train.py --config configs/phase_c/S1_smooth_200.yaml --total_timesteps 8192 --checkpoint_freq 4096
-
-# 2) Evaluar los checkpoints -> CSV (fase c: bastón biblioteca sobre
-#    src.evaluation.checkpoints.run_phase_c_evaluation; fase b por corrida:
-#    python scripts/evaluate_checkpoints.py --phase b --exp_dir ... --config ...)
-
-# 3) Generar las figuras solo del modelo nuevo
-python scripts/generate_figures.py --phase c --data-dir <csvs> --experiments S1_smooth_200 --exps-dir experiments/phase_c/S1_smooth_200 --out-dir <figs>
-python scripts/generate_figures.py --phase b --data-dir <csvs> --experiments S1_smooth_200 --seeds 42 --figures 2,3 --out-dir <figs>
-```
-
-Los experimentos sin color canónico en la paleta (`EXP_COLORS`/`AGENT_COLORS`)
-reciben un color del ciclo neutro por orden de aparición
-(`src/visualization/common.color_resolver`).
-
-| Fase | Contenido | Insumos | Salida por defecto |
-| :--- | :--- | :--- | :--- |
-| `a` | Figuras históricas de la Fase A por experimento (fig1–fig4) | `reports/data/all_final_*.csv` | `reports/figures/` |
-| `a_agg` | Auditoría agregada multi-semilla de Fase A + validaciones V01–V18 | CSV consolidados + TensorBoard de `experiments/phase_a` | `reports/data/aggregated/` y `reports/figures/aggregated/` |
-| `trajectories` | Trayectorias cartesianas reales (4 casos canónicos) | Modelos PPO en `experiments/phase_a/*/seed_42/models/` | `reports/figures/` |
-| `b` | 8 figuras de la Fase B con JSON de trazabilidad | TensorBoard de `experiments/phase_b` + `reports/data/phase_b/` | `reports/figures/phase_b/` |
-| `b_ext` | Figuras de la Extensión (curvas, Pareto, selección) | `reports/data/phase_b/extension/*.csv\|json` | `reports/figures/phase_b/extension/` |
-| `c` | 6 figuras de la Fase C (SAC) | `reports/data/phase_c/*.csv` + `experiments/phase_c/S1` (opcional) | `reports/figures/phase_c/` |
-| `c_s3` | 4 figuras del análisis de cierre S3_combined | `reports/phase_c_s2_analysis/` y `phase_c_s3_analysis/` | `reports/phase_c_s3_analysis/figures/` |
-
-### 5.1 Parámetros configurables de cada generador
-
-La fuente de verdad de los parámetros son los docstrings de cada módulo
-(`src/visualization/<modulo>.py`, consultables con
-`python -c "help('src.visualization.phase_b')"` o leyendo el archivo).
-Resumen orientativo:
-
-- **`phase_a`**: `output_dir`; `exp_order` y `colors` (definidos dentro de `generate_all_plots`).
-- **`phase_a_agg`**: `DATA_DIR` (lecturas); `run(out_dir)` redirige las escrituras (`data_aggregated/`, `figures/aggregated/`, `ppo_diagnostics/`); `EXP_COLORS`, `REPLICATED_RL_EXPS`, `SEEDS`.
-- **`trajectories`**: `output_dir`; rutas de modelos (`x5_model_path` ... `x6_norm_path`); episodios de los casos canónicos (`final_dataset[0/5/10/12]`); horizonte de 200 pasos.
-- **`phase_b`**: `FIG_B_DIR`/`DATA_B_DIR`; `EXP_COLORS`, `CAT_COLORS`/`CATEGORIES` (mantener tonos históricos: los JSON publicados los asocian a las figuras ya publicadas); figs 2/3/8 parametrizables (`experiments`, `seeds`, `exps_dir`, `selected_ckpts` solo por biblioteca); figs 1 y 4-7 monográficas (se omiten con aviso si faltan sus CSV).
-- **`phase_b_ext`**: `out_dir`; `AGENT_COLORS`; listas `main_agents` y `pilot_agents`.
-- **`phase_c`**: `data_dir`/`figures_dir`; `AGENT_COLORS`; `experiments`/`sac_exp_dir`/`figures` (figs 1-3 y 5 parametrizables); `step_filter` (655360 por defecto; 245760 para el presupuesto del estudio S3; `None` sin filtro); `time_s1_sec`/`time_x3_sec` (4600.0 y 720.0 segundos medidos en GPU).
-- **`phase_c_s3`**: `out_dir`; `STEPS`, `SEEDS`, `COLORS`; `train_times`/`fps_vals` (tiempos de entrenamiento en minutos y FPS medios por modelo, medidos en GPU, de la fig4).
-
-- **`phase_custom`**: `out_dir`; `configs` (obligatorio, 1 YAML por agente); `experiments` (nombre de corrida 1-a-1 con `--configs`); `seeds` (1-a-1, default 42); `figures` (subconjunto 1-5); `exps_dir` (raíz alternativa de corridas; por defecto la fase se deriva de la ruta del YAML como en `train.py`); `skip_checkpoint_eval`/`refresh_checkpoint_eval` (evaluación formal de la fig. 5).
-
-### 5.2 Notas de reproducción
-
-- **Aviso controlado**: si falta el insumo principal, los generadores `a` y `trajectories` avisan y terminan sin error ("no encontrado aún", "Modelos aún no listos"); el resto aborta con la excepción correspondiente. En la fase `b`, las figuras monográficas 1 y 4-7 se omiten con aviso ("[OMITIDA]") cuando sus CSV no existen (p. ej. con un `--data-dir` alternativo).
-- **Opcionales**: en la fase `c`, `fig2` (diagnósticos SAC) se genera solo si existe la corrida indicada (`--exps-dir`; por defecto `experiments/phase_c/S1/`); las figs 4-5 solo si existe `step_data_val_geometry.csv` en el `--data-dir`.
-- **`a_agg`**: las tablas y figuras se generan íntegras; la suite V01–V18 exige los logs históricos de TensorBoard (`experiments/phase_a/<exp>/seed_<seed>/logs/`); si no están presentes, la validación V12 se interrumpe tras la generación de artefactos.
-- **Trazabilidad JSON**: cada figura con metadatos escribe un `<figura>.json` junto al PNG. El campo `script_path` apunta ahora al módulo migrado en `src/visualization/` (procedencia real); los esquemas de claves son idénticos a los publicados.
-- La invocación directa de cada módulo (`python -m src.visualization.phase_b`) es equivalente al despachador.
-
-### 5.3 Modo custom: comparativas libres entre agentes (fase X)
-
-Para agentes propios fuera de las fases monográficas (p. ej. los de
-`configs/phase_X/<autor>/`), `--phase custom` compara las corridas que
-`train.py` dejó en `experiments/…` usando sus registros sin recurrir a datos
-históricos:
-
-```powershell
-# Comparar dos agentes (las semillas van 1-a-1 con los configs):
-python scripts/generate_figures.py --phase custom `
-    --configs configs/phase_X/tomi/ppo_x3_v1.yaml,configs/phase_X/tomi/sac_smooth_v1.yaml `
-    --seeds 42
-
-# Variantes: solo algunas figuras (--figures 1,2,3), omitir la evaluación
-# formal de checkpoints (--skip-checkpoint-eval), o otra raíz de corridas
-# (--exps-dir) / nombres de directorio distintos al YAML (--experiments).
-```
-
-**Qué figura mirar según la pregunta:**
-
-| Pregunta | Figura | Dato a mirar |
-| :--- | :--- | :--- |
-| ¿Quién obtiene más recompensa durante el entrenamiento? | `figX_01` | `rollout/ep_rew_mean` (curva suavizada) |
-| ¿En qué punto del entrenamiento estuvo el mejor modelo? | `figX_02` | la **estrella**: timestep de máxima recompensa media de evaluación; el modelo ya extraído es `models/best_model/best_model.zip` |
-| ¿Cuánto varía una recompensa a otra por episodio? | `figX_03` | puntos individuales (mejor punto vs final) |
-| ¿Cuál es el mejor checkpoint para interactuar? | `figX_05` | la estrella por **tasa de éxito estricta formal** ±IC Wilson (dataset congelado n=200) |
-
-**Selección para la interacción** (con el VecNormalize acoplado del propio
-checkpoint cuando exista):
-
-```powershell
-python interactive_render.py experiments/phase_X_tomi/X3_v1/seed_42/checkpoints/ckpt_204800/model.zip
-# o el "mejor modelo" del callback de evaluación:
-python interactive_render.py experiments/phase_X_tomi/X3_v1/seed_42/models/best_model/best_model.zip
-```
-
-**Caveats del modo custom:**
-
-- Comparar RECOMPENSAS entre agentes solo es limpio si ambos comparten el
-  mismo `reward_params` (mismos pesos, incluido `w_a`): agentes con pesos
-  distintos usan escalas distintas (p. ej. un SAC con `w_a > 0` penaliza la
-  acción cambiante y su recompensa total es sistemáticamente menor). Si
-  difieren, usa la comparación por **éxito** de la figura 5 y el CSV
-  `reports/data/phase_X/checkpoint_eval.csv`.
-- El módulo avisa cuando el mejor por recompensa (fig. 2) no coincide con
-  el mejor por éxito (fig. 5): para elegir modelo la métrica objetivo de
-  la TFM es el éxito estricto.
-- La fig. 5 evalúa 200 episodios por checkpoint (dataset congelado
-  'validation'); las corridas entrenadas sin VecNormalize se detectan
-  automáticamente (columna `has_vecnormalize` del CSV).
-
----
-
-## 6. Suite de Validación
-
-31 pruebas unitarias: cinemática directa, Jacobiano analítico, contador de *hold*, conservación de suavidad, checkpointing acoplado a `VecNormalize`, integridad de los datasets congelados y API de Gymnasium.
-
-```powershell
-python -m pytest tests/ -q
-```
-
----
-
-## 7. Estructura del Repositorio
+El repositorio articula sus etapas bajo una taxonomía homogénea y desacoplada estructurada en carpetas temáticas o de presupuesto computacional (secciones):
 
 ```text
-robot-arm-2dof-ppo/
-├── train.py                                 # Punto de entrada único de entrenamiento (PPO/SAC)
-├── arm2d_env.py                             # Entorno Gymnasium (física, cinemática directa, hold, jacobiano)
-├── interactive_render.py                    # Simulador interactivo Pygame (PPO/SAC) con auto-carga de normalización
-├── configs/
-│   ├── phase_a/                             # Configuraciones de diagnóstico de la Fase A (X1a a X6)
-│   ├── phase_b/                             # Configuraciones a 1M pasos (X3, X5_near)
-│   │   └── extension/                       # Configuraciones de la Extensión (X1a, X2, X3, X4, X5, X6) -> fase phase_b_ext
-│   ├── phase_c/                             # Configuraciones SAC de la Fase C (S1, S1_smooth_200, S2_freq, S2_wa, S3_combined)
-│   └── smoke/                               # Fixtures de humo con entrenamiento corto -> experiments/smoke/ (sección 4)
-├── experiments/
-│   └── <phase>/<exp_id>/seed_<seed>/        # Salida estricta del entrenamiento (ver sección 2.5)
-├── src/
-│   ├── controllers/
-│   │   └── jacobian_controller.py           # Controlador cinemático diferencial analítico C0 (Jacobiano DLS)
-│   ├── evaluation/
-│   │   ├── datasets.py                      # Generación y congelamiento criptográfico de datasets (n=200, 300, 500)
-│   │   ├── evaluator.py                     # Motor formal de evaluación multi-episodio (determinista/estocástico)
-│   │   ├── checkpoints.py                   # Evaluación de checkpoints (núcleo de Fases B/B-ext/C, esquemas 'b' y 'c')
-│   │   └── metrics.py                       # Métricas operativas (éxito estricto, Wilson 95%, etc.)
-│   ├── training/
-│   │   ├── callbacks.py                     # Callbacks de telemetría y evaluación en línea (sincronización VecNormalize)
-│   │   └── phase_b_callbacks.py             # Checkpointing acoplado (model.zip + vecnormalize_stats.pkl)
-│   └── visualization/                       # Paquete de generación de figuras por fase (sección 5)
-│       ├── common.py                        # Estilo, guardado con metadatos JSON y clasificación de desenlaces
-│       ├── phase_a.py, phase_a_agg.py, trajectories.py, phase_b.py
-│       └── phase_b_ext.py, phase_c.py, phase_c_s3.py
-├── scripts/
-│   ├── evaluate_checkpoints.py              # Punto único de evaluación de checkpoints (--phase b|c)
-│   ├── generate_figures.py                  # Punto único de generación de figuras (--phase a|a_agg|trajectories|b|b_ext|c|c_s3)
-│   └── ...                                  # runners batch, selección formal y análisis
-├── reports/                                 # Informes por fase, datos agregados y figuras exportadas
-├── docs/
-│   ├── manual-de-uso.md                     # Este manual
-│   └── metodologia.md                       # Fundamento técnico y protocolo experimental
-├── tests/                                   # Suite de 31 pruebas unitarias
-├── requirements.txt                         # Dependencias fijadas (Python 3.11)
-├── train.py                                 # raíz — ver arriba
-└── README.md                                # Página de talón (resumen, hallazgos y arranque rápido)
+configs/<seccion>/<modelo>.yaml
+experiments/<seccion>/<modelo>/seed_<semilla>/
+reports/data/evaluation/<eval_set>/<seccion>/<modelo>/
+reports/<fig_partition>/<seccion>/<modelo>/
+```
+
+### 2.1 Secciones Canónicas
+
+* `entorno/`: Modelos de calibración base de física y baseline cinemático C0 (`C0`, `PPO_1` a `PPO_7`, `SAC_1`, `SAC_2`).
+* `entorno_V2/`: Variaciones paramétricas de recompensa y dinámicas del entorno (`PPO_7.2` a `PPO_7.12`, `PPO_7.11_500`).
+* `NN/`: Ablación de arquitecturas de red neuronal y funciones de activación (`PPO_S`, `PPO_L`, `PPO_M_RELU`, `PPO_M_TANH`, `PPO_M_LEAKYRELU`).
+* `PPO_eval_300k/`: Evaluaciones PPO con horizonte estándar de 300 000 timesteps (`PPO_NOM300`, `PPO_MYO`, `PPO_EXP_H`, `PPO_EXP_L`, `PPO_FAR`, `PPO_STG`, `PPO_AGR`).
+* `PPO_eval_500k/`: Evaluaciones PPO con horizonte intermedio de 500 000 timesteps (`PPO_NOM`, `PPO_NOM_LRelu`, `PPO_15`, `PPO_17`, `PPO_17_E`, `PPO_10_todo` a `PPO_18`).
+* `PPO_eval_1M/`: Evaluaciones PPO de alta convergencia a 1 000 000 de pasos (`PPO_NOM_1M`, `PPO_15_1M`, `PPO_17_1M`, `PPO_17_2M`).
+* `SAC_eval_300k/`: Evaluaciones SAC a 300 000 timesteps (`SAC_NOM`, `SAC_4`, `SAC_4s`, `SAC_BUF_L`, `SAC_BUF_S`, `SAC_EXP_LOW`, `SAC_EXP_H`, `SAC_NOM_NREWARD`).
+* `SAC_eval_500k/`: Configuraciones SAC de horizonte extendido.
+* `smoke/`: Pruebas de integración rápida de bajo presupuesto temporal (`PPO_smoke`, `SAC_smoke`).
+
+En los archivos YAML, el nombre del modelo está dado por el nombre del archivo sin extensión (`.stem`) y la sección por el nombre de la carpeta contenedora (`.parent.name`). El bloque `experiment:` contiene exclusivamente `description:`.
+
+---
+
+## 3. Entrenamiento de Agentes (`train.py`)
+
+El script en la raíz [train.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/train.py) centraliza la inicialización, vectorización y entrenamiento de los agentes bajo el proceso de decisión de Markov continuo (MDP):
+
+* **Resolución de Hiperparámetros (SSOT):** Fusiona automáticamente los parámetros físicos invariantes de [configs/environment.yaml](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/configs/environment.yaml) con la configuración específica del algoritmo de control.
+* **Selección de Algoritmo:** Detecta automáticamente si la configuración define hiperparámetros para PPO (`ppo:`) o SAC (`sac:`).
+* **Normalización Acoplada:** Utiliza `VecNormalize` sobre observaciones cinemáticas y dinámicas crudas preservando las escalas de la función de costo LQR continua (`norm_reward: false`).
+
+### 3.1 Sintaxis del Comando y Parámetros
+
+```powershell
+python train.py --config <ruta_yaml> [--seed <int|lista>] [--device <str>] [--total_timesteps <int>] [--checkpoint_freq <int>] [--resume [ruta_o_auto]] [--env-config <ruta_yaml>]
+```
+
+Comportamiento de los argumentos y valores por defecto:
+
+* `--config` (requerido): Ruta al archivo YAML del experimento (por ejemplo, `configs/PPO_eval_500k/PPO_17.yaml`).
+* `--seed` (por defecto: `42`): Semilla pseudoaleatoria. Admite enteros individuales o listas separadas por comas (ej. `"42, 100, 2026"`), ejecutando entrenamientos secuenciales de todas las semillas en una única orden.
+* `--device` (por defecto: `"auto"`): Dispositivo de cómputo para los tensores de PyTorch (`cuda` o `cpu`).
+* `--total_timesteps` (por defecto: `None`): Presupuesto total de pasos de interacción en el entorno. Si se omite, adopta el valor de `training.total_timesteps` en el YAML.
+* `--checkpoint_freq` (por defecto: `None`): Frecuencia de serialización periódica de puntos de control. Si se omite, adopta `training.checkpoint_freq` del YAML (típicamente 50 000 timesteps).
+* `--resume` (opcional, por defecto: `None`): Reanuda el entrenamiento desde un punto de control. Sin argumentos o con `"auto"`, localiza de manera autónoma el último punto de control (`ckpt_<paso>`) en `experiments/<seccion>/<modelo>/seed_<semilla>/checkpoints/`. Admite una ruta explícita a un directorio de checkpoint o a su `model.zip`.
+* `--env-config` (por defecto: `None`): Ruta al archivo de configuración del entorno físico común. Por defecto, carga [configs/environment.yaml](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/configs/environment.yaml).
+
+### 3.2 Comandos de Ejecución Estándar
+
+```powershell
+# Entrenamiento estándar (seed 42)
+python train.py --config configs/PPO_eval_500k/PPO_17.yaml --seed 42
+
+# Reanudación automática desde el último checkpoint registrado
+python train.py --config configs/PPO_eval_500k/PPO_17.yaml --resume
+
+# Reanudación manual especificando la ruta al checkpoint deseado
+python train.py --config configs/PPO_eval_500k/PPO_17.yaml --resume experiments/PPO_eval_500k/PPO_17/seed_42/checkpoints/ckpt_250000
+
+# Extensión desacoplada de presupuesto (Warm-Start de 500k a 1M pasos)
+python train.py --config configs/PPO_eval_1M/PPO_17_1M.yaml --resume experiments/PPO_eval_500k/PPO_17/seed_42/checkpoints/ckpt_500000
+
+# Entrenamiento multisemilla secuencial en una sola instrucción
+python train.py --config configs/PPO_eval_500k/PPO_NOM.yaml --seed "42, 100, 2026"
+
+# Entrenamiento SAC (seed 42)
+python train.py --config configs/SAC_eval_300k/SAC_NOM.yaml --seed 42
+
+# Ejecución secuencial de múltiples entrenamientos encadenados en una sola línea mediante el operador ';'
+python train.py --config configs/SAC_eval_300k/SAC_NOM.yaml --seed 42; python train.py --config configs/SAC_eval_300k/SAC_BUF_S.yaml --seed 42
+
+# Pruebas de integración rápida (Smoke tests, 256 timesteps)
+python train.py --config configs/smoke/PPO_smoke.yaml --total_timesteps 256
+python train.py --config configs/smoke/SAC_smoke.yaml --total_timesteps 256
+```
+
+### 3.3 Estructura de Artefactos de Salida de Entrenamiento
+
+Cada sesión de entrenamiento genera su estructura en `experiments/<seccion>/<modelo>/seed_<semilla>/`:
+
+* `models/<algoritmo>_arm2d_final.zip`: Red neuronal con los pesos correspondientes al último paso de optimización.
+* `models/best_model/`: Checkpoint con el mayor retorno medio alcanzado durante las evaluaciones periódicas (`best_model.zip` junto a `vecnormalize_stats.pkl`).
+* `checkpoints/ckpt_<paso>/`: Puntos de control periódicos.
+* `logs/`: Registros de eventos para TensorBoard y archivo de validación periódica `evaluations.npz`.
+
+### 3.4 Monitoreo con TensorBoard
+
+```powershell
+# Iniciar servidor web de monitoreo apuntando al directorio raíz de experimentos
+tensorboard --logdir experiments/
+
+# Especificar puerto alternativo
+tensorboard --logdir experiments/ --port 6007
 ```
 
 ---
 
-## 8. Carpeta Compartida de Google Drive (modelos y figuras)
+## 4. Evaluación Mecatrónica y Benchmarking (`evaluate.py`)
 
-Los binarios generados (modelos `.zip`, `vecnormalize_stats.pkl`, TensorBoard y
-figuras PNG) **no viajan en git**: se comparten a través de una carpeta de
-Google Drive cuya estructura replica la del repositorio. Git conserva el
-código, `configs/`, `docs/`, y los CSV/JSON de texto de `experiments/` y
-`reports/` (que sí son versionables y diferenciables en diffs).
+El script [evaluate.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/evaluate.py) ejecuta la evaluación determinista de políticas de aprendizaje por refuerzo o del controlador cinemático analítico C0 sobre bancos congelados de trayectorias.
 
-| Carpeta compartida | <https://drive.google.com/drive/folders/1IEO1rKzjEdylb-TTwW7NywV8oNclvjnX> |
-| :--- | :--- |
+### 4.1 Conjuntos de Datos Disponibles (Datasets Congelados)
 
-### 8.1 Estructura dentro de la carpeta (espejo del repositorio)
+* **Conjunto de Validación Intermedia ([datasets/validation_set_200.json](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/datasets/validation_set_200.json)):** Contiene 200 episodios generados con semilla pseudoaleatoria 202601. Se emplea para comparar y calibrar hiperparámetros durante el desarrollo.
+* **Conjunto de Evaluación Final de Referencia ([datasets/final_eval_set_300.json](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/datasets/final_eval_set_300.json)):** Contiene 300 episodios generados con semilla pseudoaleatoria 202602. Actúa como conjunto de prueba desacoplado (*test set*) para certificar formalmente las métricas definitivas del benchmark mecatrónico.
 
-```text
-brazo-2dof-compartido/
-├── experiments/<fase>/<experimento>/seed_<seed>/   # igual que en el repo
-├── reports/figures/                                # PNG + JSON de trazabilidad
-└── reports/phase_c_s3_analysis/figures/
-```
-
-### 8.2 Flujo de trabajo
+### 4.2 Sintaxis del Comando y Parámetros
 
 ```powershell
-# Cuando terminas de entrenar/evaluar/generar figuras:
-# 1) Copia las carpetas nuevas al mismo sitio dentro de la carpeta compartida
-# 2) Haz git commit de los CSV/JSON de texto que sí van a git y push
-
-# Cuando empiezas a trabajar:
-# 1) git pull (trae código + CSVs/JSONs de texto)
-# 2) Descarga de Drive lo que te falte (modelos de otros, figuras publicadas)
+python evaluate.py [--model-path <ruta_modelo.zip>] [--section <nombre_seccion>] [--label <identificador>] [--c0] [--vecnormalize <ruta_stats.pkl>] [--dataset <200|300|all|ruta_json>] [--output-dir <directorio_salida>] [--mode <deterministic|stochastic>] [--plot]
 ```
+
+Comportamiento de los argumentos y valores por defecto:
+
+* `--model-path` (por defecto: `None`): Ruta al archivo `.zip` del modelo entrenado.
+* `--section`, `--phase` (opcional, por defecto: `None`): Subcarpeta que clasifica al modelo (ej. `PPO_eval_500k`, `entorno`). Si se omite, se deduce automáticamente a partir de la ruta del modelo o de su definición en `configs/`.
+* `--label` (por defecto: automático): Nombre identificatorio del modelo. Si se omite, se deduce automáticamente analizando la ruta del modelo: al detectar la carpeta `seed_<semilla>`, asigna por defecto el formato estandarizado `<modelo>_seed_<semilla>` (por ejemplo, `PPO_NOM_seed_42`), manteniendo concordancia con la carpeta de experimentos y evitando sobreescrituras en las evaluaciones. Solo es necesario especificar `--label` cuando se desee forzar un identificador personalizado.
+* `--c0` (por defecto: `False`): Bandera para evaluar el controlador cinemático analítico con transpuesta de Jacobiano amortiguada. Admite modificar ganancias mediante `--kp` (por defecto: `50.0`), `--kd` (por defecto: `0.05`) y `--lambda-damping` (por defecto: `0.01`).
+* `--dataset` (por defecto: `"datasets/validation_set_200.json"`): Especificación del conjunto de prueba. Admite `"all"` (ejecuta consecutivamente 200 y 300), `"200"` o `"300"`.
+* `--vecnormalize` (por defecto: `None`): Ruta a `vecnormalize_stats.pkl`. Si se omite, se localiza automáticamente en el directorio del modelo.
+* `--output-dir` (por defecto: `"reports/data/evaluation"`): Directorio base de evaluación.
+* `--mode` (por defecto: `"deterministic"`): Modo de inferencia de la política (`deterministic` o `stochastic`).
+* `--plot` (por defecto: `False`): Dispara de forma automática el generador gráfico tras concluir la evaluación numérica.
+
+### 4.3 Ejemplos de Evaluación
+
+```powershell
+# 1. Evaluación sobre benchmark definitivo de 300 episodios (etiqueta automática: PPO_17_seed_42)
+python evaluate.py --model-path experiments/PPO_eval_500k/PPO_17/seed_42/models/best_model/best_model.zip --dataset 300
+
+# 2. Evaluación encadenada de múltiples semillas en PowerShell (asigna automáticamente PPO_NOM_seed_42, PPO_NOM_seed_100, etc.)
+42, 100, 2026 | ForEach-Object {
+    python evaluate.py --model-path "experiments/PPO_eval_500k/PPO_NOM/seed_$_/models/best_model/best_model.zip" --dataset 300
+}
+
+# 3. Forzar explícitamente un identificador personalizado con --label
+python evaluate.py --model-path experiments/PPO_eval_500k/PPO_NOM/seed_42/models/best_model/best_model.zip --label PPO_NOM_nominal --dataset 300
+
+# 4. Evaluación del controlador analítico C0 sobre 300 episodios (etiqueta automática: C0)
+python evaluate.py --c0 --dataset 300
+
+# 5. Evaluación secuencial completa sobre 200 y 300 episodios con generación inmediata de figuras
+python evaluate.py --model-path experiments/PPO_eval_500k/PPO_NOM/seed_42/models/best_model/best_model.zip --dataset all --plot
+
+# 6. Evaluación encadenada de múltiples modelos independientes en una sola línea mediante ';'
+python evaluate.py --model-path experiments/SAC_eval_300k/SAC_NOM/seed_42/models/best_model/best_model.zip --dataset 300 ; python evaluate.py --model-path experiments/SAC_eval_300k/SAC_BUF_S/seed_42/models/best_model/best_model.zip --dataset 300
+```
+
+### 4.4 Estructura de Salida Unificada (SSOT)
+
+Cada evaluación almacena sus resultados en un destino único correspondiente a la sección y al identificador provisto en `--label` o deducido, eliminando redundancias en la raíz:
+
+```text
+reports/data/evaluation/<eval_set>/<seccion>/<modelo_o_semilla>/
+├── episodes.csv              # Métricas de estabilización cartesiana por episodio
+├── summary.json              # Consolidado estadístico e intervalos de Wilson
+└── sample_trajectories.csv   # Trayectorias temporales paso a paso (si aplica)
+```
+
+Por ejemplo, la evaluación de tres semillas para `PPO_NOM` genera independientemente:
+
+* `reports/data/evaluation/eval_300/PPO_eval_500k/PPO_NOM_seed_42/`
+* `reports/data/evaluation/eval_300/PPO_eval_500k/PPO_NOM_seed_100/`
+* `reports/data/evaluation/eval_300/PPO_eval_500k/PPO_NOM_seed_2026/`
+
+---
+
+## 5. Generación Modular de Gráficas (`plot.py`)
+
+El script [plot.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/plot.py) procesa de forma desacoplada los datos tabulares evaluados en `reports/data/evaluation/` y los registros de telemetría de TensorBoard.
+
+* **Filtrado Automático de Sesiones:** Detecta si existen múltiples subcarpetas de eventos para una misma semilla (ej. ejecuciones abortadas o reiniciadas) y selecciona la sesión canónica correspondiente a la corrida completa y evaluada.
+* **Consolidación Multisemilla de Evaluación:** Al solicitar un modelo base (ej. `--model NN/PPO_M_RELU` o `--model entorno/SAC_2`), el sistema localiza y concatena automáticamente todas las réplicas de evaluación (`<modelo>_seed_*`), generando muestras consolidadas de $N = 900$ episodios (para 3 semillas) o $N = 600$ (para 2 semillas) sobre todas las métricas de dispersión en diagramas de caja y mapas de Pareto, reportando explícitamente el tamaño muestral $N$ en el cuadro estadístico.
+* **Agregación Multisemilla en Entrenamiento:** En curvas de aprendizaje y telemetría de TensorBoard, integra las réplicas graficando la media muestral $\mu$ con una banda sombreada de dispersión a una desviación estándar ($\pm 1\sigma$).
+* **Compatibilidad Dual PPO y SAC:** Resuelve automáticamente los registros de optimización de ambos algoritmos, incluyendo las métricas intrínsecas de SAC (`train/actor_loss`, `train/critic_loss`, `train/ent_coef` y `train/ent_coef_loss`).
+
+### 5.1 Sintaxis del Comando y Parámetros
+
+```powershell
+python plot.py [--model <[seccion/]nombre_modelo>] [--section <seccion>] [--compare <m1,m2,...>] [--dataset <200|300|all>] [--metric <metrica1,metrica2,...>] [--data-dir <directorio_datos>] [--out-dir <directorio_salida>] [--strict]
+```
+
+Comportamiento de los argumentos principales:
+
+* `--data-dir` (por defecto: `"reports/data/evaluation"`): Directorio base que contiene los datos tabulares. Explora recursivamente subdirectorios jerárquicos (`eval_*/<seccion>/<modelo>/`).
+* `--out-dir` (por defecto: `"reports"`): Directorio base para la salida gráfica. Se enruta automáticamente a `reports/figures_valid_200/` y `reports/figures_final_300/`.
+* `--dataset` (por defecto: `None`): Filtro de partición (`200`, `300`, `eval_200` o `eval_300`). Si se omite, procesa las particiones disponibles.
+* `--model` (por defecto: `None`): Genera figuras para el modelo indicado. Admite rutas calificadas por sección (`--model <seccion>/<modelo>`, ej. `--model PPO_eval_500k/PPO_7`) o nombres simples (`--model PPO_7`).
+* `--section` (por defecto: `None`): Especifica explícitamente la sección o fase del modelo para desambiguar homónimos entre distintas carpetas (ej. `--section PPO_eval_500k`).
+* `--compare` (por defecto: `None`): Lista de modelos separados por comas para generar figuras comparativas consolidadas. Admite modelos simples o calificados por sección (ej. `--compare entorno/PPO_7,PPO_eval_500k/PPO_7`).
+* `--metric`, `--metrics` (por defecto: `None`): Selecciona métricas específicas o macros:
+  * **Optimizador (TensorBoard):** `explained_variance` (`ev`), `approx_kl` (`kl`), `value_loss` (`vl`), `policy_loss` (`pl`), `entropy`, `loss`, `optimizer_summary`.
+  * **Curvas de Aprendizaje:** `learning_return` (`return`), `learning_success_rate` (`learning_sr`), `learning_curves`.
+  * **Benchmark de Evaluación:** `success_rate`, `steady_state_error` (`e_ss`), `residual_velocity` (`v_ss`), `settling_time` (`t_s`), `control_effort` (`j_u`), `reward_components`, `pareto_tradeoff`, `spatial_error`, `temporal_trajectories`.
+  * **Macros:** `optimizer` (todas las del optimizador), `eval` (las 9 de benchmark), `all` (suite completa).
+* `--strict` (por defecto: `False`): Exige consistencia muestral homogénea al comparar modelos entre particiones distintas.
+
+### 5.2 Organización de las Figuras de Salida
+
+Las figuras se organizan en correspondencia con el árbol de secciones:
+
+1. **Figuras individuales por modelo:**
+   `reports/<particion_figuras>/<seccion>/<modelo>/`
+   *(Ejemplo: `reports/figures_final_300/PPO_eval_500k/PPO_17/`)*
+
+2. **Figuras comparativas intra-sección (modelos de la misma categoría):**
+   `reports/<particion_figuras>/<seccion>/<modelo1>_<modelo2>/`
+   *(Ejemplo: `reports/figures_final_300/PPO_eval_500k/PPO_17_PPO_15/`)*
+
+3. **Figuras comparativas inter-sección (modelos de categorías distintas o calificados):**
+   `reports/<particion_figuras>/comparisons/<modelo1>_<modelo2>/`
+   *(Ejemplo: `reports/figures_final_300/comparisons/entorno_PPO_7_PPO_eval_500k_PPO_17/`)*
+
+### 5.3 Ejemplos de Ejecución Gráfica
+
+```powershell
+# 1. Generación de figuras individuales para un modelo único
+python plot.py --dataset 300 --model PPO_17
+
+# 2. Generación con calificación por sección ante posibles homónimos
+python plot.py --dataset 300 --model PPO_eval_500k/PPO_7 --metric explained_variance
+python plot.py --dataset 300 --model PPO_7 --section entorno --metric steady_state_error
+
+# 3. Comparativa intra-sección (salida en reports/figures_final_300/PPO_eval_500k/PPO_17_PPO_15/)
+python plot.py --dataset 300 --compare PPO_17,PPO_15 --metric steady_state_error,pareto_tradeoff
+
+# 4. Comparativa inter-sección con desambiguación calificada
+python plot.py --dataset 300 --compare entorno/PPO_7,PPO_eval_500k/PPO_17 --metric steady_state_error
+
+# 5. Comparativa de homónimos entre distintas secciones
+python plot.py --dataset 300 --compare entorno/PPO_7,PPO_eval_500k/PPO_7 --metric e_ss,control_effort
+
+# 6. Comparativa de curvas del optimizador (panel 2x3)
+python plot.py --dataset 300 --compare PPO_17,PPO_15 --metric optimizer_summary
+
+# 7. Comparativa entre evaluaciones de semillas individuales de un mismo modelo
+python plot.py --dataset 300 --compare PPO_eval_500k/PPO_NOM_seed_42,PPO_eval_500k/PPO_NOM_seed_100 --metric steady_state_error
+
+# 8. Flujo integrado continuo (Evaluación -> Generación gráfica) encadenado mediante ';'
+python evaluate.py --model-path experiments/PPO_eval_500k/PPO_NOM/seed_42/models/best_model/best_model.zip --dataset 300 ; python plot.py --dataset 300 --model PPO_eval_500k/PPO_NOM_seed_42 --metric eval
+```
+
+---
+
+## 6. Simulación Visual Interactiva 3D (`interactive_render.py`)
+
+El visualizador [interactive_render.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/interactive_render.py) interactúa con la ventana nativa OpenGL de MuJoCo en 3D para inspección cualitativa del movimiento del manipulador:
+
+```powershell
+# Visualización de un modelo entrenado de RL
+python interactive_render.py experiments/PPO_eval_500k/PPO_17/seed_42/models/best_model/best_model.zip
+
+# Visualización del controlador cartesiano analítico C0 durante 10 episodios
+python interactive_render.py --c0 --episodes 10
+```
+
+---
+
+## 7. Ejecución de Pruebas Unitarias
+
+La suite de validación asegura la coherencia dimensional, cinemática y algorítmica del sistema mediante `pytest`:
+
+```powershell
+python -m pytest tests/
+```
+
+Módulos de prueba verificados:
+
+* [tests/test_config.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_config.py): Carga desacoplada de configuraciones y verificación de parámetros SSOT de MuJoCo Reacher-v5.
+* [tests/test_kinematics.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_kinematics.py): Validación de cinemática directa y matriz Jacobiana contrastada contra las librerías cinemáticas de MuJoCo.
+* [tests/test_normalization.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_normalization.py): Normalización vectorial `VecNormalize`, cálculo de recompensa continua LQR y truncamiento del horizonte de simulación.
+* [tests/test_plot_metrics.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_plot_metrics.py): Resolución canónica y alias de métricas modulares para graficación.
+* [tests/test_plot_section.py](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/tests/test_plot_section.py): Resolución jerárquica de secciones, calificación de modelos canónicos y agregación multisemilla.
+
+---
+
+## 8. Generación de la Matriz de Benchmarking (`generate_benchmark_matrix.py`)
+
+Para consolidar en una tabla estructurada todos los hiperparámetros del entorno físico, los algoritmos de control y las métricas cinemáticas y dinámicas calculadas durante las evaluaciones:
+
+```powershell
+python generate_benchmark_matrix.py
+```
+
+El script explora recursivamente todos los archivos `.yaml` en `configs/`, extrae los parámetros de preprocesamiento, redes y optimización, y vincula automáticamente las métricas de evaluación almacenadas en `reports/data/evaluation/eval_300/` (prioritario) o `eval_200/`. La matriz resultante se exporta a [reports/data/benchmark_matrix.csv](file:///c:/Users/ulica/Documents/AprendizajeAuo2026/Fase_D_V3/reports/data/benchmark_matrix.csv).

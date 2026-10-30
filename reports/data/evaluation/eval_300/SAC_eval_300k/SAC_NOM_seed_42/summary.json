@@ -1,0 +1,27 @@
+{
+  "agent": "SAC_NOM_seed_42",
+  "section": "SAC_eval_300k",
+  "eval_set": "final_eval_set_300",
+  "eval_mode": "deterministic",
+  "metrics": {
+    "total_episodes": 300,
+    "successful_episodes": 44,
+    "success_rate": 0.14666666666666667,
+    "success_rate_ci": "14.7% [11.1%, 19.1%] (44/300)",
+    "ci_low": 0.1111052508554842,
+    "ci_high": 0.19116241294264633,
+    "e_ss_mean": 0.05080282984118104,
+    "e_ss_median": 0.029410613838285374,
+    "e_ss_p90": 0.1391124619668509,
+    "final_dist_mean": 0.0480401595586156,
+    "v_ss_mean": 0.6605453884351674,
+    "v_ss_median": 0.35390677201386866,
+    "t_s_mean": 1.6168666666666665,
+    "t_s_median": 2.0,
+    "j_u_mean": 0.5853839906190348,
+    "j_lqr_mean": -16.77398976803349,
+    "j_lqr_median": -11.968949162522044,
+    "j_lqr_std": 15.56045857475177,
+    "mean_action_delta": 0.5616482321838862
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "agent": "PPO_M_TANH_seed_2026",
+  "section": "NN",
+  "eval_set": "final_eval_set_300",
+  "eval_mode": "deterministic",
+  "metrics": {
+    "total_episodes": 300,
+    "successful_episodes": 7,
+    "success_rate": 0.023333333333333334,
+    "success_rate_ci": "2.3% [1.1%, 4.7%] (7/300)",
+    "ci_low": 0.011347676308111725,
+    "ci_high": 0.04737190787238511,
+    "e_ss_mean": 0.08528396459332584,
+    "e_ss_median": 0.06483170183322767,
+    "e_ss_p90": 0.17177975348861876,
+    "final_dist_mean": 0.08204514854430107,
+    "v_ss_mean": 1.6083791713064977,
+    "v_ss_median": 1.8204528964751203,
+    "t_s_mean": 1.9215333333333335,
+    "t_s_median": 2.0,
+    "j_u_mean": 1.0436033307501618,
+    "j_lqr_mean": -35.51213128240358,
+    "j_lqr_median": -32.31941221137513,
+    "j_lqr_std": 24.342812928717628,
+    "mean_action_delta": 0.854524163812849
+  }
+}

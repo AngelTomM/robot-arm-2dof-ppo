@@ -1,0 +1,32 @@
+# ==============================================================================
+# CONFIGURACIÓN DEL AGENTE: Smoke Test PPO (Fase D)
+# ==============================================================================
+experiment:
+  description: Smoke test PPO con recompensa Lyapunov / LQR continua (Fase D)
+
+# Referencia al entorno físico común
+env_config: configs/environment.yaml
+
+normalization:
+  norm_obs: true
+  norm_reward: false
+  clip_obs: 10.0
+
+ppo:
+  learning_rate: 0.00015
+  n_steps: 256
+  batch_size: 64
+  n_epochs: 4
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.002
+  max_grad_norm: 0.5
+  num_envs: 2
+  net_arch:
+    layers: [128, 128]
+    hidden_activation: relu
+
+training:
+  total_timesteps: 1000
+  checkpoint_freq: 1000

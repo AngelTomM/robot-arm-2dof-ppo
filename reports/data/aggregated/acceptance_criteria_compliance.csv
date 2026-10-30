@@ -1,9 +1,0 @@
-Experimento,Tipo,1. Éxito Estricto (≥95%),2. Balísticas (≤5%),3. Oscilatorias (≤5%),4. Std Semillas (≤5pp),5. Mín Semilla (≥90%),6. Brecha Det-Estoc (≤10pp)
-C0,Control analítico,100.0% [CUMPLE],36.3% [NO CUMPLE],0.0% [CUMPLE],N/A (analítico) [N/A],N/A (analítico) [N/A],N/A (determinista) [N/A]
-X0,Histórico (n=1),1.0% (n=1) [NO CUMPLE],9.3% [NO CUMPLE],1.0% [CUMPLE],N/A (n=1) [N/A],N/A (touch histórico) [N/A],1.0 pp [CUMPLE]
-X1a,RL replicado,8.6% [NO CUMPLE],8.7% [NO CUMPLE],0.4% [CUMPLE],2.5 pp [CUMPLE],6.0% [NO CUMPLE],8.6 pp [CUMPLE]
-X2,RL replicado,5.9% [NO CUMPLE],7.8% [NO CUMPLE],0.3% [CUMPLE],1.8 pp [CUMPLE],4.0% [NO CUMPLE],5.9 pp [CUMPLE]
-X3,RL replicado,44.1% [NO CUMPLE],32.7% [NO CUMPLE],0.1% [CUMPLE],18.3 pp [NO CUMPLE],27.3% [NO CUMPLE],44.1 pp [NO CUMPLE]
-X5_near,RL replicado,70.8% [NO CUMPLE],36.8% [NO CUMPLE],0.2% [CUMPLE],5.7 pp [NO CUMPLE],65.0% [NO CUMPLE],70.8 pp [NO CUMPLE]
-X5,RL replicado,55.3% [NO CUMPLE],41.9% [NO CUMPLE],0.2% [CUMPLE],31.4 pp [NO CUMPLE],28.7% [NO CUMPLE],55.3 pp [NO CUMPLE]
-X6,RL replicado,45.6% [NO CUMPLE],33.9% [NO CUMPLE],0.0% [CUMPLE],25.0 pp [NO CUMPLE],16.7% [NO CUMPLE],45.6 pp [NO CUMPLE]

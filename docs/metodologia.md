@@ -1,113 +1,108 @@
-# 📐 Metodología — Brazo Robótico 2 DOF
+# Metodología — Manipulador Planar 2-DOF (Fase D: MDP Continuo con Regulación LQR en MuJoCo)
 
-Fundamento técnico del proyecto: modelo físico, representación de estados, criterio operativo de éxito, diseño de funciones de recompensa y protocolo experimental (normalización, checkpoints y evaluación).
-Para los análisis monográficos por fase, consulte los informes en [`reports/`](../reports/). Para el uso operativo del código, consulte [`docs/manual-de-uso.md`](manual-de-uso.md).
+El presente documento expone los fundamentos físicos, cinemáticos, metodológicos y de teoría de control del proyecto: la caracterización del manipulador en el motor de física dinámica MuJoCo (`Reacher-v5`), la transición formal desde formulaciones parcialmente observables (POMDP con *hold counter*) hacia un Proceso de Decisión de Markov (MDP) continuo puro, el diseño de la función de recompensa continua de regulación LQR y el protocolo de evaluación dual desacoplada.
 
 ---
 
-## 1. Fundamento Físico y Cinemático
+## 1. Modelo Físico y Cinemático en MuJoCo
 
-El robot es un manipulador planar articulado anclado en el origen $(0, 0)$ con dos eslabones rígidos de longitud $L_1 = 1.0\text{ m}$ y $L_2 = 1.0\text{ m}$.
+La planta física corresponde al modelo de dos grados de libertad `Reacher-v5` provisto por Gymnasium bajo el motor de física de cuerpos rígidos MuJoCo. El robot se encuentra anclado a una base estática en el plano $(x, y)$ a una cota constante $z = 0.01\text{ m}$.
 
-```
-      (x1, y1) Codo [Articulación 2]
-         o───────┐ L2
-        /         \
-    L1 /           \
-      /             o (x_ee, y_ee) Efector Final
-     o (0, 0) Base
-```
+### 1.1 Parámetros Geométricos, Inerciales y de Actuación
+* **Eslabón 1 (Brazo proximal):** Longitud $L_1 = 0.10\text{ m}$, masa $m_1 = 0.035605\text{ kg}$, articulado a la base mediante la junta de revolución continua $\theta_1 \in (-\infty, \infty)$.
+* **Eslabón 2 y Efector Final (Brazo distal):** Longitud combinada $L_2 = 0.11\text{ m}$ (compuesta por el eslabón rígido de $0.10\text{ m}$ y el cuerpo esférico del efector final *fingertip* de radio $0.01\text{ m}$ con masa $m_{\text{fingertip}} = 0.004189\text{ kg}$). Posee tope mecánico articular en $\theta_2 \in [-3.0, 3.0]\text{ rad} \approx [-171.89^\circ, 171.89^\circ]$.
+* **Alcance Cinemático:** El radio de alcance máximo del efector final es $r_{\max} = L_1 + L_2 = 0.21\text{ m}$, mientras que el radio mínimo admisible por la restricción angular es $r_{\min} = \sqrt{L_1^2 + L_2^2 + 2 L_1 L_2 \cos(3.0\text{ rad})} \approx 0.037\text{ m}$.
+* **Actuadores y Transmisión:** Cada articulación es excitada directamente por torque mediante actuadores continuos de relación de engrane $\text{gear} = 200.0\text{ N}\cdot\text{m}$. La señal de control normalizada del agente $\mathbf{a}_t \in [-1.0, 1.0]^2$ se escala linealmente al rango físico de saturación.
+* **Integración Temporal:** El resolvedor numérico de MuJoCo opera con un paso temporal interno de $\Delta t = 0.01\text{ s}$ y un factor de submuestreo $\text{frame\_skip} = 2$, estableciendo un período de control discreto efectivo de $\Delta t_{\text{eff}} = 0.02\text{ s}$ ($50\text{ Hz}$).
 
-### 1.1 Cinemática Directa Exacta
-$$\begin{aligned}
-x_{codo} &= L_1 \cos(\theta_1), \quad y_{codo} = L_1 \sin(\theta_1) \\
-x_{ee} &= x_{codo} + L_2 \cos(\theta_1 + \theta_2) \\
-y_{ee} &= y_{codo} + L_2 \sin(\theta_1 + \theta_2)
-\end{aligned}$$
+### 1.2 Cinemática Directa Planar
+La posición cartesiana de la articulación intermedia del codo $(x_{\text{codo}}, y_{\text{codo}})$ y del efector final $(x_{ee}, y_{ee})$ respecto al marco de referencia inercial de la base se determina como:
+$$x_{\text{codo}} = L_1 \cos(\theta_1), \quad y_{\text{codo}} = L_1 \sin(\theta_1)$$
+$$x_{ee} = x_{\text{codo}} + L_2 \cos(\theta_1 + \theta_2)$$
+$$y_{ee} = y_{\text{codo}} + L_2 \sin(\theta_1 + \theta_2)$$
 
-### 1.2 Matriz Jacobiana Analítica ($J(\boldsymbol{\theta}) \in \mathbb{R}^{2 \times 2}$)
-La relación diferencial entre velocidades articulares $\dot{\boldsymbol{\theta}} = [\dot{\theta}_1, \dot{\theta}_2]^T$ y velocidad cartesiana del efector final $\dot{\mathbf{x}} = [\dot{x}, \dot{y}]^T$ está dada por:
+### 1.3 Matriz Jacobiana Analítica ($J(\boldsymbol{\theta}) \in \mathbb{R}^{2 \times 2}$)
+La relación diferencial de velocidades cartesianas respecto a las velocidades articulares $\dot{\boldsymbol{\theta}} = [\dot{\theta}_1, \dot{\theta}_2]^T$ se obtiene a partir de la derivada temporal de la cinemática directa:
+$$\dot{\mathbf{x}}_{ee} = J(\boldsymbol{\theta}) \, \dot{\boldsymbol{\theta}}$$
 $$J(\boldsymbol{\theta}) = \begin{bmatrix}
 -L_1 \sin(\theta_1) - L_2 \sin(\theta_1 + \theta_2) & -L_2 \sin(\theta_1 + \theta_2) \\
 L_1 \cos(\theta_1) + L_2 \cos(\theta_1 + \theta_2) & L_2 \cos(\theta_1 + \theta_2)
 \end{bmatrix}$$
+Esta formulación analítica fue contrastada unitariamente contra la función cinemática matricial `mj_jacBody` de MuJoCo, garantizando consistencia numérica con un error absoluto residual inferior a $10^{-5}\text{ m/(rad}\cdot\text{s)}$.
 
-### 1.3 Espacio de Estados y Acciones
-* **Acciones continuas** $\mathbf{a}_t \in [-1.0, 1.0]^2$: mapeadas directamente a velocidad angular articular:
-  $$\dot{\boldsymbol{\theta}}_t = \mathbf{a}_t \cdot v_{max} \quad (v_{max} = 1.5\text{ rad/s}, \, \Delta t = 0.05\text{ s})$$
-* **Observación** $\mathbf{s}_t \in \mathbb{R}^{10}$:
-  $$[\cos\theta_1, \, \sin\theta_1, \, \cos\theta_2, \, \sin\theta_2, \, \dot{\theta}_1, \, \dot{\theta}_2, \, x_{tgt}, \, y_{tgt}, \, \Delta x_{ee}, \, \Delta y_{ee}]$$
-
----
-
-## 2. Criterio Operativo de Éxito Estricto (*Hold*)
-
-Para considerar un episodio como **exitoso**, el efector final debe satisfacer simultáneamente:
-1. **Zona de Precisión:** distancia euclídea al blanco $d = \|\mathbf{x}_{ee} - \mathbf{x}_{tgt}\| \le r_{tgt} = 0.06\text{ m}$.
-2. **Condición de Frenado:** velocidad angular conjunta $\|\dot{\boldsymbol{\theta}}\| \le v_{tol} = 0.10\text{ rad/s}$.
-3. **Persistencia Temporal (*Hold*):** mantener las dos condiciones anteriores de forma ininterrumpida durante $N_{hold}$ pasos consecutivos ($N_{hold} = 20$ en los experimentos de referencia de Fase A; $N_{hold} = 5$ en Fase B y C, $v_{tol} = 0.3\text{ rad/s}$).
-4. **Horizonte:** completar la estabilización antes del límite de $T_{max} = 200$ pasos ($10.0\text{ s}$).
-
-Cualquier episodio que agote el horizonte sin consolidar el *hold* se clasifica como **truncado**. La transición desde el criterio clásico de mero contacto (*touch*, $d < 0.08\text{ m}$) se motivó porque dicha condición incentivaba atravesar el objetivo a máxima velocidad, generando etiquetas de éxito no representativas de estabilidad real.
+### 1.4 Espacio de Observaciones $\mathbf{s}_t \in \mathbb{R}^{10}$
+El vector de realimentación suministrado a las políticas de control y al baseline analítico se extrae directamente de las coordenadas cinemáticas y dinámicas de MuJoCo:
+$$\mathbf{s}_t = \left[\cos(\theta_1), \, \cos(\theta_2), \, \sin(\theta_1), \, \sin(\theta_2), \, x_{\text{tgt}}, \, y_{\text{tgt}}, \, \dot{\theta}_1, \, \dot{\theta}_2, \, (x_{ee} - x_{\text{tgt}}), \, (y_{ee} - y_{\text{tgt}})\right]^T$$
+donde la descomposición en seno y coseno elimina la discontinuidad trigonométrica en $\pm \pi$, y el vector diferencial $(x_{ee} - x_{\text{tgt}}, y_{ee} - y_{\text{tgt}})$ provee la distancia cartesiana relativa al punto de consigna.
 
 ---
 
-## 3. Diseño de Funciones de Recompensa
+## 2. Transición hacia la Fase D: De POMDP a MDP Continuo Puro
 
-La recompensa descompuesta en cada paso $t$ está dada por:
-$$R_t = R_{dist} + R_{action} + R_{near} + R_{vel} + R_{smooth} + R_{success}$$
+### 2.1 Limitaciones Teóricas del Paradigma Anterior (*Hold Condition*)
+En iteraciones previas del entorno, la condición de éxito se definía mediante la permanencia del efector final dentro de una tolerancia esférica durante $N = 20$ pasos consecutivos, momento en el cual se aplicaba un bono terminal positivo y se truncaba prematuramente el episodio.
 
-| Término | Expresión | Nota |
-| :--- | :---: | :--- |
-| Distancia ($R_{dist}$) | $-1.0 \cdot d$ | Gradiente continuo negativo hacia el objetivo. |
-| Esfuerzo de control ($R_{action}$) | $-0.02 \|\mathbf{a}_t\|^2$ | Penalización por saturación de actuadores. |
-| Proximidad ($R_{near}$) | $(1.0 - d / 0.30) - 0.15 (|\dot{\theta}_1| + |\dot{\theta}_2|)$ | Activo en $d < 0.30\text{ m}$; configurable mediante `r_near_mode` (`historical`, `none`, `non_positive`). |
-| Velocidad gaussiana ($R_{vel}$, X5) | $-w_v \exp\!\left(-\dfrac{d^2}{2\sigma_v^2}\right) \|\dot{\boldsymbol{\theta}}\|^2$ | $w_v = 0.10$, $\sigma_v = 0.15$ en la configuración de referencia. |
-| Suavidad ($R_{smooth}$, X6) | $-w_a \|\mathbf{a}_t - \mathbf{a}_{t-1}\|^2$ | $w_a = 0.01$ en X6; barrido $w_a \in \{0.01, 0.1, 0.5\}$ en X6_wa*. |
-| Éxito ($R_{success}$) | $+15.0 \cdot \mathbb{I}_{succ}$ | Otorgado únicamente al consolidar el *hold*. |
+Dicha formulación introducía una violación estructural a la propiedad de Markov:
+1. **Parcial Observabilidad (POMDP):** El contador interno $k \in \{0, \dots, 20\}$ no formaba parte del vector de observación $\mathbf{s}_t \in \mathbb{R}^{10}$. En consecuencia, dos estados con idéntica postura cinemática y velocidad poseían valores de retorno esperado radicalmente divergentes dependiendo del estado de la variable latente $k$, desestabilizando la convergencia del crítico y la estimación de ventajas (GAE).
+2. **Incentivos Perversos:** La recompensa terminal incentivaba políticas que alcanzaban transitoriamente la esfera objetivo sin amortiguamiento suficiente, provocando oscilaciones de alta frecuencia al intentar maximizar el bono terminal antes de la terminación anticipada.
 
-### 3.1 Diagnóstico Empírico de los Términos
-
-* **Efecto de $R_{near}$:** en la Fase A se hipotetizó que el término positivo $(1 - d/0.30)$ era perjudicial ("trampa de recompensa"). La evaluación posterior a igual presupuesto demostró lo contrario: suprimirlo (`X5_near`) redujo la tasa de éxito en $14.93$ puntos porcentuales, por lo que actúa como un *reward shaping* denso e indispensable para la convergencia temprana.
-* **Valores elevados de $w_v$:** imponer $w_v \ge 1.0$ produce **parálisis cinemática**, pues el coste de aproximarse con velocidad supera la ganancia de proximidad. El valor óptimo en el barrido fue $w_v = 0.10$.
-* **Recompensa `smooth_precision`:** combinación de referencia de las fases B y C (sin barrido adicional); es la base del agente líder.
+### 2.2 Formulación de Horizonte Fijo Estrictamente Markoviana
+La Fase D elimina el contador de permanencia y las terminaciones prematuras por éxito:
+* **Horizonte Temporal Fijo:** Todo episodio concluye estrictamente al alcanzar el límite prefijado de $T_{\max} = 200$ pasos ($4.0\text{ s}$ de tiempo simulado).
+* **Señales de Estado:** Se establece invariablemente `terminated = False`. La señal `truncated = True` se emite de forma exclusiva al cumplirse $t = T_{\max}$.
+* **Propiedad Markoviana:** La distribución de probabilidad de transición $P(\mathbf{s}_{t+1} \mid \mathbf{s}_t, \mathbf{a}_t)$ y la función de recompensa instantánea $r(\mathbf{s}_t, \mathbf{a}_t)$ dependen de manera exclusiva del par estado-acción actual.
 
 ---
 
-## 4. Protocolo Experimental
+## 3. Función de Recompensa Continua Cuadrática (LQR / Lyapunov)
 
-### 4.1 Fases del proyecto
-
-| Fase | Algoritmo | Presupuesto | Objetivo |
-| :--- | :---: | :---: | :--- |
-| **A** | PPO | 300.000 pasos | Diagnóstico: estabilización del criterio *hold*, arquitectura, normalización y barridos de recompensa (X1a–X6_wa05). |
-| **B** | PPO | 1.000.000 de pasos | Confirmación a presupuesto extendido de los candidatos (X3, X5_near). |
-| **B (extensión)** | PPO | 655.360 pasos | Evaluación multi-semilla ($n=500$ episodios × 3 semillas) y selección formal del agente líder (X4). |
-| **C** | SAC | 245.760–655.360 pasos | Estudio unifactorial (frecuencia de entrenamiento, suavidad) y paquete combinado (S1, S2_freq, S2_wa, S3_combined). |
-
-### 4.2 Normalización y política de checkpoints
-
-* Se demostró que desacoplar la red neuronal de las estadísticas de `VecNormalize` distorsiona gravemente la evaluación: las observaciones normalizadas con estadísticas obsoletas dejan de ser comparables entre checkpoints.
-* Toda la pipeline vigente aplica **guardado acoplado**: en cada checkpoint se persisten simultáneamente `model.zip` y `vecnormalize_stats.pkl` del mismo paso de entrenamiento, de modo que la recarga de cualquier punto de la curva de aprendizaje reproduce con exactitud el estado normalizado correspondiente.
-* El entorno de evaluación se ejecuta en modo inferencia (`training=False`, `norm_reward=False`) y recibe las estadísticas sincronizadas desde el entorno de entrenamiento (`sync_envs_normalization`).
-
-### 4.3 Congelamiento de datasets y evaluación
-
-* Los datasets de evaluación ($n=200$, $n=300$, $n=500$) se generan una única vez con semillas documentadas y se fijan con hashes SHA-256; el separador por conjunto (validación / evaluación final) se verifica mediante test para impedir solapamientos y fuga de información.
-* La métrica principal es la **tasa de éxito estricta** con intervalo de Wilson al 95%; la comparación entre agentes se resuelve con el **intervalo de indistinguibilidad operacional** ($U_{equiv} = 3.16$ pp), calculado por el script de selección formal.
-* La evaluación se ejecuta en dos modos separados: determinista (acción media de la política) y estocástico (muestreo), sin mezcla de modos dentro de una misma ejecución.
-* La selección del *best_model* durante el entrenamiento se basa en la tasa de éxito de la evaluación en línea ($n_{eval}=15$ episodios por defecto), que utiliza objetivos aleatorios y no el dataset congelado final, garantizando la independencia entre selección de checkpoint y evaluación terminal.
-
-### 4.4 Reproducibilidad y configuración
-
-* Cada experimento deriva su fase e identificador de la **ruta del archivo YAML** (fuente única de verdad) y escribe la salida en `experiments/<fase>/<exp_id>/seed_<seed>/`.
-* El archivo `experiment_meta.json` registra el config completo y parámetros efectivos de la ejecución; `train_metrics.json` registra el tiempo y el rendimiento medio.
-* Las semillas se fijan de forma global (Python, NumPy, torch y CUDA) para reproducibilidad determinista.
+El aprendizaje del agente se guía mediante un funcional continuo cuadrático inspirado en el Regulador Lineal Cuadrático (LQR) y en funciones de Lyapunov para control de posición:
+$$r(\mathbf{s}_t, \mathbf{a}_t) = - \left(w_{\text{pos}} \|\mathbf{x}_{ee} - \mathbf{x}_{\text{tgt}}\|^2 + w_{\text{ctrl}} \|\mathbf{a}_t\|^2 + w_{\text{vel}} \|\dot{\boldsymbol{\theta}}_t\|^2\right)$$
+donde los términos componentes cumplen funciones de regulación física específicas:
+* **Error Cartesiano Cuadrático ($\|\mathbf{x}_{ee} - \mathbf{x}_{\text{tgt}}\|^2$):** Provee un gradiente continuo y suave en todo el espacio de trabajo accesible, incrementando la atracción hacia el objetivo a medida que el efector se aproxima sin presentar discontinuidades de frontera. Se pondera con $w_{\text{pos}} = 1.0$.
+* **Disipación de Energía Cinética ($\|\dot{\boldsymbol{\theta}}_t\|^2 = \dot{\theta}_1^2 + \dot{\theta}_2^2$):** Penaliza la velocidad angular residual en las articulaciones, forzando al controlador a amortiguar el movimiento para lograr reposo en el régimen permanente. Se pondera con $w_{\text{vel}} = 0.05$.
+* **Regularización del Esfuerzo de Control ($\|\mathbf{a}_t\|^2 = a_1^2 + a_2^2$):** Penaliza los torques excesivos aplicados por los motores, reduciendo la saturación de los actuadores y previniendo oscilaciones parásitas. Se pondera con $w_{\text{ctrl}} = 0.01$.
 
 ---
 
-## 5. Referencias a Monografías
+## 4. Protocolo de Evaluación Dual Desacoplada
 
-* Fase A: [`reports/phase_a_report.md`](../reports/phase_a_report.md)
-* Fase B y Extensión: [`reports/phase_b_report.md`](../reports/phase_b_report.md)
-* Fase C: [`reports/phase_c_report.md`](../reports/phase_c_report.md)
+Para garantizar objetividad y evitar que la normalización de observaciones o recompensas en tiempo de entrenamiento afecte las métricas de desempeño, la evaluación se efectúa sobre la trayectoria física cruda a lo largo de conjuntos deterministas reproducibles de episodios (`validation_set_200.json` y `final_eval_set_300.json`).
+
+### 4.1 Métrica Principal — Estabilización Terminal en Ventana $k = 20$
+Se evalúa el comportamiento asintótico en los últimos 20 pasos de control del episodio ($t \in [T-19, T]$):
+$$\bar{e}_{\text{ss}} = \frac{1}{20} \sum_{t=T-19}^T \|\mathbf{x}_{ee}(t) - \mathbf{x}_{\text{tgt}}\|, \qquad \bar{v}_{\text{ss}} = \frac{1}{20} \sum_{t=T-19}^T \|\dot{\boldsymbol{\theta}}(t)\|$$
+Un episodio se clasifica formalmente como exitoso si y solo si satisface simultáneamente las tolerancias de reposo y proximidad:
+$$\text{is\_success} = \mathbb{I}\left(\bar{e}_{\text{ss}} \le 0.02\text{ m} \;\wedge\; \bar{v}_{\text{ss}} \le 0.10\text{ rad/s}\right)$$
+
+La tasa de éxito agregada sobre $N$ episodios se complementa con el cálculo del intervalo de confianza asintótico de Wilson al 95%:
+$$\hat{p} = \frac{S}{N}, \qquad \text{IC}_{95\%} = \frac{\hat{p} + \frac{z^2}{2N} \pm z \sqrt{\frac{\hat{p}(1-\hat{p})}{N} + \frac{z^2}{4N^2}}}{1 + \frac{z^2}{N}} \quad (z = 1.96)$$
+
+### 4.2 Métrica Comparativa Canónica — Costo Integral Cuadrático ($J_{\text{LQR}}$)
+Permite comparar agentes de aprendizaje y controladores analíticos bajo una métrica escalar independiente del algoritmo:
+$$J_{\text{LQR}} = - \sum_{t=1}^T \left(1.0 \cdot \|\mathbf{x}_{ee}(t) - \mathbf{x}_{\text{tgt}}\|^2 + 0.01 \cdot \|\mathbf{a}(t)\|^2 + 0.05 \cdot \|\dot{\boldsymbol{\theta}}(t)\|^2\right)$$
+
+### 4.4 Protocolo Multisemilla y Muestra Consolidada
+Para cuantificar la variabilidad intrínseca inducida por la estocasticidad en la inicialización de los pesos de la red neuronal y en el proceso de optimización por gradientes de política, se implementa una evaluación estándar sobre tres réplicas pseudoaleatorias independientes (semillas 42, 100 y 2026). Al evaluarse cada réplica sobre el banco congelado de referencia de 300 episodios, los datos se consolidan bajo el identificador canónico del modelo conformando una muestra total de $N = 900$ episodios ($N = 600$ para configuraciones con dos réplicas). Dicha muestra acumulada se emplea directamente para calcular las proporciones binomiales de estabilización, los intervalos de Wilson al 95%, los cuartiles en los diagramas de caja de error y esfuerzo, y la frontera empírica de compromiso de Pareto.
+
+### 4.3 Métricas Dinámicas y Temporales Complementarias
+* **Tiempo de Establecimiento ($t_s$):** Instante continuo a partir del cual $\|\mathbf{x}_{ee}(t) - \mathbf{x}_{\text{tgt}}\| \le 0.02\text{ m}$ y permanece confinado dentro de dicha cota hasta el término del horizonte.
+* **Esfuerzo Acumulado de Control ($J_u$):** Integral discreta del torque aplicado $J_u = \sum_{t=1}^T \|\mathbf{a}(t)\|^2 \Delta t_{\text{eff}}$.
+* **Suavidad de Acción ($J_{\Delta u}$):** Variación cuadrática del comando entre pasos sucesivos $J_{\Delta u} = \frac{1}{T-1} \sum_{t=2}^T \|\mathbf{a}(t) - \mathbf{a}(t-1)\|$.
+
+---
+
+## 5. Algoritmos Evaluados y Baseline Analítico
+
+### 5.1 Proximal Policy Optimization (`PPO_1`)
+Algoritmo de gradiente de política *on-policy* con función objetivo truncada para limitar la divergencia de Kullback-Leibler. Utiliza estimación de ventajas generalizada (GAE) con $\gamma = 0.99$ y $\lambda_{\text{gae}} = 0.95$, redes densas totalmente conectadas de 3 capas ocultas ($[256, 256, 128]$) y normalización adaptativa de observaciones mediante `VecNormalize`.
+
+### 5.2 Soft Actor-Critic (`SAC_1`)
+Algoritmo *off-policy* basado en el marco de máxima entropía. Optimiza simultáneamente la recompensa esperada y la entropía de la política para evitar convergencias prematuras en mínimos locales de torque. Emplea doble red crítica Q, amortiguamiento suave de pesos de red objetivo con $\tau = 0.005$ y capas ocultas $[512, 512]$.
+
+### 5.3 Baseline Analítico: Controlador Cartesiano PD con Transposición del Jacobiano (`C0`)
+Como patrón de comparación analítico desacoplado de procesos de aprendizaje, se implementa un lazo de control operacional en coordenadas de tarea:
+$$e_{\text{pos}} = \mathbf{x}_{\text{tgt}} - \mathbf{x}_{ee} \in \mathbb{R}^2$$
+$$\tau = J(\boldsymbol{\theta})^T \left(K_p \, e_{\text{pos}}\right) - K_d \, \dot{\boldsymbol{\theta}}$$
+$$\mathbf{a}_t = \text{clip}(\tau, -1.0, 1.0)$$
+donde $K_p = 50.0$ actúa como ganancia cartesiana de posición y $K_d = 1.5$ proporciona amortiguamiento derivativo articular. La saturación en $[-1.0, 1.0]$ sitúa al controlador analítico bajo idénticas limitaciones físicas que los agentes de aprendizaje por refuerzo.

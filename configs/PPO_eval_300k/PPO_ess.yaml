@@ -1,0 +1,46 @@
+# ==============================================================================
+# CONFIGURACIÓN DEL AGENTE: PPO_ess (Fase D)
+# ==============================================================================
+# Fenómeno 1: Minimización del error de estado estacionario (offset / zona muerta).
+# Objetivo: El efector final debe posarse exactamente sobre el objetivo con error
+#           mínimo o nulo (e_ss -> 0), manteniéndose inmóvil sin derivas.
+# Modificaciones respecto a PPO_1:
+#   - normalization.norm_reward: true  (amplifica gradientes cerca de cero)
+#   - ppo.gamma: 0.995                 (horizonte ultra-largo para premiar permanencia en target)
+#   - ppo.ent_coef: 0.0                (elimina el jitter/ruido para lograr reposo estático)
+# ==============================================================================
+experiment:
+  description: PPO_ess - Aislado para error de estado estacionario minimo (norm_reward=true, gamma=0.995, ent_coef=0.0)
+
+# Referencia al entorno físico común
+env_config: configs/environment.yaml
+
+# Preprocesamiento y normalización
+normalization:
+  norm_obs: true
+  norm_reward: true            # Modificado: re-escala retornos para dar gradiente en distancias milimétricas
+  clip_obs: 10.0
+
+# Hiperparámetros del algoritmo PPO (base PPO_1)
+ppo:
+  learning_rate: 0.00015       # Igual a PPO_1
+  n_steps: 2048                # Igual a PPO_1
+  batch_size: 64               # Igual a PPO_1
+  n_epochs: 10                 # Igual a PPO_1
+  gamma: 0.995                 # Modificado: horizonte extendido para priorizar permanencia sobre el objetivo
+  gae_lambda: 0.95             # Igual a PPO_1
+  clip_range: 0.2              # Igual a PPO_1
+  ent_coef: 0.0                # Modificado: varianza nula (sigma -> 0) para suprimir temblor en reposo
+  max_grad_norm: 0.5           # Igual a PPO_1
+  num_envs: 4                  # Igual a PPO_1
+
+  net_arch:
+    layers: [256, 256, 128]    # Igual a PPO_1
+    hidden_activation: relu    # Igual a PPO_1
+
+# Parámetros del proceso de entrenamiento
+training:
+  total_timesteps: 300000      # Igual a PPO_1
+  checkpoint_freq: 50000
+  eval_freq: 5000
+  n_eval_episodes: 15

@@ -1,10 +1,15 @@
-# Entornos virtuales de Python
+# ==============================================================================
+# GITIGNORE - ENTORNO MECATRÓNICO Y APRENDIZAJE POR REFUERZO (FASE D)
+# ==============================================================================
+
+# Entornos virtuales
 .venv/
 venv/
 ENV/
 env/
+env*/
 
-# Archivos compilados y caché de Python
+# Archivos compilados y cachés de Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -27,29 +32,51 @@ share/python-wheels/
 .installed.cfg
 *.egg
 
-# Logs de entrenamiento y monitoreo (TensorBoard)
-logs/
-*.tfevents.*
-analysis/
-*.png
+# Pruebas, cobertura y análisis estático
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 
-# Modelos y Checkpoints pesados (ignorar modelos generados localmente excepto si se desea versionar un benchmark)
-# Modelos, Checkpoints y Estadísticas de normalización
+# Logs de entrenamiento y telemetría de monitoreo
+logs/
+runs/
+wandb/
+analysis/
+*.tfevents.*
+*.log
+
+# Checkpoints y modelos binarios pesados (Stable-Baselines3)
 models/
 experiments/
 *.zip
 *.pkl
 
-# Pygame / Logs de ejecución
-*.log
+# Grabaciones de video y multimedia temporal
+*.mp4
+*.avi
+*.mov
+*.webm
 
-# Archivos de configuración del IDE
+# Gráficos e imágenes (artefactos derivados generados por plot.py)
+*.png
+*.jpg
+*.jpeg
+*.svg
+reports/figures*/
+
+# Entornos y configuración de IDEs
 .vscode/
 .idea/
 *.sublime-project
 *.sublime-workspace
+*.swp
+*.swo
+*~
 
-# Sistema Operativo
+# Archivos del sistema operativo
 .DS_Store
 Thumbs.db
 Desktop.ini

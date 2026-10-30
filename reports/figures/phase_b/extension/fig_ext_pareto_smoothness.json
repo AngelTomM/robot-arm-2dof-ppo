@@ -1,8 +1,0 @@
-{
-  "title": "Espacio de Pareto \u00c9xito vs Suavidad",
-  "dataset": "validation_b2_500.json",
-  "metrics": {
-    "x": "mean_action_delta",
-    "y": "strict_success_rate"
-  }
-}
